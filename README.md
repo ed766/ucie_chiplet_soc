@@ -1,6 +1,6 @@
 UCIe Chiplet SoC (Dual-Die Extension)
 
-This repository extends the original RISC-V SoC into a two-die system connected
+This repository extends the original RISC-V SoC(RISC-V-SoC-with-Multi-Domain-Power-Intent-using-LibreLane) into a two-die system connected
 by a behavioral UCIe 2.0-style link. Die A generates plaintext traffic and
 verifies returning ciphertext. Die B aggregates traffic into 128-bit blocks,
 encrypts it using an iterative AES-128 core, and returns results over the link.
