@@ -1,0 +1,17 @@
+{
+  "DESIGN_NAME": "soc_top",
+  "VERILOG_FILES": [
+    "dir::../../base_soc/rtl/top/soc_top.sv",
+    "dir::../../base_soc/rtl/aon/apb_bridge.sv",
+    "dir::../../base_soc/rtl/aon/aon_power_ctrl.sv",
+    "dir::../../base_soc/rtl/aon/timer_32k.sv",
+    "dir::../../base_soc/rtl/pd1_rv32/rv32_core.sv",
+    "dir::../../base_soc/rtl/pd2_aes/aes_regs.sv",
+    "dir::../../base_soc/rtl/pd2_aes/aes128_iterative.sv",
+    "dir::../../base_soc/rtl/wrappers/ret_ff.sv",
+    "dir::../../base_soc/rtl/wrappers/iso_cell.sv",
+    "dir::../../base_soc/rtl/wrappers/rst_sync.sv"
+  ],
+  "CLOCK_PERIOD": 25,
+  "CLOCK_PORT": "clk"
+}

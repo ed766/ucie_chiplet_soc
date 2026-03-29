@@ -1,0 +1,8 @@
+metric,value
+accepted_count,62
+compared_count,62
+mismatch_count,0
+branch_count,13
+load_count,6
+store_count,5
+illegal_count,0

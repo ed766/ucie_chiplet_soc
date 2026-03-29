@@ -1,0 +1,37 @@
+[*]
+[*] GTKWave Analyzer v3.3.116
+[*] Lightweight RV32 core DV waveform view
+[*]
+[dumpfile] "rv32_core_wave.fst"
+[savefile] "rv32_core_wave.gtkw"
+[timestart] 0
+[size] 1440 900
+[pos] -1 -1
+*-18.000000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+[sst_width] 280
+[signals_width] 220
+[sst_expanded] 1
+[sst_vpaned_height] 280
+@28
+TOP.tb_rv32_core.clk
+TOP.tb_rv32_core.rvif.rst_n
+TOP.tb_rv32_core.rvif.instr_valid
+TOP.tb_rv32_core.rvif.instr_ready
+TOP.tb_rv32_core.rvif.commit_valid
+TOP.tb_rv32_core.rvif.wb_valid
+TOP.tb_rv32_core.rvif.mem_valid
+TOP.tb_rv32_core.rvif.mem_write
+TOP.tb_rv32_core.rvif.branch_taken
+TOP.tb_rv32_core.rvif.illegal_instr
+TOP.tb_rv32_core.rvif.halted
+@22
+TOP.tb_rv32_core.rvif.instr[31:0]
+TOP.tb_rv32_core.rvif.commit_instr[31:0]
+TOP.tb_rv32_core.rvif.commit_pc[31:0]
+TOP.tb_rv32_core.rvif.commit_next_pc[31:0]
+TOP.tb_rv32_core.rvif.wb_rd[4:0]
+TOP.tb_rv32_core.rvif.wb_data[31:0]
+TOP.tb_rv32_core.rvif.mem_addr[31:0]
+TOP.tb_rv32_core.rvif.mem_wdata[31:0]
+TOP.tb_rv32_core.rvif.mem_rdata[31:0]
+TOP.tb_rv32_core.dut.pc_q[31:0]

@@ -1,0 +1,14 @@
+# UPF for Die A compute chiplet
+create_power_domain AON_A
+create_power_domain PD1_RV32 -elements {die_a_system}
+
+# Always-on nets for UCIe sideband
+create_supply_port AON_A_VDD
+create_supply_port AON_A_VSS
+
+set_domain_supply_net AON_A -primary_power_net AON_A_VDD -primary_ground_net AON_A_VSS
+set_domain_supply_net PD1_RV32 -primary_power_net AON_A_VDD -primary_ground_net AON_A_VSS
+
+# Placeholder for isolation and retention strategies
+create_power_state RUN -domain PD1_RV32 -values {AON_A_VDD 1}
+create_power_state SLEEP -domain PD1_RV32 -values {AON_A_VDD 0}

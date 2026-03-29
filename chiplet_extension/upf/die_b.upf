@@ -1,0 +1,12 @@
+# UPF for Die B crypto chiplet
+create_power_domain AON_B
+create_power_domain PD2_AES -elements {die_b_system}
+
+create_supply_port AON_B_VDD
+create_supply_port AON_B_VSS
+
+set_domain_supply_net AON_B -primary_power_net AON_B_VDD -primary_ground_net AON_B_VSS
+set_domain_supply_net PD2_AES -primary_power_net AON_B_VDD -primary_ground_net AON_B_VSS
+
+create_power_state CRYPTO_RUN   -domain PD2_AES -values {AON_B_VDD 1}
+create_power_state CRYPTO_SLEEP -domain PD2_AES -values {AON_B_VDD 0}

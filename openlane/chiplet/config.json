@@ -1,0 +1,32 @@
+{
+  "DESIGN_NAME": "soc_chiplet_top",
+  "PDK": "sky130A",
+  "STD_CELL_LIBRARY": "sky130_fd_sc_hd",
+  "CLOCK_PORT": "clk",
+  "CLOCK_PERIOD": 200,
+  "PNR_SDC_FILE": "dir::soc_chiplet_top.sdc",
+  "SIGNOFF_SDC_FILE": "dir::soc_chiplet_top.sdc",
+  "FP_CORE_UTIL": 40,
+  "PL_TARGET_DENSITY_PCT": 55,
+  "RT_MIN_LAYER": "met1",
+  "RT_MAX_LAYER": "met5",
+  "RT_CLOCK_MIN_LAYER": "met2",
+  "RT_CLOCK_MAX_LAYER": "met5",
+  "VERILOG_FILES": [
+    "dir::../../chiplet_extension/rtl/soc_chiplet_top.sv",
+    "dir::../../chiplet_extension/rtl/soc_die_a_top.sv",
+    "dir::../../chiplet_extension/rtl/soc_die_b_top.sv",
+    "dir::../../chiplet_extension/rtl/die_a/die_a_system.sv",
+    "dir::../../chiplet_extension/rtl/die_b/die_b_system.sv",
+    "dir::../../chiplet_extension/rtl/die_b/aes128_iterative.sv",
+    "dir::../../chiplet_extension/rtl/d2d_adapter/flit_packetizer.sv",
+    "dir::../../chiplet_extension/rtl/d2d_adapter/flit_depacketizer.sv",
+    "dir::../../chiplet_extension/rtl/d2d_adapter/credit_mgr.sv",
+    "dir::../../chiplet_extension/rtl/d2d_adapter/link_fsm.sv",
+    "dir::../../chiplet_extension/rtl/d2d_adapter/retry_ctrl.sv",
+    "dir::../../chiplet_extension/rtl/d2d_adapter/ucie_tx.sv",
+    "dir::../../chiplet_extension/rtl/d2d_adapter/ucie_rx.sv",
+    "dir::../../chiplet_extension/rtl/phy_model/phy_behavioral.sv",
+    "dir::../../chiplet_extension/rtl/channel_model/channel_model.sv"
+  ]
+}

@@ -1,0 +1,21 @@
+set_power_intent -upf_version 4.0
+
+create_power_domain AON  -elements { soc_top.u_pwr soc_top.u_tim }
+create_power_domain PD1  -elements { soc_top.u_core }
+create_power_domain PD2  -elements { soc_top.u_aes_regs }
+
+create_supply_port VDD
+create_supply_port VSS
+connect_supply_net VDD -ports VDD
+connect_supply_net VSS -ports VSS
+
+create_power_switch PS_PD1 -domain PD1 -input_supply VDD -output_supply VDD_PD1 \
+  -control_port { soc_top/pd1_sw_en }
+create_power_switch PS_PD2 -domain PD2 -input_supply VDD -output_supply VDD_PD2 \
+  -control_port { soc_top/pd2_sw_en }
+
+set_isolation ISO_PD1 -domain PD1 -applies_to outputs -isolation_signal soc_top/iso_pd1_n -isolation_sense active_low -clamp_value 0
+set_isolation ISO_PD2 -domain PD2 -applies_to outputs -isolation_signal soc_top/iso_pd2_n -isolation_sense active_low -clamp_value 0
+
+set_retention RET_PD2 -domain PD2 -elements { soc_top/u_aes_regs/g_key[*]/u_ret } \
+  -save_signal soc_top/save_pd2 -restore_signal soc_top/restore_pd2

@@ -1,0 +1,11 @@
+# Simulation build outputs
+/base_soc/sim/build/
+/base_soc/sim/obj_dir/
+
+# LibreLane/OpenLane generated runs
+/chiplet_extension/build/
+/chiplet_extension/logs/
+/chiplet_extension/openlane/chiplet/runs/
+
+# Packaged exports
+*.zip

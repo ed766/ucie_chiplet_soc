@@ -1,0 +1,14 @@
+# Power state table for the two-die system
+create_power_state_table CHIPLET_PST -domains {AON_A PD1_RV32 AON_B PD2_AES}
+
+add_pst_state CHIPLET_PST RUN \
+    -domain_state {AON_A 1 PD1_RV32 1 AON_B 1 PD2_AES 1}
+
+add_pst_state CHIPLET_PST SLEEP \
+    -domain_state {AON_A 1 PD1_RV32 0 AON_B 1 PD2_AES 0}
+
+add_pst_state CHIPLET_PST CRYPTO_ONLY \
+    -domain_state {AON_A 0 PD1_RV32 0 AON_B 1 PD2_AES 1}
+
+add_pst_state CHIPLET_PST DEEP_SLEEP \
+    -domain_state {AON_A 0 PD1_RV32 0 AON_B 0 PD2_AES 0}

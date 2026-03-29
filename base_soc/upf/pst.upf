@@ -1,0 +1,18 @@
+set_power_intent -upf_version 4.0
+
+add_power_state RUN         -domain AON -values { VDD on }
+add_power_state RUN         -domain PD1 -values { VDD_PD1 on }
+add_power_state RUN         -domain PD2 -values { VDD_PD2 on }
+
+add_power_state SLEEP       -domain AON -values { VDD on }
+add_power_state SLEEP       -domain PD1 -values { VDD_PD1 off }
+add_power_state SLEEP       -domain PD2 -values { VDD_PD2 on }  ;# retention on PD2 via ret_ff
+
+add_power_state CRYPTO_ONLY -domain AON -values { VDD on }
+add_power_state CRYPTO_ONLY -domain PD1 -values { VDD_PD1 off }
+add_power_state CRYPTO_ONLY -domain PD2 -values { VDD_PD2 on }
+
+add_power_state DEEP_SLEEP  -domain AON -values { VDD on }
+add_power_state DEEP_SLEEP  -domain PD1 -values { VDD_PD1 off }
+add_power_state DEEP_SLEEP  -domain PD2 -values { VDD_PD2 off }
+

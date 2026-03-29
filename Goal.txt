@@ -1,0 +1,98 @@
+1) Write a real verification plan and map it to coverage
+
+Add docs/verification_plan.md with:
+
+Features: bring-up, credit init, normal traffic, backpressure, retry, CRC errors, lane faults, reorder (if any), reset behavior.
+
+For each feature: stimulus, checkers, assertions, functional coverage bins, pass criteria.
+
+Create a “traceability table”: Plan item → test(s) → assertions → coverage points.
+
+Why it helps: recruiters love seeing verification discipline, and it forces completeness.
+
+2) Add functional coverage (not just “it passed”)
+
+Implement covergroups for:
+
+Link states: RESET, TRAIN, ACTIVE, ERROR, RETRY, DRAIN (whatever your FSM has).
+
+Credits/backpressure: min/0 credits, near-full credits, oscillating backpressure.
+
+Retry/CRC: single error, burst errors, error during backpressure, error during transitions.
+
+Latency/jitter knobs: low/nominal/high settings; distribution bins.
+
+Fault injection: lane fault probability bins, skew/crosstalk stall bins.
+
+Output a simple coverage report summary (even if simulator-limited). If using iverilog, you can still do coverage via Verilator (limited) or track “coverage counters” in SV and dump to CSV.
+
+3) Introduce a real reference model (lightweight is fine)
+
+Right now Die A “mirrors” expected behavior. That’s okay, but it’s correlated with DUT bugs.
+Options (in increasing rigor):
+
+Independent AES model in Python (PyCryptodome or a small AES implementation) to generate expected ciphertext for random plaintext/key sequences, then compare in SV via DPI or file-based vectors.
+
+Or: SV “golden” AES in a separate package that is not shared with the DUT RTL (no common modules).
+
+Also: add negative tests (wrong key, wrong block alignment) and ensure scoreboard flags them.
+
+4) Build a reusable scoreboard + transaction-level monitoring
+
+Move from signal-peeking to transactions:
+
+Create ucie_txn with fields: seq_id, payload, crc, retry_count, timestamps.
+
+Monitors push txns into a scoreboard.
+
+Scoreboard checks: ordering, duplication, loss, latency bounds (when configured), correctness of retry semantics.
+
+Even without UVM, this is UVM-like structure and reads well.
+
+5) Strengthen assertions around protocol invariants
+
+Add SVA for “must always” rules:
+
+Credit invariants: never send without credit; credits never negative; credit returns valid.
+
+Retry invariants: if CRC fails, retry requested within N cycles; retried packet matches original (seq_id/payload).
+
+Liveness: in ACTIVE, if traffic exists and no permanent faults, forward progress occurs (bounded liveness).
+
+Reset/bring-up: no data flits before link is ACTIVE; training completes within N cycles (under nominal conditions).
+
+Make assertions parameterized so you can reuse across tests/configs.
+
+Make it look like DV work (portfolio signal)
+6) Add constrained-random stimulus with seeded regressions
+
+Randomize: packet sizes, idle gaps, backpressure patterns, error injection rates, jitter knobs.
+
+Log seeds; add make regress N=50 and store a regress_summary.csv with pass/fail, seed, and key knob settings.
+
+Add a few targeted directed tests for corner cases (credit starvation, repeated retries, reset mid-flight).
+
+7) Add “bug injection” toggles to prove your testbench catches issues
+
+Create compile-time ifdefs that intentionally break the DUT:
+
+Off-by-one in credit decrement.
+
+Wrong CRC polynomial.
+
+Retry sends wrong seq_id.
+Then show in docs that tests fail when toggles are enabled.
+
+This is a strong credibility move.
+
+8) Add protocol checkers as a standalone library
+
+Package your link checker so it can be reused:
+
+sim/checkers/ucie_link_checker.sv
+
+sim/checkers/credit_checker.sv
+
+sim/checkers/retry_checker.sv
+
+Recruiters see “verification IP,” not just a one-off test.
