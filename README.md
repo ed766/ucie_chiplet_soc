@@ -170,9 +170,9 @@ Artifacts:
 
 The random stream deliberately mixes ALU ops, dependency chains, branch-heavy behavior, and memory traffic so you can talk concretely about stimulus generation, checking, assertions, functional coverage, and waveform-driven debug in the same project.
 
-### Suggested GitHub Figure
+### GTKWave Capture
 
-A clean GTKWave screenshot is a good visual proof point for the DV work. The most readable view is a short 6-10 instruction window that shows:
+A representative GTKWave screenshot from the lightweight RV32 DV environment is shown below. The most useful view is a short 6-10 instruction window that shows:
 
 - `instr_valid` / `instr_ready`
 - `commit_valid`
@@ -181,18 +181,6 @@ A clean GTKWave screenshot is a good visual proof point for the DV work. The mos
 - `mem_valid` / `mem_write` when load-store traffic is present
 - `branch_taken` when a branch sequence is visible
 
-Suggested screenshot filename:
-
-```text
-docs/images/rv32_dv_waveform.png
-```
-
-Suggested README embed once the screenshot is saved:
-
-```md
 ![GTKWave capture of the lightweight RV32 DV environment showing instruction handshaking, commit trace, PC progression, branch behavior, and writeback activity under directed and random stimulus.](docs/images/rv32_dv_waveform.png)
-```
 
-Suggested caption text:
-
-> GTKWave capture of the lightweight RV32 DV environment showing instruction handshaking, commit trace, PC progression, branch behavior, and writeback activity under directed and random stimulus.
+GTKWave capture of the lightweight RV32 DV environment showing instruction handshaking, commit trace, PC progression, branch behavior, and writeback activity under directed and random stimulus.
