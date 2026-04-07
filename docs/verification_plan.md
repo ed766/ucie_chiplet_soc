@@ -1,46 +1,203 @@
-# Verification Plan — UCIe Chiplet SoC
+# Verification Plan — UCIe Chiplet Coverage-Driven DV
 
-## Scope
+## Goal
 
-This plan targets the chiplet extension under `chiplet_extension/` and focuses on
-the UCIe-style link, die-to-die protocol behavior, and the AES traffic loop.
-The intent is to demonstrate verification discipline for an exploratory design,
-not full sign-off closure.
+Verify the dual-die RISC-V SoC and behavioral UCIe-style link in
+`chiplet_extension/` using a lightweight, coverage-driven environment. The
+methodology intentionally avoids full UVM and instead builds on:
 
-## Features and Plan Items
+- named tests
+- lightweight config objects
+- passive monitors
+- scoreboards and assertions
+- functional coverage counters
+- automated Verilator regressions
 
-| Feature | Stimulus | Checkers/Assertions | Coverage | Pass Criteria |
-| --- | --- | --- | --- | --- |
-| Link bring-up | `tb_ucie_prbs.sv` nominal training; link FSM enabled | `ucie_link_checker.sv`: training completes within `TRAIN_WINDOW` | `link_state_*` bins | Link reaches ACTIVE within window without faults |
-| Credit init | `tb_ucie_prbs.sv` startup | `credit_checker.sv`: expected vs. actual credits | `credit_zero/low/mid/high` bins | Credits match model, no underflow |
-| Normal traffic | Continuous PRBS and plaintext traffic | `ucie_scoreboard.sv` ordering/loss checks | `latency_*` bins | No mismatches, bounded latency |
-| Reordering | N/A (link is in-order; no reorder buffers) | `ucie_scoreboard.sv` FIFO match | N/A | RX flits match TX order |
-| Backpressure | Random `flit_rx_ready` toggles | `credit_checker.sv`, link liveness | `backpressure` bin | No send without credit; progress resumes |
-| Retry | CRC errors injected, `retry_ctrl` active | `retry_checker.sv`: resend within N cycles | `resend_request` bin | Resend requested and payload matches |
-| CRC errors | PHY/channel injection + optional CRC bug | `retry_checker.sv`, depacketizer flags | `crc_error` bin | CRC errors detected; no silent corruption |
-| Lane faults | Channel/PHY injects faults | `ucie_link_checker.sv` tolerates faults | `lane_fault` bin | Faults observable, link recovers when possible |
-| Reset behavior | `+RESET_MIDFLIGHT` scenario | `ucie_link_checker.sv` (no tx before ready) | link reset bin | Reset drains pipeline and retrains |
-| AES correctness | `tb_soc_chiplets.sv` plaintext loop | Independent `aes_ref_pkg` model | `scoreboard_soc_chiplets.csv` | Ciphertext matches reference |
-| Negative tests | `+NEG_WRONG_KEY`, `+NEG_MISALIGN` | Reference mismatch detection | mismatch counters | Errors are detected as expected |
+## Testbench Strategy
 
-## Traceability Table
+### Link-focused bench
 
-| Plan Item | Test(s) | Assertions/Checkers | Coverage |
-| --- | --- | --- | --- |
-| Link bring-up | `tb_ucie_prbs.sv` | `ucie_link_checker.sv` | `coverage_ucie_prbs.csv` (`link_*`) |
-| Credit init/backpressure | `tb_ucie_prbs.sv` | `credit_checker.sv` | `coverage_ucie_prbs.csv` (`credit_*`, `backpressure`) |
-| Retry/CRC | `tb_ucie_prbs.sv` | `retry_checker.sv` | `coverage_ucie_prbs.csv` (`crc_error`, `resend_request`) |
-| Reordering | `tb_ucie_prbs.sv` | `ucie_scoreboard.sv` | N/A |
-| AES correctness | `tb_soc_chiplets.sv` | `aes_ref_pkg` scoreboard | `scoreboard_soc_chiplets.csv` |
-| Negative tests | `tb_soc_chiplets.sv` with `+NEG_*` | AES mismatch counts | `scoreboard_soc_chiplets.csv` |
-| Reset mid-flight | `tb_ucie_prbs.sv +RESET_MIDFLIGHT` | `ucie_link_checker.sv` | `coverage_ucie_prbs.csv` |
+- `chiplet_extension/sim/tb_ucie_prbs.sv`
+  - focuses on packetizer, credit flow, retry logic, PHY/channel effects, and
+    FLIT-level checking
 
-## Notes
+### End-to-end bench
 
-- Coverage is implemented as counters in `sim/coverage/ucie_coverage.sv` and
-  dumped to CSV. This is simulator-agnostic and works with Icarus Verilog.
-- Seeded regressions are automated via `make regress`, which emits
-  `reports/regress_summary.csv` plus per-run logs and coverage artifacts.
-- Bug injection toggles (`UCIE_BUG_*`) intentionally break the RTL to prove
-  the checkers and scoreboards catch issues (see `Goal.txt` item 7).
-  Example: `make chiplet-sim SIM_TOOL=iverilog SIM_DEFINES='-DUCIE_BUG_CREDIT_OFF_BY_ONE'`.
+- `chiplet_extension/sim/tb_soc_chiplets.sv`
+  - focuses on the Die A -> Die B -> Die A datapath, ciphertext correctness,
+    and negative scenarios
+
+## Stimulus Strategy
+
+### Directed tests
+
+Directed tests target specific behaviors:
+
+- bring-up and nominal datapath
+- credit starvation
+- receive backpressure
+- mid-flight reset
+- wrong-key negative case
+- misalignment negative case
+- bug-validation mode
+
+### Randomized tests
+
+Randomized tests use named scenarios plus seed sweeps:
+
+- `prbs_rand_stress`
+- `soc_rand_mix`
+
+The regression runner sweeps multiple seeds automatically so randomized evidence
+is part of the default flow rather than a manual extra step.
+
+## Checking Strategy
+
+### Assertions
+
+- `credit_checker.sv`
+  - credit accounting and bug-mode detection
+- `retry_checker.sv`
+  - retry / resend checks
+- `ucie_link_checker.sv`
+  - bounded training and progress checks
+
+### Scoreboards and monitors
+
+- `ucie_txn_monitor.sv`
+  - passive FLIT capture
+- `ucie_scoreboard.sv`
+  - FLIT ordering, mismatch, drop, and latency tracking
+- end-to-end SoC checking
+  - compares ciphertext behavior against an independent reference path and
+    verifies negative scenarios are actually caught
+
+### Result-line contract
+
+Passing tests emit a standardized `DV_RESULT|...` line with:
+
+- bench
+- test
+- scenario
+- seed
+- bug mode
+- pass/fail status
+- key counters
+- coverage totals
+- artifact paths
+
+Aborting assertion failures are still regression-visible because the parser
+falls back to log signatures and return codes when a `DV_RESULT` line is
+missing.
+
+## Coverage Plan
+
+Coverage is monitor-driven and CSV-based so it works cleanly with Verilator.
+
+Tracked functional categories:
+
+- link FSM visibility
+  - reset
+  - train
+  - active
+  - retrain
+  - degraded
+  - recoveries
+- credits
+  - zero
+  - low
+  - high
+- backpressure
+  - direct backpressure
+  - retry under backpressure
+- retry / fault hooks
+  - CRC error
+  - resend request
+  - lane fault
+- latency buckets
+  - low
+  - nominal
+  - high
+- end-to-end behavior
+  - updates
+  - mismatches
+  - expected-empty underflow
+- power visibility proxies
+  - reset proxy
+  - idle proxy
+
+## Named Test Plan
+
+### Stable suite
+
+- `prbs_smoke`
+- `prbs_credit_starve`
+- `prbs_reset_midflight`
+- `prbs_backpressure_wave`
+- `prbs_rand_stress`
+- `soc_smoke`
+- `soc_wrong_key`
+- `soc_misalign`
+- `soc_backpressure`
+- `soc_fault_echo`
+- `soc_rand_mix`
+- `bug_credit_off_by_one`
+
+### Exploratory stress suite
+
+- `prbs_retry_burst`
+- `prbs_crc_storm`
+- `prbs_fault_retrain`
+
+The stable suite is the default regression gate. The stress suite exists to
+exercise retry-heavy behavior and currently serves as an exploratory closure
+target rather than a clean pass requirement.
+
+## Bug-Validation Plan
+
+Required injected bug:
+
+- `UCIE_BUG_CREDIT_OFF_BY_ONE`
+
+Expected behavior:
+
+- nominal tests pass without the define
+- `bug_credit_off_by_one` fails with the define
+- the failure is bucketed as a credit / flow-control problem
+
+## Regression Plan
+
+Primary automation entry point:
+
+- `chiplet_extension/scripts/run_regression.py`
+
+Post-processing:
+
+- `chiplet_extension/scripts/parse_regression_results.py`
+- `chiplet_extension/scripts/gen_coverage_report.py`
+- `chiplet_extension/scripts/gen_failure_summary.py`
+
+Default outputs:
+
+- `chiplet_extension/reports/regress_summary.csv`
+- `chiplet_extension/reports/coverage_summary.csv`
+- `chiplet_extension/reports/failure_buckets.csv`
+- `chiplet_extension/reports/top_failures.md`
+- `chiplet_extension/reports/verification_dashboard.md`
+
+## Acceptance Status
+
+Implemented and verified:
+
+- at least 10 named tests
+- directed and randomized tests without bench edits
+- multiple-seed automated regression
+- automatic coverage sampling and aggregation
+- machine-readable result lines
+- bug-injection validation for `UCIE_BUG_CREDIT_OFF_BY_ONE`
+- README and docs updated for the coverage-driven flow
+
+Still open:
+
+- stable-suite coverage for retry / CRC / lane-fault bins
+- closure of the exploratory stress suite without `link_progress` failures

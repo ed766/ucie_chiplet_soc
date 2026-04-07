@@ -1,5 +1,4 @@
 `timescale 1ns/1ps
-`include "sva_macros.svh"
 
 module ucie_link_checker #(
     parameter int TRAIN_WINDOW = 512,
@@ -15,23 +14,63 @@ module ucie_link_checker #(
     input  logic traffic_present
 );
 
-    // Do not transmit before the link is reported ready.
-    `ASSERT_PROP("LINK_NO_TX_BEFORE_READY",
-        @(posedge clk) disable iff (!rst_n)
-        tx_fire |-> link_ready
-    )
+    logic training_watch_q;
+    logic progress_watch_q;
+    logic last_training_cond_q;
+    logic last_progress_cond_q;
+    int unsigned training_window_q;
+    int unsigned progress_window_q;
 
-    // Under nominal conditions (no fault), training should complete in a bounded window.
-    `ASSERT_PROP("LINK_TRAINING_BOUNDED",
-        @(posedge clk) disable iff (!rst_n)
-        (start_training && traffic_present && !fault_detected)
-            |-> ##[1:TRAIN_WINDOW] link_up
-    )
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            training_watch_q <= 1'b0;
+            progress_watch_q <= 1'b0;
+            last_training_cond_q <= 1'b0;
+            last_progress_cond_q <= 1'b0;
+            training_window_q <= 0;
+            progress_window_q <= 0;
+        end else begin
+            logic training_cond;
+            logic progress_cond;
 
-    // Bounded liveness: active link with traffic should make progress.
-    `ASSERT_PROP("LINK_PROGRESS_BOUNDED",
-        @(posedge clk) disable iff (!rst_n)
-        (link_up && traffic_present && !fault_detected) |-> ##[1:PROGRESS_WINDOW] tx_fire
-    )
+            training_cond = start_training && traffic_present && !fault_detected;
+            progress_cond = link_ready && traffic_present && !fault_detected;
+
+            if (tx_fire && !link_ready) begin
+                $error("LINK_NO_TX_BEFORE_READY: transfer fired before link_ready");
+            end
+
+            if (training_cond && !last_training_cond_q && !link_up) begin
+                training_watch_q <= 1'b1;
+                training_window_q <= TRAIN_WINDOW;
+            end else if (!training_cond || link_up) begin
+                training_watch_q <= 1'b0;
+                training_window_q <= 0;
+            end else if (training_watch_q && training_window_q != 0) begin
+                training_window_q <= training_window_q - 1;
+                if (training_window_q == 1) begin
+                    $error("LINK_TRAINING_BOUNDED: link_up missing within %0d cycles", TRAIN_WINDOW);
+                    training_watch_q <= 1'b0;
+                end
+            end
+
+            if (progress_cond && !last_progress_cond_q) begin
+                progress_watch_q <= 1'b1;
+                progress_window_q <= PROGRESS_WINDOW;
+            end else if (!progress_cond || tx_fire) begin
+                progress_watch_q <= 1'b0;
+                progress_window_q <= 0;
+            end else if (progress_watch_q && progress_window_q != 0) begin
+                progress_window_q <= progress_window_q - 1;
+                if (progress_window_q == 1) begin
+                    $error("LINK_PROGRESS_BOUNDED: no tx progress within %0d cycles", PROGRESS_WINDOW);
+                    progress_watch_q <= 1'b0;
+                end
+            end
+
+            last_training_cond_q <= training_cond;
+            last_progress_cond_q <= progress_cond;
+        end
+    end
 
 endmodule : ucie_link_checker

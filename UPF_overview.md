@@ -7,19 +7,19 @@ files live, and how they connect to the RTL, verification, and intended flows.
 
 Two layers of power intent exist:
 
-- **Base SoC (single-die reference)**: `ucie_chiplet_soc/base_soc/upf/`
+- **Base SoC (single-die reference)**: `base_soc/upf/`
   - `soc.upf` defines domains, supplies, switches, isolation, and retention.
   - `pst.upf` defines the power-state table (PST) and legal state combinations.
-- **Chiplet extension (dual-die scaffolding)**: `ucie_chiplet_soc/chiplet_extension/upf/`
+- **Chiplet extension (dual-die scaffolding)**: `chiplet_extension/upf/`
   - `die_a.upf`, `die_b.upf` define domain boundaries per die.
   - `pst_chiplet.upf` defines cross-die states.
 
 Supporting RTL and verification hooks that align with the UPF intent:
 
-- Power control FSM and sequencing: `ucie_chiplet_soc/base_soc/rtl/aon/aon_power_ctrl.sv`
-- Isolation usage in RTL: `ucie_chiplet_soc/base_soc/rtl/top/soc_top.sv`
-- Power sequencing assertions: `ucie_chiplet_soc/base_soc/sim/pwr_assertions.sv`
-- PST checks in testbench: `ucie_chiplet_soc/base_soc/sim/tb_soc_top.sv`
+- Power control FSM and sequencing: `base_soc/rtl/aon/aon_power_ctrl.sv`
+- Isolation usage in RTL: `base_soc/rtl/top/soc_top.sv`
+- Power sequencing assertions: `base_soc/sim/pwr_assertions.sv`
+- PST checks in testbench: `base_soc/sim/tb_soc_top.sv`
 
 ## Base SoC UPF (Complete Example)
 

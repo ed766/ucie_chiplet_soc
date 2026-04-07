@@ -5,13 +5,13 @@ module ucie_scoreboard #(
     parameter int DEPTH       = 128,
     parameter int LATENCY_MAX = 128
 ) (
-    input  logic      clk,
-    input  logic      rst_n,
-    input  logic      tx_valid,
-    input  ucie_txn_t tx_txn,
-    input  logic      rx_valid,
-    input  ucie_txn_t rx_txn,
-    output logic      latency_valid,
+    input  logic        clk,
+    input  logic        rst_n,
+    input  logic        tx_valid,
+    input  ucie_txn_t   tx_txn,
+    input  logic        rx_valid,
+    input  ucie_txn_t   rx_txn,
+    output logic        latency_valid,
     output logic [15:0] latency_value,
     output int unsigned tx_count,
     output int unsigned rx_count,
@@ -21,9 +21,20 @@ module ucie_scoreboard #(
     output int unsigned latency_violation_count
 );
 
-    ucie_txn_t fifo_payload [0:DEPTH-1];
-    int unsigned head_q, tail_q, count_q;
-    ucie_txn_t last_txn_q;
+    localparam int PAYLOAD_WIDTH = `UCIE_TXN_FLIT_WIDTH - `UCIE_TXN_CRC_WIDTH;
+
+    logic [PAYLOAD_WIDTH-1:0] fifo_payload_q   [0:DEPTH-1];
+    logic [`UCIE_TXN_CRC_WIDTH-1:0] fifo_crc_q [0:DEPTH-1];
+    logic [31:0] fifo_timestamp_q              [0:DEPTH-1];
+    logic [15:0] fifo_seq_id_q                 [0:DEPTH-1];
+
+    int unsigned head_q;
+    int unsigned tail_q;
+    int unsigned count_q;
+
+    logic [PAYLOAD_WIDTH-1:0] last_payload_q;
+    logic [`UCIE_TXN_CRC_WIDTH-1:0] last_crc_q;
+    logic [15:0] last_seq_id_q;
     logic have_last_q;
 
     always_ff @(posedge clk or negedge rst_n) begin
@@ -31,7 +42,9 @@ module ucie_scoreboard #(
             head_q <= 0;
             tail_q <= 0;
             count_q <= 0;
-            last_txn_q <= '0;
+            last_payload_q <= '0;
+            last_crc_q <= '0;
+            last_seq_id_q <= '0;
             have_last_q <= 1'b0;
             tx_count <= 0;
             rx_count <= 0;
@@ -49,16 +62,21 @@ module ucie_scoreboard #(
                 if (tx_txn.retry_count != 0) begin
                     retry_count <= retry_count + 1;
                     if (!have_last_q ||
-                        tx_txn.seq_id != last_txn_q.seq_id ||
-                        tx_txn.payload !== last_txn_q.payload ||
-                        tx_txn.crc !== last_txn_q.crc) begin
+                        tx_txn.seq_id != last_seq_id_q ||
+                        tx_txn.payload !== last_payload_q ||
+                        tx_txn.crc !== last_crc_q) begin
                         mismatch_count <= mismatch_count + 1;
                     end
                 end else begin
-                    last_txn_q <= tx_txn;
+                    last_seq_id_q <= tx_txn.seq_id;
+                    last_payload_q <= tx_txn.payload;
+                    last_crc_q <= tx_txn.crc;
                     have_last_q <= 1'b1;
                     if (count_q < DEPTH) begin
-                        fifo_payload[tail_q] <= tx_txn;
+                        fifo_seq_id_q[tail_q] <= tx_txn.seq_id;
+                        fifo_payload_q[tail_q] <= tx_txn.payload;
+                        fifo_crc_q[tail_q] <= tx_txn.crc;
+                        fifo_timestamp_q[tail_q] <= tx_txn.timestamp;
                         tail_q <= (tail_q + 1) % DEPTH;
                         count_q <= count_q + 1;
                     end else begin
@@ -68,16 +86,16 @@ module ucie_scoreboard #(
             end
 
             if (rx_valid) begin
+                logic [31:0] latency_calc;
                 rx_count <= rx_count + 1;
                 if (count_q == 0) begin
                     drop_count <= drop_count + 1;
                 end else begin
-                    logic [31:0] latency_calc;
-                    if (rx_txn.payload !== fifo_payload[head_q].payload ||
-                        rx_txn.crc !== fifo_payload[head_q].crc) begin
+                    if (rx_txn.payload !== fifo_payload_q[head_q] ||
+                        rx_txn.crc !== fifo_crc_q[head_q]) begin
                         mismatch_count <= mismatch_count + 1;
                     end
-                    latency_calc = rx_txn.timestamp - fifo_payload[head_q].timestamp;
+                    latency_calc = rx_txn.timestamp - fifo_timestamp_q[head_q];
                     latency_value <= latency_calc[15:0];
                     latency_valid <= 1'b1;
                     if (latency_calc > LATENCY_MAX) begin
@@ -95,16 +113,16 @@ module ucie_scoreboard #(
         fd = $fopen(path, "w");
         if (fd == 0) begin
             $display("Failed to open scoreboard report file: %s", path);
-            return;
+        end else begin
+            $fdisplay(fd, "metric,value");
+            $fdisplay(fd, "tx_count,%0d", tx_count);
+            $fdisplay(fd, "rx_count,%0d", rx_count);
+            $fdisplay(fd, "mismatch_count,%0d", mismatch_count);
+            $fdisplay(fd, "drop_count,%0d", drop_count);
+            $fdisplay(fd, "retry_count,%0d", retry_count);
+            $fdisplay(fd, "latency_violation_count,%0d", latency_violation_count);
+            $fclose(fd);
         end
-        $fdisplay(fd, "metric,value");
-        $fdisplay(fd, "tx_count,%0d", tx_count);
-        $fdisplay(fd, "rx_count,%0d", rx_count);
-        $fdisplay(fd, "mismatch_count,%0d", mismatch_count);
-        $fdisplay(fd, "drop_count,%0d", drop_count);
-        $fdisplay(fd, "retry_count,%0d", retry_count);
-        $fdisplay(fd, "latency_violation_count,%0d", latency_violation_count);
-        $fclose(fd);
     endtask
 
 endmodule : ucie_scoreboard

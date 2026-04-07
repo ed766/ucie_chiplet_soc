@@ -68,20 +68,19 @@ Verification Strategy
 
 Running Tests
 
-    The chiplet_extension/Makefile supports simulator-agnostic targets. By
-    default it emits stub logs so reports still build; set SIM_TOOL to run a
-    real simulator.
+    The chiplet_extension/Makefile now drives the Verilator-based regression
+    flow directly.
 
         cd chiplet_extension
         make chiplet-sim
-        make chiplet-report
-
-        # Run real benches when Icarus Verilog is installed
-        make chiplet-sim SIM_TOOL=iverilog
+        make regress
+        make stress
+        make bug-validate
 
     Outputs and logs:
-        Logs land in chiplet_extension/logs/ and feed reports under
-        chiplet_extension/reports/ (link_bw_latency.csv, link_summary.csv).
+        Per-run simulator and compile logs land in
+        chiplet_extension/build/verilator_regression/logs/.
+        Aggregated CSV / Markdown reports land in chiplet_extension/reports/.
 
 Reports and Physical Flow
 
@@ -92,10 +91,11 @@ Reports and Physical Flow
         constraints for realistic timing closure.
 
         Example:
-            cd ~/librelane
-            python3 -m librelane \
-              --pdk-root ~/.ciel/ciel/sky130/versions/0fe599b2afb6708d281543108caf8310912f54af \
-              ~/ucie_chiplet_soc/chiplet_extension/openlane/chiplet/config.json
+            /nix/var/nix/profiles/default/bin/nix-shell --pure <librelane-root>/shell.nix
+            cd <librelane-root>
+            librelane \
+              --pdk-root <sky130-pdk-root> \
+              <repo-root>/chiplet_extension/openlane/chiplet/config.json
 
     Outputs:
         Runs are written under chiplet_extension/openlane/chiplet/runs/.
@@ -103,6 +103,7 @@ Reports and Physical Flow
 Status as of this revision
 
     LibreLane runs complete end-to-end in this workspace with the relaxed clock
-    target, producing final layout outputs. Timing closure at tighter clocks is
-    not representative yet, and slow-corner max slew/max cap warnings remain.
-    UPF is still a scaffold and not suitable for power-aware sign-off.
+    target, producing final layout outputs. Magic DRC and LVS pass in the
+    verified run, while antenna, max slew, and max cap warnings still remain.
+    Timing closure at tighter clocks is not representative yet, and UPF is
+    still a scaffold rather than a power-aware sign-off flow.

@@ -24,7 +24,7 @@ Latency/jitter knobs: low/nominal/high settings; distribution bins.
 
 Fault injection: lane fault probability bins, skew/crosstalk stall bins.
 
-Output a simple coverage report summary (even if simulator-limited). If using iverilog, you can still do coverage via Verilator (limited) or track “coverage counters” in SV and dump to CSV.
+Output a simple coverage report summary (even if simulator-limited). The current project flow uses Verilator plus SystemVerilog coverage counters dumped to CSV.
 
 3) Introduce a real reference model (lightweight is fine)
 

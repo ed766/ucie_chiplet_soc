@@ -1,8 +1,7 @@
 `timescale 1ns/1ps
-`include "sva_macros.svh"
 
 module retry_checker #(
-    parameter int FLIT_WIDTH = 256,
+    parameter int FLIT_WIDTH = 264,
     parameter int RESEND_WINDOW = 16
 ) (
     input  logic                  clk,
@@ -17,26 +16,47 @@ module retry_checker #(
     logic [FLIT_WIDTH-1:0] last_flit_q;
     logic                  have_last_q;
     logic                  expect_resend_q;
-
-    // Require a resend request within a bounded window after a CRC error.
-    `ASSERT_PROP("RETRY_RESEND_WINDOW",
-        @(posedge clk) disable iff (!rst_n)
-        crc_error |-> ##[1:RESEND_WINDOW] resend_request
-    )
-
-    // If resend is requested, expect traffic to resume within a bounded window.
-    `ASSERT_PROP("RETRY_PROGRESS",
-        @(posedge clk) disable iff (!rst_n)
-        (resend_request && link_ready) |-> ##[1:RESEND_WINDOW] tx_fire
-    )
+    int unsigned           resend_window_q;
+    int unsigned           progress_window_q;
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            last_flit_q      <= '0;
-            have_last_q      <= 1'b0;
-            expect_resend_q  <= 1'b0;
+            last_flit_q <= '0;
+            have_last_q <= 1'b0;
+            expect_resend_q <= 1'b0;
+            resend_window_q <= 0;
+            progress_window_q <= 0;
         end else begin
+            if (crc_error) begin
+                expect_resend_q <= 1'b1;
+                resend_window_q <= RESEND_WINDOW;
+            end else if (expect_resend_q && resend_window_q != 0) begin
+                resend_window_q <= resend_window_q - 1;
+                if (resend_window_q == 1) begin
+                    $error("RETRY_RESEND_WINDOW: resend request missing within %0d cycles", RESEND_WINDOW);
+                    expect_resend_q <= 1'b0;
+                end
+            end
+
+            if (resend_request) begin
+                expect_resend_q <= 1'b0;
+                resend_window_q <= 0;
+                if (link_ready) begin
+                    progress_window_q <= RESEND_WINDOW;
+                end
+            end else if (progress_window_q != 0) begin
+                progress_window_q <= progress_window_q - 1;
+                if (tx_fire) begin
+                    progress_window_q <= 0;
+                end else if (progress_window_q == 1) begin
+                    $error("RETRY_PROGRESS: no tx_fire observed within %0d cycles after resend", RESEND_WINDOW);
+                end
+            end
+
             if (tx_fire) begin
+                if (progress_window_q != 0) begin
+                    progress_window_q <= 0;
+                end
                 if (expect_resend_q) begin
                     if (have_last_q && tx_flit !== last_flit_q) begin
                         $error("Retry payload mismatch: expected %h got %h", last_flit_q, tx_flit);
@@ -46,10 +66,6 @@ module retry_checker #(
                     last_flit_q <= tx_flit;
                     have_last_q <= 1'b1;
                 end
-            end
-
-            if (crc_error) begin
-                expect_resend_q <= 1'b1;
             end
         end
     end

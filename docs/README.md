@@ -127,32 +127,57 @@ In short, the chiplet system is a looped crypto service:
 
 - Stresses packetizer/adapter/PHY/channel/receiver with PRBS-like source traffic.
 - Adds random receive backpressure.
-- Directed scenarios via plusargs:
-- `CREDIT_STARVE`, `RETRY_BURST`, `RESET_MIDFLIGHT`.
+- Selects named directed and randomized tests through `+TEST=<name>`.
+- Current PRBS named tests include:
+- `prbs_smoke`
+- `prbs_credit_starve`
+- `prbs_retry_burst`
+- `prbs_reset_midflight`
+- `prbs_backpressure_wave`
+- `prbs_crc_storm`
+- `prbs_fault_retrain`
+- `prbs_rand_stress`
 - Uses:
 - scoreboard (`ucie_scoreboard.sv`) for mismatch/drop/latency checks,
 - assertions (`credit_checker.sv`, `retry_checker.sv`, `ucie_link_checker.sv`),
-- coverage counters (`ucie_coverage.sv`) written to CSV.
+- monitor-driven coverage counters (`sim/dv/stats_monitor.sv`) written to CSV.
+- Emits machine-readable `DV_RESULT|...` lines for automation.
 
 ### `tb_soc_chiplets.sv`
 
 - Runs the full two-die AES loop.
 - Builds an *independent* AES reference (`sim/models/aes_ref_pkg.sv`) for expected ciphertext.
-- Includes negative modes:
-- `NEG_WRONG_KEY` and `NEG_MISALIGN`.
+- Includes named negative scenarios:
+- `soc_wrong_key`
+- `soc_misalign`
+- Additional named tests include:
+- `soc_smoke`
+- `soc_backpressure`
+- `soc_fault_echo`
+- `soc_rand_mix`
 - Fails if expected mismatches are absent in negative mode, or present in normal mode.
+- Emits machine-readable `DV_RESULT|...` lines for automation.
 
 ### Regression Harness
 
-- `scripts/run_regress.py` compiles/runs seeded PRBS sweeps with varied jitter/error/pipeline/skew/crosstalk/reach macros.
-- Adds directed PRBS and SoC negative runs.
-- Emits per-run logs and CSV summary (`reports/regress_summary.csv`).
+- `scripts/run_regression.py` is the Verilator-native regression entry point.
+- It sweeps multiple seeds for randomized tests, compiles bug-mode variants, and
+  emits a manifest for every run.
+- `scripts/parse_regression_results.py` consumes `DV_RESULT|...` lines and
+  assertion/log signatures to build `reports/regress_summary.csv`.
+- `scripts/gen_coverage_report.py` aggregates per-run coverage CSVs into
+  `reports/coverage_summary.csv`.
+- `scripts/gen_failure_summary.py` writes:
+- `reports/failure_buckets.csv`
+- `reports/top_failures.md`
+- `reports/verification_dashboard.md`
 
 ## 6) Behavioral Boundaries and Current Practical Notes
 
 - This is a behavioral/prototyping model of a UCIe-like stack, not a sign-off PHY or protocol-complete UCIe implementation.
-- `Makefile` defaults to `SIM_TOOL=stub`, so report generation works even without running real RTL simulation.
-- Link metrics parsers are currently log-format dependent and can still produce placeholder-like outputs if logs do not match expected patterns.
+- The current flow is Verilator-based rather than Icarus-based.
+- Stable regression artifacts are generated from named tests and checked in under
+  `chiplet_extension/reports/`.
 - Packetizer/depacketizer require `(FLIT_WIDTH - CRC_WIDTH)` to be divisible by `DATA_WIDTH`; keep parameters consistent when changing widths.
 - Bug-injection macros exist to validate checker sensitivity:
 - `UCIE_BUG_CREDIT_OFF_BY_ONE`,

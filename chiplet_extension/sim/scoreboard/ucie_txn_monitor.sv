@@ -98,6 +98,7 @@ module ucie_txn_monitor_rx (
     input  logic                          flit_valid,
     input  logic                          flit_ready,
     input  logic [`UCIE_TXN_FLIT_WIDTH-1:0] flit_data,
+    input  logic                          crc_error,
     output logic                          txn_valid,
     output ucie_txn_t                     txn
 );
@@ -106,6 +107,8 @@ module ucie_txn_monitor_rx (
 
     logic [31:0] cycle_q;
     logic [15:0] seq_id_q;
+    logic        pending_valid_q;
+    ucie_txn_t   pending_txn_q;
     logic [PAYLOAD_WIDTH-1:0]          payload;
     logic [`UCIE_TXN_CRC_WIDTH-1:0]    crc;
     logic                             flit_fire;
@@ -116,13 +119,13 @@ module ucie_txn_monitor_rx (
 
     always_comb begin
         txn = '0;
-        txn_valid = flit_fire;
-        if (flit_fire) begin
-            txn.seq_id      = seq_id_q;
+        txn_valid = pending_valid_q && !crc_error;
+        if (pending_valid_q && !crc_error) begin
+            txn.seq_id      = pending_txn_q.seq_id;
             txn.retry_count = 0;
-            txn.payload     = payload;
-            txn.crc         = crc;
-            txn.timestamp   = cycle_q;
+            txn.payload     = pending_txn_q.payload;
+            txn.crc         = pending_txn_q.crc;
+            txn.timestamp   = pending_txn_q.timestamp;
         end
     end
 
@@ -130,10 +133,24 @@ module ucie_txn_monitor_rx (
         if (!rst_n) begin
             cycle_q <= 0;
             seq_id_q <= 0;
+            pending_valid_q <= 1'b0;
+            pending_txn_q <= '0;
         end else begin
             cycle_q <= cycle_q + 1'b1;
+            if (pending_valid_q) begin
+                pending_valid_q <= 1'b0;
+                if (!crc_error) begin
+                    seq_id_q <= seq_id_q + 1'b1;
+                end
+            end
             if (flit_fire) begin
-                seq_id_q <= seq_id_q + 1'b1;
+                pending_valid_q <= 1'b1;
+                pending_txn_q <= '0;
+                pending_txn_q.seq_id <= seq_id_q;
+                pending_txn_q.retry_count <= 0;
+                pending_txn_q.payload <= payload;
+                pending_txn_q.crc <= crc;
+                pending_txn_q.timestamp <= cycle_q;
             end
         end
     end

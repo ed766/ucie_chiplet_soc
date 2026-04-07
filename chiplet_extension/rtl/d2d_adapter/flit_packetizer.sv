@@ -1,7 +1,7 @@
 // Groups streaming payloads into fixed-size FLITs and appends CRC-8 protection.
 // Role: transmit-side framing for the UCIe-style adapter.
 module flit_packetizer #(
-    parameter int FLIT_WIDTH = 256,
+    parameter int FLIT_WIDTH = 264,
     parameter int DATA_WIDTH = 64,
     parameter int CRC_WIDTH  = 8
 ) (

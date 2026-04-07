@@ -2,7 +2,7 @@
 // Role: breaks a FLIT into lane-width beats and drives link/training signals.
 module ucie_tx #(
     parameter int LANES = 16,
-    parameter int FLIT_WIDTH = 256
+    parameter int FLIT_WIDTH = 264
 ) (
     input  logic                   clk,
     input  logic                   rst_n,

@@ -1,7 +1,7 @@
 // Reconstructs payload words from incoming FLITs and validates CRC-8 fields.
 // Role: receive-side deframing for the UCIe-style adapter.
 module flit_depacketizer #(
-    parameter int FLIT_WIDTH = 256,
+    parameter int FLIT_WIDTH = 264,
     parameter int DATA_WIDTH = 64,
     parameter int CRC_WIDTH  = 8
 ) (

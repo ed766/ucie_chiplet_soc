@@ -2,13 +2,13 @@
 `define TB_PARAMS_SVH
 
 `ifndef TB_LANES
-`define TB_LANES 16
+`define TB_LANES 8
 `endif
 `ifndef TB_DATA_WIDTH
 `define TB_DATA_WIDTH 64
 `endif
 `ifndef TB_FLIT_WIDTH
-`define TB_FLIT_WIDTH 256
+`define TB_FLIT_WIDTH 264
 `endif
 
 `ifndef TB_ERROR_PROB_NUM

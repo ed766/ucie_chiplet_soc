@@ -1,0 +1,2 @@
+bucket,count,unexpected_failures,expected_failures,tests,example_run_id,example_detail,example_log
+credit_accounting,1,0,1,bug_credit_off_by_one,bug_credit_off_by_one_seed6be68c02,credit_assertion,/home/esgha/ucie_chiplet_soc/chiplet_extension/build/verilator_regression/logs/bug_credit_off_by_one_seed6be68c02.log

@@ -2,7 +2,7 @@
 // Role: reassembles FLITs from lane beats and returns credits to the sender.
 module ucie_rx #(
     parameter int LANES = 16,
-    parameter int FLIT_WIDTH = 256
+    parameter int FLIT_WIDTH = 264
 ) (
     input  logic                   clk,
     input  logic                   rst_n,
@@ -21,8 +21,7 @@ module ucie_rx #(
     localparam int BEAT_COUNTER_WID = $clog2(BEATS_PER_FLIT + 1);
 
     logic [FLIT_WIDTH-1:0] flit_buffer_d, flit_buffer_q;
-    logic [BEAT_COUNTER_WID-1:0] beats_left_d, beats_left_q;
-    logic receiving_d, receiving_q;
+    logic [BEAT_COUNTER_WID-1:0] beat_index_d, beat_index_q;
     logic hold_flit_d, hold_flit_q;
 
     assign flit_out      = flit_buffer_q;
@@ -34,36 +33,22 @@ module ucie_rx #(
     always_comb begin
         // Shift in lane beats until a full FLIT is assembled.
         flit_buffer_d = flit_buffer_q;
-        beats_left_d  = beats_left_q;
-        receiving_d   = receiving_q;
+        beat_index_d  = beat_index_q;
         hold_flit_d   = hold_flit_q;
 
         if (!link_up) begin
-            receiving_d = 1'b0;
-            beats_left_d = '0;
+            beat_index_d = '0;
             if (!hold_flit_q) begin
                 flit_buffer_d = '0;
             end
         end else begin
             if (lane_rx_valid && !hold_flit_q) begin
-                flit_buffer_d = {lane_rx_data, flit_buffer_q[FLIT_WIDTH-1:LANES]};
-                if (!receiving_q) begin
-                    if (BEATS_PER_FLIT <= 1) begin
-                        hold_flit_d   = 1'b1;
-                        receiving_d   = 1'b0;
-                        beats_left_d  = '0;
-                    end else begin
-                        receiving_d  = 1'b1;
-                        beats_left_d = BEAT_COUNTER_WID'((BEATS_PER_FLIT > 0) ? (BEATS_PER_FLIT - 1) : 0);
-                    end
+                flit_buffer_d[(beat_index_q * LANES) +: LANES] = lane_rx_data;
+                if (beat_index_q == BEAT_COUNTER_WID'(BEATS_PER_FLIT - 1)) begin
+                    hold_flit_d  = 1'b1;
+                    beat_index_d = '0;
                 end else begin
-                    if (beats_left_q == 0) begin
-                        hold_flit_d   = 1'b1;
-                        receiving_d   = 1'b0;
-                        beats_left_d  = '0;
-                    end else begin
-                        beats_left_d  = beats_left_q - 1'b1;
-                    end
+                    beat_index_d = beat_index_q + 1'b1;
                 end
             end
         end
@@ -77,13 +62,11 @@ module ucie_rx #(
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             flit_buffer_q <= '0;
-            beats_left_q  <= '0;
-            receiving_q   <= 1'b0;
+            beat_index_q  <= '0;
             hold_flit_q   <= 1'b0;
         end else begin
             flit_buffer_q <= flit_buffer_d;
-            beats_left_q  <= beats_left_d;
-            receiving_q   <= receiving_d;
+            beat_index_q  <= beat_index_d;
             hold_flit_q   <= hold_flit_d;
         end
     end

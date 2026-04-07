@@ -2,7 +2,7 @@
 // Role: integration point for the UCIe-style link; exposes plaintext/ciphertext monitors.
 module soc_chiplet_top #(
     parameter int DATA_WIDTH = 64,
-    parameter int FLIT_WIDTH = 256,
+    parameter int FLIT_WIDTH = 264,
     parameter int LANES = 16
 ) (
     input  logic                   clk,

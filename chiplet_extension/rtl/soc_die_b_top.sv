@@ -2,7 +2,7 @@
 // Role: receive FLITs, run AES, and return ciphertext via the adapter/PHY stack.
 module soc_die_b_top #(
     parameter int DATA_WIDTH = 64,
-    parameter int FLIT_WIDTH = 256,
+    parameter int FLIT_WIDTH = 264,
     parameter int LANES = 16
 ) (
     input  logic                  clk,
@@ -19,6 +19,7 @@ module soc_die_b_top #(
 );
 
     localparam int CREDIT_INIT = 128;
+    localparam int TRAIN_SETTLE_CYCLES = 16;
 
     // Adapter-side lane signals (before the PHY/channel).
     logic [LANES-1:0] lane_adapter_tx_data;
@@ -56,6 +57,8 @@ module soc_die_b_top #(
     logic resend_request;
     logic link_ready;
     logic link_up;
+    logic training_done;
+    logic [$clog2(TRAIN_SETTLE_CYCLES+1)-1:0] training_timer_q;
 
     // Receive lane beats and rebuild FLITs.
     ucie_rx #(
@@ -138,7 +141,7 @@ module soc_die_b_top #(
         .clk              (clk),
         .rst_n            (rst_n),
         .start_training   (1'b1),
-        .training_done    (lane_adapter_rx_valid),
+        .training_done    (training_done),
         .fault_detected   (lane_adapter_lane_fault),
         .retry_in_progress(resend_request),
         .link_ready       (link_ready),
@@ -204,6 +207,19 @@ module soc_die_b_top #(
 
     // Use the fabric clock as the lane clock in this behavioral model.
     assign lane_adapter_lane_clk = clk;
+    assign training_done = lane_adapter_rx_valid || (training_timer_q == TRAIN_SETTLE_CYCLES[$bits(training_timer_q)-1:0]);
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            training_timer_q <= '0;
+        end else if (link_up) begin
+            training_timer_q <= '0;
+        end else if (lane_adapter_rx_valid) begin
+            training_timer_q <= TRAIN_SETTLE_CYCLES[$bits(training_timer_q)-1:0];
+        end else if (training_timer_q != TRAIN_SETTLE_CYCLES[$bits(training_timer_q)-1:0]) begin
+            training_timer_q <= training_timer_q + 1'b1;
+        end
+    end
 
     // Monitor ciphertext for debug.
     always_ff @(posedge clk or negedge rst_n) begin

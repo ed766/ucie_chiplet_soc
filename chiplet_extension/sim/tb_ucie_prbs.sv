@@ -1,51 +1,126 @@
 `timescale 1ns/1ps
 `include "tb_params.svh"
 `include "sva_macros.svh"
+`include "dv/txn_pkg.sv"
+`include "dv/ucie_cov_pkg.sv"
+`include "dv/stats_pkg.sv"
+`include "dv/stats_monitor.sv"
+`include "tests/prbs_tests_pkg.sv"
 `include "checkers/credit_checker.sv"
 `include "checkers/retry_checker.sv"
 `include "checkers/ucie_link_checker.sv"
 `include "scoreboard/ucie_txn.svh"
 `include "scoreboard/ucie_txn_monitor.sv"
 `include "scoreboard/ucie_scoreboard.sv"
-`include "coverage/ucie_coverage.sv"
 
 module tb_ucie_prbs;
+
+    import txn_pkg::*;
+    import prbs_tests_pkg::*;
 
     localparam int LANES = `TB_LANES;
     localparam int DATA_WIDTH = `TB_DATA_WIDTH;
     localparam int FLIT_WIDTH = `TB_FLIT_WIDTH;
+    localparam int POST_TARGET_DRAIN_CYCLES = 256;
 
     logic clk;
     logic rst_n;
+    logic cfg_ready;
+
+    ucie_test_cfg cfg;
+    bit found_cfg;
+    string test_name;
+    string scenario_kind;
+    string bug_mode;
+    int unsigned target_tx_count_cfg;
+    int unsigned max_cycles_cfg;
+    int unsigned gap_ceiling_cfg;
+    int unsigned backpressure_modulus_cfg;
+    int unsigned backpressure_hold_cfg;
+    int unsigned error_inject_modulus_cfg;
+    int unsigned credit_block_start_cfg;
+    int unsigned credit_block_cycles_cfg;
+    int unsigned midflight_reset_cycle_cfg;
+    logic enable_midflight_reset_cfg;
+    logic enable_credit_starve_cfg;
+    logic enable_retry_burst_cfg;
+    logic enable_backpressure_cfg;
+    logic enable_fault_echo_cfg;
+    int unsigned backpressure_hold_q;
+    bit debug_progress;
+    logic last_link_ready_q;
+    logic last_resend_request_q;
+    logic reset_observed_q;
+    logic [3:0] reset_proxy_window_q;
+    int unsigned error_cycle_q;
 
     initial begin
         clk = 0;
         forever #5 clk = ~clk; // 100 MHz fabric clock
     end
 
+    int unsigned seed;
+    string cov_path;
+    string score_path;
     initial begin
+        cfg_ready = 1'b0;
+        if (!$value$plusargs("TEST=%s", test_name)) begin
+            test_name = "prbs_smoke";
+        end
+        apply_prbs_named_test(test_name, found_cfg, cfg);
+        if (!found_cfg) begin
+            $fatal(1, "Unknown PRBS test '%s'", test_name);
+        end
+        cfg.apply_runtime_plusargs();
+        cfg.apply_seed(cfg.seed);
+        seed = cfg.seed;
+        scenario_kind = cfg.scenario_kind;
+        bug_mode = cfg.bug_mode;
+        target_tx_count_cfg = cfg.target_tx_count;
+        max_cycles_cfg = cfg.max_cycles;
+        gap_ceiling_cfg = cfg.link.gap_ceiling;
+        backpressure_modulus_cfg = cfg.link.backpressure_modulus;
+        backpressure_hold_cfg = cfg.link.backpressure_hold_cycles;
+        error_inject_modulus_cfg = cfg.link.error_inject_modulus;
+        credit_block_start_cfg = cfg.link.credit_block_start;
+        credit_block_cycles_cfg = cfg.link.credit_block_cycles;
+        midflight_reset_cycle_cfg = cfg.link.midflight_reset_cycle;
+        enable_midflight_reset_cfg = cfg.link.enable_midflight_reset;
+        enable_credit_starve_cfg = cfg.link.enable_credit_starve;
+        enable_retry_burst_cfg = cfg.link.enable_retry_burst;
+        enable_backpressure_cfg = cfg.link.enable_backpressure;
+        enable_fault_echo_cfg = cfg.link.enable_fault_echo;
+        cov_path = "reports/coverage_ucie_prbs.csv";
+        score_path = "reports/scoreboard_ucie_prbs.csv";
+        void'($value$plusargs("COV_OUT=%s", cov_path));
+        void'($value$plusargs("SCORE_OUT=%s", score_path));
+        debug_progress = $test$plusargs("DEBUG_PROGRESS");
+        cfg_ready = 1'b1;
+    end
+
+    initial begin
+        wait (cfg_ready);
         rst_n = 0;
         repeat (5) @(posedge clk);
         rst_n = 1;
-        if ($test$plusargs("RESET_MIDFLIGHT")) begin
-            repeat (300) @(posedge clk);
+        if (enable_midflight_reset_cfg) begin
+            repeat (midflight_reset_cycle_cfg) @(posedge clk);
             rst_n = 0;
             repeat (5) @(posedge clk);
             rst_n = 1;
         end
     end
 
-    int unsigned seed;
-    string cov_path;
-    string score_path;
-    initial begin
-        if (!$value$plusargs("SEED=%d", seed)) begin
-            seed = `TB_SEED_DEFAULT;
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            reset_observed_q <= 1'b1;
+            reset_proxy_window_q <= 4'd8;
+        end else if (reset_proxy_window_q != 0) begin
+            reset_observed_q <= 1'b1;
+            reset_proxy_window_q <= reset_proxy_window_q - 1'b1;
+        end else begin
+            reset_observed_q <= 1'b0;
         end
-        cov_path = "reports/coverage_ucie_prbs.csv";
-        score_path = "reports/scoreboard_ucie_prbs.csv";
-        void'($value$plusargs("COV_OUT=%s", cov_path));
-        void'($value$plusargs("SCORE_OUT=%s", score_path));
     end
 
     // Streaming data into the packetizer.
@@ -95,6 +170,7 @@ module tb_ucie_prbs;
     logic [LANES-1:0] lane_channel_rx_data_raw;
     logic             lane_channel_rx_valid;
     logic             lane_channel_lane_fault_raw;
+    logic             lane_channel_lane_fault_unused;
 
     // Optional error injection between channel and RX PHY.
     logic [LANES-1:0] lane_channel_rx_data;
@@ -114,32 +190,39 @@ module tb_ucie_prbs;
             if (gap_count != 0) begin
                 gap_count <= gap_count - 1;
             end else if (tx_stream_valid && tx_stream_ready) begin
-                gap_count <= ($urandom(seed) % 4);
+                gap_count <= ($urandom(seed) % ((gap_ceiling_cfg == 0) ? 1 : (gap_ceiling_cfg + 1)));
             end
         end
     end
 
     assign tx_stream_data  = {DATA_WIDTH/16{prbs_state[15:0]}};
     assign tx_stream_valid = (gap_count == 0);
-    assign rx_stream_ready = 1'b1;
 
     // Random backpressure on the receive stream.
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            flit_rx_ready <= 1'b1;
-        end else if ($urandom(seed) % 8 == 0) begin
-            flit_rx_ready <= ~flit_rx_ready;
+            rx_stream_ready <= 1'b1;
+            backpressure_hold_q <= 0;
+        end else if (!enable_backpressure_cfg) begin
+            rx_stream_ready <= 1'b1;
+            backpressure_hold_q <= 0;
+        end else if (backpressure_hold_q != 0) begin
+            backpressure_hold_q <= backpressure_hold_q - 1;
+        end else if ($urandom(seed) % ((backpressure_modulus_cfg == 0) ? 1 : backpressure_modulus_cfg) == 0) begin
+            rx_stream_ready <= ~rx_stream_ready;
+            backpressure_hold_q <= backpressure_hold_cfg;
         end
     end
 
     // Targeted credit starvation scenario.
     logic credit_block;
     initial begin
+        wait (cfg_ready);
         credit_block = 1'b0;
-        if ($test$plusargs("CREDIT_STARVE")) begin
-            repeat (200) @(posedge clk);
+        if (enable_credit_starve_cfg) begin
+            repeat (credit_block_start_cfg) @(posedge clk);
             credit_block = 1'b1;
-            repeat (100) @(posedge clk);
+            repeat (credit_block_cycles_cfg) @(posedge clk);
             credit_block = 1'b0;
         end
     end
@@ -148,10 +231,19 @@ module tb_ucie_prbs;
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             inject_error <= 1'b0;
-        end else if ($test$plusargs("RETRY_BURST")) begin
-            inject_error <= ($urandom(seed) % 12 == 0);
+            error_cycle_q <= 0;
+        end else if (enable_retry_burst_cfg || enable_fault_echo_cfg) begin
+            error_cycle_q <= error_cycle_q + 1'b1;
+            if (error_inject_modulus_cfg == 0) begin
+                inject_error <= 1'b0;
+            end else begin
+                inject_error <= lane_channel_rx_valid &&
+                                !resend_request &&
+                                ((error_cycle_q % error_inject_modulus_cfg) == 0);
+            end
         end else begin
             inject_error <= 1'b0;
+            error_cycle_q <= 0;
         end
     end
 
@@ -159,6 +251,34 @@ module tb_ucie_prbs;
     assign lane_channel_lane_fault = lane_channel_lane_fault_raw | inject_error;
 
     assign credit_return = credit_block ? 16'd0 : credit_return_raw;
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            last_link_ready_q <= 1'b0;
+            last_resend_request_q <= 1'b0;
+        end else begin
+            if (debug_progress) begin
+                if (flit_tx_valid && flit_tx_ready) begin
+                    $display("[PRBS DBG] cycle=%0t tx_fire credits=%0d resend=%0b link_ready=%0b",
+                             $time, credit_available, resend_request, link_ready);
+                end
+                if (flit_rx_valid && flit_rx_ready) begin
+                    $display("[PRBS DBG] cycle=%0t rx_flit crc_err=%0b credit_return=%0d",
+                             $time, depacketizer_crc_error, credit_return_raw);
+                end
+                if (resend_request && !last_resend_request_q) begin
+                    $display("[PRBS DBG] cycle=%0t resend_request lane_fault=%0b crc_error=%0b",
+                             $time, lane_adapter_lane_fault, depacketizer_crc_error);
+                end
+                if (link_ready != last_link_ready_q) begin
+                    $display("[PRBS DBG] cycle=%0t link_ready=%0b state=%0d",
+                             $time, link_ready, u_link_fsm.state_q);
+                end
+            end
+            last_link_ready_q <= link_ready;
+            last_resend_request_q <= resend_request;
+        end
+    end
 
     credit_mgr u_credit_mgr (
         .clk              (clk),
@@ -272,7 +392,7 @@ module tb_ucie_prbs;
         .lane_a_tx_valid  (lane_channel_tx_valid),
         .lane_a_rx_data   (),
         .lane_a_rx_valid  (),
-        .lane_a_lane_fault(1'b0),
+        .lane_a_lane_fault(lane_channel_lane_fault_unused),
         .lane_b_tx_data   ('0),
         .lane_b_tx_valid  (1'b0),
         .lane_b_rx_data   (lane_channel_rx_data_raw),
@@ -372,6 +492,7 @@ module tb_ucie_prbs;
         .flit_valid (flit_rx_valid),
         .flit_ready (flit_rx_ready),
         .flit_data  (flit_rx_payload),
+        .crc_error  (depacketizer_crc_error),
         .txn_valid  (rx_txn_valid),
         .txn        (rx_txn)
     );
@@ -395,24 +516,33 @@ module tb_ucie_prbs;
         .latency_violation_count (latency_violation_count)
     );
 
-    ucie_coverage #(
-        .CREDIT_MAX  (256),
-        .LATENCY_LOW (4),
-        .LATENCY_HIGH(16)
-    ) u_cov (
-        .clk                     (clk),
-        .rst_n                   (rst_n),
-        .link_state              (u_link_fsm.state_q),
-        .credit_available        (credit_available),
-        .backpressure            (flit_tx_valid && !flit_tx_ready),
-        .crc_error               (depacketizer_crc_error),
-        .resend_request          (resend_request),
-        .lane_fault              (lane_adapter_lane_fault),
-        .error_during_backpressure(depacketizer_crc_error && (flit_tx_valid && !flit_tx_ready)),
-        .latency_valid           (latency_valid),
-        .latency_value           (latency_value),
-        .jitter_setting          (`TB_JITTER_CYCLES),
-        .error_setting           (`TB_ERROR_PROB_NUM)
+    logic power_idle_proxy;
+    assign power_idle_proxy = rst_n && !flit_tx_valid && !flit_rx_valid && !tx_stream_valid && !rx_stream_valid;
+
+    stats_monitor u_stats (
+        .clk               (clk),
+        .rst_n             (rst_n),
+        .link_state_a      (u_link_fsm.state_q),
+        .link_state_b      (3'd0),
+        .credit_available_a(credit_available),
+        .credit_available_b(16'd0),
+        .backpressure_a    (flit_tx_valid && !flit_tx_ready),
+        .backpressure_b    (1'b0),
+        .crc_error_a       (depacketizer_crc_error),
+        .crc_error_b       (1'b0),
+        .resend_request_a  (resend_request),
+        .resend_request_b  (1'b0),
+        .lane_fault_a      (lane_adapter_lane_fault),
+        .lane_fault_b      (1'b0),
+        .latency_valid     (latency_valid),
+        .latency_value     (latency_value),
+        .tx_fire           (flit_tx_valid && flit_tx_ready),
+        .rx_fire           (flit_rx_valid && flit_rx_ready),
+        .e2e_update        (rx_stream_valid && rx_stream_ready),
+        .e2e_mismatch      (1'b0),
+        .expected_empty    (1'b0),
+        .power_reset_proxy (reset_observed_q),
+        .power_idle_proxy  (power_idle_proxy)
     );
 
     // Assertion-based protocol checks.
@@ -440,7 +570,8 @@ module tb_ucie_prbs;
     );
 
     ucie_link_checker #(
-        .TRAIN_WINDOW(512)
+        .TRAIN_WINDOW(512),
+        .PROGRESS_WINDOW(2048)
     ) u_link_chk (
         .clk            (clk),
         .rst_n          (rst_n),
@@ -449,15 +580,45 @@ module tb_ucie_prbs;
         .start_training (1'b1),
         .fault_detected (lane_adapter_lane_fault),
         .tx_fire        (flit_tx_valid && flit_tx_ready),
-        .traffic_present(tx_stream_valid)
+        .traffic_present(flit_tx_valid)
     );
 
     initial begin
-        `TB_TIMEOUT(clk, 5000)
-        wait (tx_count > 100);
-        $display("[UCIe PRBS] tx=%0d rx=%0d retries=%0d crc_err=%0d", tx_count, rx_count, retry_count, depacketizer_crc_error);
+        int unsigned drain_cycle;
+        wait (cfg_ready);
+        `TB_TIMEOUT(clk, max_cycles_cfg)
+        wait (tx_count >= target_tx_count_cfg);
+        for (drain_cycle = 0; drain_cycle < POST_TARGET_DRAIN_CYCLES; drain_cycle++) begin
+            @(posedge clk);
+            if ((rx_count >= tx_count) &&
+                !flit_tx_valid &&
+                !flit_rx_valid &&
+                !resend_request) begin
+                break;
+            end
+        end
         u_scoreboard.write_report(score_path);
-        u_cov.write_report(cov_path);
+        u_stats.write_coverage(cov_path);
+        u_stats.emit_result(
+            "tb_ucie_prbs",
+            test_name,
+            scenario_kind,
+            seed,
+            bug_mode,
+            (mismatch_count == 0 && drop_count == 0 && latency_violation_count == 0),
+            (mismatch_count == 0 && drop_count == 0 && latency_violation_count == 0) ? "clean" : "scoreboard_violation",
+            tx_count,
+            rx_count,
+            retry_count,
+            mismatch_count,
+            drop_count,
+            latency_violation_count,
+            0,
+            0,
+            score_path,
+            cov_path
+        );
+        $display("[UCIe PRBS] test=%s tx=%0d rx=%0d retries=%0d crc_err=%0d", test_name, tx_count, rx_count, retry_count, depacketizer_crc_error);
         if (mismatch_count != 0 || drop_count != 0 || latency_violation_count != 0) begin
             $error("Scoreboard violations: mismatch=%0d drop=%0d latency=%0d", mismatch_count, drop_count, latency_violation_count);
         end

@@ -1,19 +1,19 @@
 # UCIe Chiplet SoC Project
 
-This repository stages a two-die extension of the original three-domain RISC-V SoC. The original project lives under `base_soc/` and remains untouched so you can continue to run its regressions and flows. The new work appears under `chiplet_extension/` and adds a behavioral UCIe 2.0-style link, die partitioning, AES-backed crypto services, and automation scaffolding for simulation and physical exploration.
+This repository stages a two-die extension of the original three-domain RISC-V SoC. The original project lives under `base_soc/` and remains untouched so you can continue to run its regressions and flows. The new work appears under `chiplet_extension/` and adds a behavioral UCIe 2.0-style link, die partitioning, AES-backed crypto services, and a lightweight coverage-driven DV flow built around Verilator, named tests, passive monitors, scoreboards, assertions, and regression dashboards.
 
 ```
 ucie_chiplet_soc/
 ├── base_soc/              # Exact copy of RISCV_Project (rtl/sim/upf/scripts)
 ├── chiplet_extension/     # New RTL, benches, scripts, and OpenLane config
 │   ├── rtl/               # Die-A/B, adapters, PHY/channel, top wrappers
-│   ├── sim/               # SystemVerilog benches, assertion macros
+│   ├── sim/               # SystemVerilog benches, DV packages, named tests
 │   ├── upf/               # Power-intent placeholders for the two-die system
-│   ├── reports/           # CSV outputs produced by the automation hooks
-│   ├── scripts/           # Python helpers for log parsing and report merging
-│   ├── Makefile           # Targets for simulation + reporting
+│   ├── reports/           # Regression summaries, coverage CSVs, dashboards
+│   ├── scripts/           # Verilator regression and report-generation tools
+│   ├── Makefile           # Verilator DV targets
 │   └── openlane/          # LibreLane/OpenLane configuration stub
-└── docs/                  # Placeholder for diagrams and waveform captures
+└── docs/                  # DV docs, diagrams, and waveform captures
 ```
 
 ## Architecture at a Glance
@@ -58,21 +58,32 @@ The repository uses UPF to capture power intent separately from RTL so the desig
 
 ## Simulation Flow
 
-The new Makefile under `chiplet_extension/` provides two main goals:
+The chiplet DV flow is Verilator-based.
 
 ```bash
 cd chiplet_extension
-make chiplet-sim          # Emits stub logs (default SIM_TOOL=stub)
-make chiplet-report       # Rebuilds CSV metrics under reports/
+make chiplet-sim      # quick smoke run: prbs_smoke + soc_smoke
+make regress          # stable suite + bug validation
+make stress           # exploratory retry/fault stress suite
+make bug-validate     # bug-mode-only validation
 ```
 
-Set `SIM_TOOL=iverilog` to compile and run the SystemVerilog testbenches with Icarus Verilog once it is installed:
+The benches (`tb_ucie_prbs.sv` and `tb_soc_chiplets.sv`) now use named tests,
+lightweight config objects, machine-readable `DV_RESULT|...` lines, and shared
+Python post-processing. The default regression regenerates:
 
-```bash
-make chiplet-sim SIM_TOOL=iverilog
-```
+- `chiplet_extension/reports/regress_summary.csv`
+- `chiplet_extension/reports/coverage_summary.csv`
+- `chiplet_extension/reports/failure_buckets.csv`
+- `chiplet_extension/reports/top_failures.md`
+- `chiplet_extension/reports/verification_dashboard.md`
 
-The benches (`tb_ucie_prbs.sv` and `tb_soc_chiplets.sv`) exercise the link and the full two-die datapath, respectively. They depend on a simulator with complete SystemVerilog support. Verilator can be used as an alternative but currently requires additional refactoring (queue replacements and SV function tweaks) to execute the benches without further warnings.
+Verified in this workspace on March 30, 2026: the stable Verilator regression
+was rerun after the latest ASIC-compatibility cleanup and still completed with
+14 / 14 runs meeting expectation.
+
+For the full chiplet DV methodology and current test list, see
+`chiplet_extension/README.md`.
 
 ## Physical-Design Exploration
 
@@ -81,19 +92,19 @@ The benches (`tb_ucie_prbs.sv` and `tb_soc_chiplets.sv`) exercise the link and t
 The most reliable way to launch the flow in this workspace is through LibreLane's Nix shell. This pulls in the expected `yosys`, `openroad`, `magic`, `netgen`, `klayout`, `verilator`, and Python dependencies in one step:
 
 ```bash
-/nix/var/nix/profiles/default/bin/nix-shell --pure ~/librelane/shell.nix
+/nix/var/nix/profiles/default/bin/nix-shell --pure <librelane-root>/shell.nix
 ```
 
 Then run LibreLane from inside that shell:
 
 ```bash
-cd ~/librelane
+cd <librelane-root>
 librelane \
-  --pdk-root ~/.ciel/ciel/sky130/versions/<your_sky130_rev> \
-  ~/ucie_chiplet_soc/chiplet_extension/openlane/chiplet/config.json
+  --pdk-root <sky130-pdk-root> \
+  <repo-root>/chiplet_extension/openlane/chiplet/config.json
 ```
 
-LibreLane runs already exist under `chiplet_extension/openlane/chiplet/runs/` in this workspace. If `nix-shell` is already on your `PATH`, you can use `nix-shell --pure ~/librelane/shell.nix` instead of the absolute `/nix/...` path above. OpenLane/OpenROAD does not support SystemVerilog `interface` constructs, so if you reintroduce `ucie_lane_if.sv` into the top-level wiring, flatten it before hardening.
+LibreLane runs already exist under `chiplet_extension/openlane/chiplet/runs/` in this workspace. If `nix-shell` is already on your `PATH`, you can use `nix-shell --pure <librelane-root>/shell.nix` instead of the absolute `/nix/...` path above. OpenLane/OpenROAD does not support SystemVerilog `interface` constructs, so if you reintroduce `ucie_lane_if.sv` into the top-level wiring, flatten it before hardening.
   
 ### Quick LibreLane Run (Local PDK Example)
 
@@ -109,20 +120,23 @@ librelane \
 
 Notes:
 - If your LibreLane setup uses Volare, you can replace `--pdk-root` with `--pdk sky130A`.
-- The alternate config at `~/ucie_chiplet_soc/openlane/chiplet/config.json` is equivalent; it points at the same RTL.
+- The alternate config at `<repo-root>/openlane/chiplet/config.json` is equivalent; it points at the same RTL.
 - Running `python3 -m librelane` directly from a plain shell may fail if the LibreLane Python environment or physical-design tools are not already on `PATH`.
+- A full LibreLane run was rechecked in this workspace on March 30, 2026 and completed 78 / 78 stages, writing final GDS / DEF / LEF / SPEF / SDF / LIB outputs under `chiplet_extension/openlane/chiplet/runs/codex_asic_full_20260330_004854/final/`.
+- That run passed Magic DRC and LVS, but still reports residual antenna, max slew, and max cap warnings, so it should be described as an end-to-end physical-design bring-up rather than a clean sign-off result.
 
 ## Current Status & Outstanding Work
 
 - LibreLane runs complete end-to-end in this workspace with a relaxed clock target (e.g., 200 ns) and produce final layout outputs, so the flow is operational.
 - RTL has been refactored to remove obvious placeholders (XOR crypto, hard-coded CRC stubs) and to use a proper AES-128 core, but the flow is still functional/behavioral—no sign-off verification has been performed.
-- Testbenches compile conceptually; running them requires a simulator with full SV feature support. Install Icarus Verilog or adjust the RTL for Verilator’s SV subset before relying on automated runs.
+- The stable Verilator regression currently completes with 14 / 14 runs meeting expectation, including 4 / 4 randomized runs and one expected bug-validation failure, and that result was revalidated after the latest ASIC-flow compatibility fix.
+- The default stable suite currently covers 11 / 23 functional bins. Retry / CRC / lane-fault closure remains an explicit next step rather than something hidden.
 - UPF files are skeletal. Additional supply sets, isolation, retention, and power-switch definitions are needed to integrate with UPF-aware toolchains.
-- The reporting scripts continue to emit placeholder metrics until real simulation logs are produced.
+- The heavier retry/fault PRBS tests are preserved as an exploratory stress suite and currently bucket as `link_progress` under aggressive recovery churn.
 - Timing closure is not representative yet; tighter clocks still show significant setup violations, and slow-corner max slew/max cap warnings remain.
 
 
-This README will continue to evolve as the automation and verification environments mature. Contributions and fixes—especially around simulator compatibility—are welcome.
+This README will continue to evolve as coverage closure improves. Contributions and fixes—especially around retry/fault stress closure—are welcome.
 
 ## Lightweight Core DV Environment
 
