@@ -177,7 +177,10 @@ module soc_die_b_top #(
         .lane_tx_valid      (lane_adapter_tx_valid),
         .lane_tx_data       (lane_adapter_tx_data),
         .lane_link_enable   (lane_adapter_link_enable),
-        .lane_link_training (lane_adapter_link_training)
+        .lane_link_training (lane_adapter_link_training),
+        .debug_send_fire    (),
+        .debug_send_flit    (),
+        .debug_resend_fire  ()
     );
 
     // Behavioral PHY that adds pipeline latency, jitter, and injected faults.

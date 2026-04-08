@@ -41,11 +41,21 @@ module tb_ucie_prbs;
     int unsigned credit_block_start_cfg;
     int unsigned credit_block_cycles_cfg;
     int unsigned midflight_reset_cycle_cfg;
+    int unsigned crc_window_start_cfg;
+    int unsigned crc_window_count_cfg;
+    int unsigned crc_window_spacing_cfg;
+    int unsigned lane_fault_start_cfg;
+    int unsigned lane_fault_cycles_cfg;
+    int unsigned training_hold_start_cfg;
+    int unsigned training_hold_cycles_cfg;
+    logic allow_crc_error_cfg;
     logic enable_midflight_reset_cfg;
     logic enable_credit_starve_cfg;
     logic enable_retry_burst_cfg;
     logic enable_backpressure_cfg;
     logic enable_fault_echo_cfg;
+    logic enable_crc_window_cfg;
+    logic enable_lane_fault_window_cfg;
     int unsigned backpressure_hold_q;
     bit debug_progress;
     logic last_link_ready_q;
@@ -53,6 +63,12 @@ module tb_ucie_prbs;
     logic reset_observed_q;
     logic [3:0] reset_proxy_window_q;
     int unsigned error_cycle_q;
+    int unsigned cycle_count_q;
+    int unsigned crc_window_hits_q;
+    int unsigned crc_window_ready_cycle_q;
+    logic crc_window_armed_q;
+    logic training_hold_active;
+    logic degraded_mode;
 
     initial begin
         clk = 0;
@@ -85,11 +101,21 @@ module tb_ucie_prbs;
         credit_block_start_cfg = cfg.link.credit_block_start;
         credit_block_cycles_cfg = cfg.link.credit_block_cycles;
         midflight_reset_cycle_cfg = cfg.link.midflight_reset_cycle;
+        crc_window_start_cfg = cfg.link.crc_window_start;
+        crc_window_count_cfg = cfg.link.crc_window_count;
+        crc_window_spacing_cfg = cfg.link.crc_window_spacing;
+        lane_fault_start_cfg = cfg.link.lane_fault_start;
+        lane_fault_cycles_cfg = cfg.link.lane_fault_cycles;
+        training_hold_start_cfg = cfg.link.training_hold_start;
+        training_hold_cycles_cfg = cfg.link.training_hold_cycles;
+        allow_crc_error_cfg = cfg.allow_crc_error;
         enable_midflight_reset_cfg = cfg.link.enable_midflight_reset;
         enable_credit_starve_cfg = cfg.link.enable_credit_starve;
         enable_retry_burst_cfg = cfg.link.enable_retry_burst;
         enable_backpressure_cfg = cfg.link.enable_backpressure;
         enable_fault_echo_cfg = cfg.link.enable_fault_echo;
+        enable_crc_window_cfg = cfg.link.enable_crc_window;
+        enable_lane_fault_window_cfg = cfg.link.enable_lane_fault_window;
         cov_path = "reports/coverage_ucie_prbs.csv";
         score_path = "reports/scoreboard_ucie_prbs.csv";
         void'($value$plusargs("COV_OUT=%s", cov_path));
@@ -138,7 +164,10 @@ module tb_ucie_prbs;
     logic [FLIT_WIDTH-1:0] flit_rx_payload;
     logic                  flit_rx_valid;
     logic                  flit_rx_ready;
+    logic [FLIT_WIDTH-1:0] flit_rx_payload_injected;
     logic                  depacketizer_crc_error;
+    logic                  debug_send_fire;
+    logic [FLIT_WIDTH-1:0] debug_send_flit;
 
     // Credit and link management.
     logic [15:0] credit_available;
@@ -175,11 +204,17 @@ module tb_ucie_prbs;
     // Optional error injection between channel and RX PHY.
     logic [LANES-1:0] lane_channel_rx_data;
     logic             lane_channel_lane_fault;
-    logic             inject_error;
+    logic             inject_lane_fault_q;
+    logic             inject_crc_error_now;
+    logic             lane_fault_drop_pending_q;
+    logic             drop_rx_txn_now;
+    logic             random_inject_error_q;
 
     // PRBS generator and gap control.
     int unsigned prbs_state;
     int unsigned gap_count;
+    logic [5:0] training_counter_q;
+    logic traffic_pause_active;
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -195,8 +230,11 @@ module tb_ucie_prbs;
         end
     end
 
+    assign traffic_pause_active = enable_lane_fault_window_cfg &&
+                                  (cycle_count_q >= ((lane_fault_start_cfg > 8) ? (lane_fault_start_cfg - 8) : 0)) &&
+                                  (cycle_count_q < (training_hold_start_cfg + training_hold_cycles_cfg + 16));
     assign tx_stream_data  = {DATA_WIDTH/16{prbs_state[15:0]}};
-    assign tx_stream_valid = (gap_count == 0);
+    assign tx_stream_valid = (gap_count == 0) && !traffic_pause_active;
 
     // Random backpressure on the receive stream.
     always_ff @(posedge clk or negedge rst_n) begin
@@ -214,6 +252,14 @@ module tb_ucie_prbs;
         end
     end
 
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            cycle_count_q <= 0;
+        end else begin
+            cycle_count_q <= cycle_count_q + 1'b1;
+        end
+    end
+
     // Targeted credit starvation scenario.
     logic credit_block;
     initial begin
@@ -227,28 +273,76 @@ module tb_ucie_prbs;
         end
     end
 
-    // Targeted retry burst scenario.
+    assign training_hold_active = (training_hold_cycles_cfg != 0) &&
+                                  (cycle_count_q >= training_hold_start_cfg) &&
+                                  (cycle_count_q < (training_hold_start_cfg + training_hold_cycles_cfg));
+    assign inject_lane_fault_q = enable_lane_fault_window_cfg &&
+                                 (cycle_count_q >= lane_fault_start_cfg) &&
+                                 (cycle_count_q < (lane_fault_start_cfg + lane_fault_cycles_cfg));
+
+    // Targeted CRC and retry scenarios.
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            inject_error <= 1'b0;
+            random_inject_error_q <= 1'b0;
             error_cycle_q <= 0;
-        end else if (enable_retry_burst_cfg || enable_fault_echo_cfg) begin
-            error_cycle_q <= error_cycle_q + 1'b1;
-            if (error_inject_modulus_cfg == 0) begin
-                inject_error <= 1'b0;
-            end else begin
-                inject_error <= lane_channel_rx_valid &&
-                                !resend_request &&
-                                ((error_cycle_q % error_inject_modulus_cfg) == 0);
-            end
+            crc_window_hits_q <= 0;
+            crc_window_ready_cycle_q <= 0;
+            crc_window_armed_q <= 1'b0;
+            lane_fault_drop_pending_q <= 1'b0;
         end else begin
-            inject_error <= 1'b0;
-            error_cycle_q <= 0;
+            int unsigned spacing;
+            random_inject_error_q <= 1'b0;
+
+            spacing = (crc_window_spacing_cfg == 0) ? 1 : crc_window_spacing_cfg;
+            if (enable_crc_window_cfg && !crc_window_armed_q) begin
+                crc_window_ready_cycle_q <= crc_window_start_cfg;
+                crc_window_armed_q <= 1'b1;
+            end
+            if (inject_crc_error_now) begin
+                crc_window_hits_q <= crc_window_hits_q + 1'b1;
+                crc_window_ready_cycle_q <= cycle_count_q + spacing;
+            end
+            if (inject_lane_fault_q) begin
+                lane_fault_drop_pending_q <= 1'b1;
+            end
+            if (drop_rx_txn_now) begin
+                lane_fault_drop_pending_q <= 1'b0;
+            end
+
+            if (enable_retry_burst_cfg || enable_fault_echo_cfg) begin
+                error_cycle_q <= error_cycle_q + 1'b1;
+                if (error_inject_modulus_cfg != 0) begin
+                    random_inject_error_q <= lane_channel_rx_valid &&
+                                             !resend_request &&
+                                             ((error_cycle_q % error_inject_modulus_cfg) == 0);
+                end
+            end else begin
+                error_cycle_q <= 0;
+            end
         end
     end
 
-    assign lane_channel_rx_data  = lane_channel_rx_data_raw ^ (inject_error ? {{(LANES-1){1'b0}}, 1'b1} : '0);
-    assign lane_channel_lane_fault = lane_channel_lane_fault_raw | inject_error;
+    assign inject_crc_error_now = enable_crc_window_cfg &&
+                                  crc_window_armed_q &&
+                                  flit_rx_valid &&
+                                  flit_rx_ready &&
+                                  !resend_request &&
+                                  (crc_window_hits_q < crc_window_count_cfg) &&
+                                  (cycle_count_q >= crc_window_ready_cycle_q);
+    assign drop_rx_txn_now = lane_fault_drop_pending_q &&
+                             flit_rx_valid &&
+                             flit_rx_ready &&
+                             !resend_request;
+
+    assign lane_channel_rx_data = lane_channel_rx_data_raw ^
+                                  (random_inject_error_q ?
+                                   {{(LANES-1){1'b0}}, 1'b1} : '0);
+    assign lane_channel_lane_fault = lane_channel_lane_fault_raw |
+                                     inject_lane_fault_q |
+                                     (enable_fault_echo_cfg && random_inject_error_q);
+    assign flit_rx_payload_injected = flit_rx_payload ^
+                                      (inject_crc_error_now ?
+                                       {{(FLIT_WIDTH-1){1'b0}}, 1'b1} : '0);
 
     assign credit_return = credit_block ? 16'd0 : credit_return_raw;
 
@@ -265,6 +359,13 @@ module tb_ucie_prbs;
                 if (flit_rx_valid && flit_rx_ready) begin
                     $display("[PRBS DBG] cycle=%0t rx_flit crc_err=%0b credit_return=%0d",
                              $time, depacketizer_crc_error, credit_return_raw);
+                end
+                if (inject_crc_error_now) begin
+                    $display("[PRBS DBG] cycle=%0t inject_crc_window hit=%0d/%0d",
+                             $time, crc_window_hits_q + 1'b1, crc_window_count_cfg);
+                end
+                if (inject_lane_fault_q) begin
+                    $display("[PRBS DBG] cycle=%0t inject_lane_fault", $time);
                 end
                 if (resend_request && !last_resend_request_q) begin
                     $display("[PRBS DBG] cycle=%0t resend_request lane_fault=%0b crc_error=%0b",
@@ -292,11 +393,14 @@ module tb_ucie_prbs;
     );
 
     // Simplified training completion for testbench purposes.
-    initial begin
-        training_done = 1'b0;
-        repeat (20) @(posedge clk);
-        training_done = 1'b1;
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            training_counter_q <= '0;
+        end else if (training_counter_q < 20) begin
+            training_counter_q <= training_counter_q + 1'b1;
+        end
     end
+    assign training_done = (training_counter_q >= 20) && !training_hold_active;
 
     link_fsm u_link_fsm (
         .clk              (clk),
@@ -307,7 +411,7 @@ module tb_ucie_prbs;
         .retry_in_progress(resend_request),
         .link_ready       (link_ready),
         .link_up          (link_up),
-        .degraded_mode    ()
+        .degraded_mode    (degraded_mode)
     );
 
     retry_ctrl u_retry_ctrl (
@@ -350,7 +454,10 @@ module tb_ucie_prbs;
         .lane_tx_valid      (lane_adapter_tx_valid),
         .lane_tx_data       (lane_adapter_tx_data),
         .lane_link_enable   (lane_adapter_link_enable),
-        .lane_link_training (lane_adapter_link_training)
+        .lane_link_training (lane_adapter_link_training),
+        .debug_send_fire    (debug_send_fire),
+        .debug_send_flit    (debug_send_flit),
+        .debug_resend_fire  ()
     );
 
     phy_behavioral #(
@@ -452,7 +559,7 @@ module tb_ucie_prbs;
     ) u_depacketizer (
         .clk        (clk),
         .rst_n      (rst_n),
-        .flit_in    (flit_rx_payload),
+        .flit_in    (flit_rx_payload_injected),
         .flit_valid (flit_rx_valid),
         .flit_ready (flit_rx_ready),
         .data_out   (rx_stream_data),
@@ -478,9 +585,9 @@ module tb_ucie_prbs;
     ucie_txn_monitor_tx u_txn_mon_tx (
         .clk           (clk),
         .rst_n         (rst_n),
-        .flit_valid    (flit_tx_valid),
-        .flit_ready    (flit_tx_ready),
-        .flit_data     (flit_tx_payload),
+        .flit_valid    (debug_send_fire),
+        .flit_ready    (1'b1),
+        .flit_data     (debug_send_flit),
         .resend_request(resend_request),
         .txn_valid     (tx_txn_valid),
         .txn           (tx_txn)
@@ -492,7 +599,7 @@ module tb_ucie_prbs;
         .flit_valid (flit_rx_valid),
         .flit_ready (flit_rx_ready),
         .flit_data  (flit_rx_payload),
-        .crc_error  (depacketizer_crc_error),
+        .crc_error  (depacketizer_crc_error || drop_rx_txn_now),
         .txn_valid  (rx_txn_valid),
         .txn        (rx_txn)
     );
@@ -558,16 +665,24 @@ module tb_ucie_prbs;
 
     retry_checker #(
         .FLIT_WIDTH   (FLIT_WIDTH),
-        .RESEND_WINDOW(16)
+        .RESEND_WINDOW(1024)
     ) u_retry_chk (
         .clk           (clk),
         .rst_n         (rst_n),
         .crc_error     (depacketizer_crc_error),
         .resend_request(resend_request),
-        .tx_fire       (flit_tx_valid && flit_tx_ready),
-        .tx_flit       (flit_tx_payload),
+        .tx_fire       (debug_send_fire),
+        .tx_flit       (debug_send_flit),
         .link_ready    (link_ready)
     );
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            // Nothing to do during reset.
+        end else if (!allow_crc_error_cfg && depacketizer_crc_error) begin
+            $error("CRC_INTEGRITY_UNEXPECTED: depacketizer_crc_error asserted in nominal path");
+        end
+    end
 
     ucie_link_checker #(
         .TRAIN_WINDOW(512),

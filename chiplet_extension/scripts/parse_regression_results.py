@@ -20,6 +20,8 @@ def parse_result_line(line: str) -> dict[str, str]:
 def infer_detail(log_text: str, returncode: str) -> str:
     patterns = [
         ("CREDIT_EXPECTED_MATCH", "credit_assertion"),
+        ("CRC_INTEGRITY_UNEXPECTED", "crc_integrity"),
+        ("Retry payload mismatch", "retry_identity"),
         ("LINK_PROGRESS_BOUNDED", "link_progress"),
         ("LINK_TRAINING_BOUNDED", "link_training"),
         ("Scoreboard violations", "scoreboard_violation"),
@@ -105,6 +107,7 @@ def main() -> int:
                 "compile_log_path": entry["compile_log_path"],
                 "score_csv": result_fields.get("score_csv", entry.get("score_csv", "")),
                 "cov_csv": result_fields.get("cov_csv", entry.get("cov_csv", "")),
+                "ref_csv": entry.get("ref_csv", ""),
             }
             rows.append(row)
 
@@ -140,6 +143,7 @@ def main() -> int:
                 "compile_log_path",
                 "score_csv",
                 "cov_csv",
+                "ref_csv",
             ],
         )
         writer.writeheader()

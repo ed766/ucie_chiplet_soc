@@ -17,7 +17,10 @@ module ucie_tx #(
     output logic                   lane_tx_valid,
     output logic [LANES-1:0]       lane_tx_data,
     output logic                   lane_link_enable,
-    output logic                   lane_link_training
+    output logic                   lane_link_training,
+    output logic                   debug_send_fire,
+    output logic [FLIT_WIDTH-1:0]  debug_send_flit,
+    output logic                   debug_resend_fire
 );
 
     localparam int BEATS_PER_FLIT   = (FLIT_WIDTH + LANES - 1) / LANES;
@@ -30,6 +33,9 @@ module ucie_tx #(
     logic resend_active_d, resend_active_q;
     logic [FLIT_WIDTH-1:0] last_flit_d, last_flit_q;
     logic last_flit_valid_d, last_flit_valid_q;
+    logic [FLIT_WIDTH-1:0] resend_flit;
+    logic load_resend;
+    logic load_new;
 
     // Only accept a new FLIT when the link is ready and credits remain.
     // Only accept a new FLIT when the link is ready and credits remain.
@@ -42,6 +48,16 @@ module ucie_tx #(
     assign lane_tx_data       = sending_q ? shreg_q[LANES-1:0] : '0;
     assign lane_link_enable   = link_ready;
     assign lane_link_training = !link_ready;
+`ifdef UCIE_BUG_RETRY_SEQ
+    assign resend_flit = last_flit_q ^ {{(FLIT_WIDTH-1){1'b0}}, 1'b1};
+`else
+    assign resend_flit = last_flit_q;
+`endif
+    assign load_resend = !sending_q && resend_pending_q && link_ready && (available_credits != 0);
+    assign load_new = flit_valid && flit_ready;
+    assign debug_send_fire = load_resend || load_new;
+    assign debug_send_flit = load_resend ? resend_flit : flit_in;
+    assign debug_resend_fire = load_resend;
 
     always_comb begin
         // Load a FLIT, then shift out LANES bits per cycle.
@@ -57,17 +73,13 @@ module ucie_tx #(
             resend_pending_d = 1'b1;
         end
 
-        if (!sending_q && resend_pending_q && link_ready && (available_credits != 0)) begin
-`ifdef UCIE_BUG_RETRY_SEQ
-            shreg_d = last_flit_q ^ {{(FLIT_WIDTH-1){1'b0}}, 1'b1};
-`else
-            shreg_d = last_flit_q;
-`endif
+        if (load_resend) begin
+            shreg_d = resend_flit;
             beat_cnt_d = BEAT_COUNTER_WID'(BEATS_PER_FLIT);
             sending_d  = 1'b1;
             resend_active_d  = 1'b1;
             resend_pending_d = 1'b0;
-        end else if (flit_valid && flit_ready) begin
+        end else if (load_new) begin
             shreg_d   = flit_in;
             beat_cnt_d = BEAT_COUNTER_WID'(BEATS_PER_FLIT);
             sending_d  = 1'b1;

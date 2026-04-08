@@ -1,11 +1,32 @@
 # UCIe Chiplet SoC Project
 
-This repository stages a two-die extension of the original three-domain RISC-V SoC. The original project lives under `base_soc/` and remains untouched so you can continue to run its regressions and flows. The new work appears under `chiplet_extension/` and adds a behavioral UCIe 2.0-style link, die partitioning, AES-backed crypto services, and a lightweight coverage-driven DV flow built around Verilator, named tests, passive monitors, scoreboards, assertions, and regression dashboards.
+This repository stages a two-die extension of the original three-domain RISC-V SoC. The original project lives under `base_soc/` and remains available as supporting earlier work. The flagship project lives under `chiplet_extension/` and adds a behavioral UCIe-style link, die partitioning, AES-backed crypto services, and a lightweight coverage-driven DV flow built around Verilator, named tests, passive monitors, scoreboards, assertions, bug injection, and regression dashboards.
+
+## Verification Snapshot
+
+- Stable runs meeting expectation: `16 / 16`
+- Nominal pass rate: `13 / 13`
+- Randomized runs meeting expectation: `3 / 3`
+- Expected bug-validation failures: `3 / 3`
+- Stable functional coverage: `18 / 23` bins (`78.3%`)
+
+```mermaid
+flowchart LR
+    A["Die A (RV32 + packetizer)"] --> B["Behavioral UCIe-style link"]
+    B --> C["Die B (AES-128 service chiplet)"]
+    C --> B
+    B --> D["Monitors + scoreboards"]
+    D --> E["Coverage CSVs + failure buckets + dashboards"]
+```
+
+> Verification closure roadmap
+>
+> Stable suite is green with 3 bug modes validated. The next closure targets are `credit_low`, `retry_backpressure_cross`, `latency_low`, `latency_high`, and `expected_empty`, plus the exploratory stress tests that remain outside the default gate.
 
 ```
 ucie_chiplet_soc/
 ├── base_soc/              # Exact copy of RISCV_Project (rtl/sim/upf/scripts)
-├── chiplet_extension/     # New RTL, benches, scripts, and OpenLane config
+├── chiplet_extension/     # Flagship dual-die RTL, DV flow, reports, and OpenLane config
 │   ├── rtl/               # Die-A/B, adapters, PHY/channel, top wrappers
 │   ├── sim/               # SystemVerilog benches, DV packages, named tests
 │   ├── upf/               # Power-intent placeholders for the two-die system
@@ -77,10 +98,13 @@ Python post-processing. The default regression regenerates:
 - `chiplet_extension/reports/failure_buckets.csv`
 - `chiplet_extension/reports/top_failures.md`
 - `chiplet_extension/reports/verification_dashboard.md`
+- `chiplet_extension/reports/regression_history.csv`
+- `chiplet_extension/reports/closure_targets.md`
 
-Verified in this workspace on March 30, 2026: the stable Verilator regression
-was rerun after the latest ASIC-compatibility cleanup and still completed with
-14 / 14 runs meeting expectation.
+Verified in this workspace on April 6, 2026: the stable Verilator regression
+completed with `16 / 16` runs meeting expectation, `13 / 13` nominal passes,
+`3 / 3` randomized passes, `3 / 3` expected bug-validation failures, and
+`18 / 23` covered functional bins.
 
 For the full chiplet DV methodology and current test list, see
 `chiplet_extension/README.md`.
@@ -129,10 +153,10 @@ Notes:
 
 - LibreLane runs complete end-to-end in this workspace with a relaxed clock target (e.g., 200 ns) and produce final layout outputs, so the flow is operational.
 - RTL has been refactored to remove obvious placeholders (XOR crypto, hard-coded CRC stubs) and to use a proper AES-128 core, but the flow is still functional/behavioral—no sign-off verification has been performed.
-- The stable Verilator regression currently completes with 14 / 14 runs meeting expectation, including 4 / 4 randomized runs and one expected bug-validation failure, and that result was revalidated after the latest ASIC-flow compatibility fix.
-- The default stable suite currently covers 11 / 23 functional bins. Retry / CRC / lane-fault closure remains an explicit next step rather than something hidden.
+- The stable Verilator regression currently completes with 16 / 16 runs meeting expectation, including 3 / 3 randomized runs and 3 / 3 expected bug-validation failures.
+- The default stable suite currently covers 18 / 23 functional bins. Remaining uncovered bins are `credit_low`, `retry_backpressure_cross`, `latency_low`, `latency_high`, and `expected_empty`.
 - UPF files are skeletal. Additional supply sets, isolation, retention, and power-switch definitions are needed to integrate with UPF-aware toolchains.
-- The heavier retry/fault PRBS tests are preserved as an exploratory stress suite and currently bucket as `link_progress` under aggressive recovery churn.
+- The heavier retry/fault and SoC recovery scenarios are preserved as a named stress suite rather than being silently removed. They remain closure work, not hidden failures.
 - Timing closure is not representative yet; tighter clocks still show significant setup violations, and slow-corner max slew/max cap warnings remain.
 
 

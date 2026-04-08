@@ -13,6 +13,10 @@ def bucket_failure(detail: str, log_text: str) -> str:
     text = f"{detail}\n{log_text}"
     if "CREDIT_EXPECTED_MATCH" in text or "credit_assertion" in text:
         return "credit_accounting"
+    if "CRC_INTEGRITY_UNEXPECTED" in text or "crc_integrity" in text:
+        return "crc_integrity"
+    if "Retry payload mismatch" in text or "retry_identity" in text:
+        return "retry_identity"
     if "LINK_PROGRESS_BOUNDED" in text or "link_progress" in text:
         return "link_progress"
     if "LINK_TRAINING_BOUNDED" in text or "link_training" in text:

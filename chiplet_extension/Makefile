@@ -5,7 +5,7 @@ BUILD_DIR := $(ROOT_DIR)/build/verilator_regression
 PYTHON ?= python3
 VERILATOR ?= verilator
 SEED ?= 20260329
-RANDOM_SEEDS ?= 2
+RANDOM_SEEDS ?= 3
 
 RUN_REGRESSION := $(ROOT_DIR)/scripts/run_regression.py
 
@@ -14,7 +14,9 @@ REPORT_ARTIFACTS := \
 	$(REPORTS_DIR)/coverage_summary.csv \
 	$(REPORTS_DIR)/failure_buckets.csv \
 	$(REPORTS_DIR)/top_failures.md \
-	$(REPORTS_DIR)/verification_dashboard.md
+	$(REPORTS_DIR)/verification_dashboard.md \
+	$(REPORTS_DIR)/regression_history.csv \
+	$(REPORTS_DIR)/closure_targets.md
 
 .PHONY: chiplet-sim chiplet-report regress stress bug-validate clean
 
@@ -40,6 +42,8 @@ clean:
 		-name 'failure_buckets.csv' -o \
 		-name 'top_failures.md' -o \
 		-name 'verification_dashboard.md' -o \
+		-name 'regression_history.csv' -o \
+		-name 'closure_targets.md' -o \
 		-name '*_coverage.csv' -o \
 		-name '*_scoreboard.csv' \
 	\) -delete

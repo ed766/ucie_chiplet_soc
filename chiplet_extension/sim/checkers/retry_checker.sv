@@ -41,9 +41,7 @@ module retry_checker #(
             if (resend_request) begin
                 expect_resend_q <= 1'b0;
                 resend_window_q <= 0;
-                if (link_ready) begin
-                    progress_window_q <= RESEND_WINDOW;
-                end
+                progress_window_q <= RESEND_WINDOW;
             end else if (progress_window_q != 0) begin
                 progress_window_q <= progress_window_q - 1;
                 if (tx_fire) begin
@@ -55,13 +53,10 @@ module retry_checker #(
 
             if (tx_fire) begin
                 if (progress_window_q != 0) begin
-                    progress_window_q <= 0;
-                end
-                if (expect_resend_q) begin
                     if (have_last_q && tx_flit !== last_flit_q) begin
                         $error("Retry payload mismatch: expected %h got %h", last_flit_q, tx_flit);
                     end
-                    expect_resend_q <= 1'b0;
+                    progress_window_q <= 0;
                 end else begin
                     last_flit_q <= tx_flit;
                     have_last_q <= 1'b1;

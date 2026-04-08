@@ -71,7 +71,10 @@ def main() -> int:
     with summary_path.open(newline="") as handle:
         reader = csv.DictReader(handle)
         for row in reader:
-            cov_path = Path(row["cov_csv"])
+            cov_csv = row.get("cov_csv", "").strip()
+            if not cov_csv:
+                continue
+            cov_path = Path(cov_csv)
             if not cov_path.exists():
                 continue
             total_runs += 1

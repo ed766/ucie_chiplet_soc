@@ -1,0 +1,7 @@
+metric,value
+tx_count,254
+rx_count,254
+mismatch_count,0
+drop_count,0
+retry_count,0
+latency_violation_count,0

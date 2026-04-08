@@ -1,0 +1,52 @@
+name: nightly-regress
+
+on:
+  schedule:
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+
+jobs:
+  stable-regression:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Verilator
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y verilator
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install cryptography
+
+      - name: Run stable regression
+        run: make -C chiplet_extension regress SEED=20260406 RANDOM_SEEDS=3
+
+      - name: Run randomized closure matrix
+        continue-on-error: true
+        run: |
+          python3 chiplet_extension/scripts/run_regression.py \
+            --tests prbs_rand_stress,soc_rand_mix \
+            --random-seeds 5 \
+            --seed 20260406
+
+      - name: Upload nightly reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-regress-reports
+          path: |
+            chiplet_extension/reports/*.csv
+            chiplet_extension/reports/*.md

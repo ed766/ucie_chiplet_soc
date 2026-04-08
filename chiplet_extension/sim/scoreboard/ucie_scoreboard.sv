@@ -36,6 +36,7 @@ module ucie_scoreboard #(
     logic [`UCIE_TXN_CRC_WIDTH-1:0] last_crc_q;
     logic [15:0] last_seq_id_q;
     logic have_last_q;
+    logic duplicate_retry_ok_q;
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -46,6 +47,7 @@ module ucie_scoreboard #(
             last_crc_q <= '0;
             last_seq_id_q <= '0;
             have_last_q <= 1'b0;
+            duplicate_retry_ok_q <= 1'b0;
             tx_count <= 0;
             rx_count <= 0;
             mismatch_count <= 0;
@@ -58,16 +60,21 @@ module ucie_scoreboard #(
             latency_valid <= 1'b0;
 
             if (tx_valid) begin
-                tx_count <= tx_count + 1;
                 if (tx_txn.retry_count != 0) begin
+                    int unsigned retry_index;
                     retry_count <= retry_count + 1;
+                    duplicate_retry_ok_q <= 1'b1;
                     if (!have_last_q ||
                         tx_txn.seq_id != last_seq_id_q ||
                         tx_txn.payload !== last_payload_q ||
                         tx_txn.crc !== last_crc_q) begin
                         mismatch_count <= mismatch_count + 1;
+                    end else if (count_q != 0) begin
+                        retry_index = (tail_q == 0) ? (DEPTH - 1) : (tail_q - 1);
+                        fifo_timestamp_q[retry_index] <= tx_txn.timestamp;
                     end
                 end else begin
+                    tx_count <= tx_count + 1;
                     last_seq_id_q <= tx_txn.seq_id;
                     last_payload_q <= tx_txn.payload;
                     last_crc_q <= tx_txn.crc;
@@ -89,8 +96,13 @@ module ucie_scoreboard #(
                 logic [31:0] latency_calc;
                 rx_count <= rx_count + 1;
                 if (count_q == 0) begin
-                    drop_count <= drop_count + 1;
+                    if (duplicate_retry_ok_q) begin
+                        duplicate_retry_ok_q <= 1'b0;
+                    end else begin
+                        drop_count <= drop_count + 1;
+                    end
                 end else begin
+                    duplicate_retry_ok_q <= 1'b0;
                     if (rx_txn.payload !== fifo_payload_q[head_q] ||
                         rx_txn.crc !== fifo_crc_q[head_q]) begin
                         mismatch_count <= mismatch_count + 1;
