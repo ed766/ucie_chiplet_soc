@@ -6,108 +6,95 @@
 
 - `UCIE_BUG_CREDIT_OFF_BY_ONE`
 
-### Why this case matters
-
-This is the clearest proof that the project is doing real checking instead of
-just printing `PASS` banners. The bug perturbs credit accounting in the link
-path, and the verification environment is expected to catch it immediately.
-
-### How it is validated
-
-Run:
-
-```bash
-python3 chiplet_extension/scripts/run_regression.py --suite bug
-```
-
-### Expected observation
+### What the DV flow proves
 
 - `bug_credit_off_by_one` compiles with `-DUCIE_BUG_CREDIT_OFF_BY_ONE`
 - `credit_checker.sv` fires
-- the regression parser classifies the result as a failure even though the bench
-  aborts before emitting a `DV_RESULT` line
-- the failure summary buckets the issue as `credit_accounting`
+- the parser classifies the failure as `credit_assertion`
+- the failure-summary script buckets it as `credit_accounting`
 
-### Evidence
+### Why this matters
 
-- Log:
-  `chiplet_extension/build/verilator_regression/logs/bug_credit_off_by_one_seed6be68c02.log`
-- Summary:
-  `chiplet_extension/reports/regress_summary.csv`
-- Failure buckets:
-  `chiplet_extension/reports/failure_buckets.csv`
+This is direct evidence that the project is doing real protocol checking rather
+than only reporting clean nominal smoke tests.
 
-### Takeaway
+## 2. CRC Polynomial Bug Injection
 
-The environment can prove checker sensitivity with a known injected bug, not
-just nominal regressions.
+### Bug mode
 
-## 2. Retry-Stress Failure Bucketing
+- `UCIE_BUG_CRC_POLY`
 
-### Tests involved
+### What the DV flow proves
 
-- `prbs_retry_burst`
-- `prbs_crc_storm`
-- `prbs_fault_retrain`
+- `bug_crc_poly` compiles with `-DUCIE_BUG_CRC_POLY`
+- the receive-side CRC path flags the corrupted polynomial behavior
+- the parser classifies the issue as `crc_integrity`
+- the failure bucket is `crc_integrity`
 
-### Why this case matters
+### Why this matters
 
-These tests are useful because they show the DV flow can also identify and
-group non-closure behavior. They are not hidden or silently dropped. They are
-kept as exploratory stress tests, and when run they consistently land in the
-same failure bucket.
+This shows the environment is sensitive to link-data integrity problems, not
+just credit flow or simple control assertions.
 
-### How to reproduce
+## 3. Retry Identity Bug Injection
 
-```bash
-python3 chiplet_extension/scripts/run_regression.py --suite stress
-```
+### Bug mode
 
-### Observed behavior
+- `UCIE_BUG_RETRY_SEQ`
 
-- the stress runs currently fail with `LINK_PROGRESS_BOUNDED`
-- the parser maps those failures to `link_progress`
-- the failure-summary script groups them together in one bucket instead of
-  leaving them as unrelated raw log files
+### What the DV flow proves
 
-Representative log:
+- `bug_retry_seq` compiles with `-DUCIE_BUG_RETRY_SEQ`
+- the retry checker compares the replayed FLIT against the actual adapter send
+  trace
+- the run fails with `Retry payload mismatch`
+- the failure bucket is `retry_identity`
 
-- `chiplet_extension/build/verilator_regression/logs/prbs_retry_burst.log`
+### Why this matters
 
-### Takeaway
+This is the strongest protocol-oriented bug case in the project because it
+shows replay checking is not based on a superficial transmit handshake. The
+checker watches the actual resend path.
 
-Even before closure is complete, the project shows verification maturity:
-
-- failures are reproducible
-- failures are categorized automatically
-- the stable suite stays clean while the stress suite remains available for
-  debug and future closure work
-
-## 3. Negative End-to-End Datapath Checks
+## 4. Negative End-to-End Datapath Checks
 
 ### Tests involved
 
 - `soc_wrong_key`
 - `soc_misalign`
 
-### Why these cases matter
-
-A weak end-to-end bench often only proves that the happy path works. These
-negative cases show the SoC bench also proves the checker can catch bad
-conditions when it should.
-
-### Observed behavior
+### What the DV flow proves
 
 - both tests are expected to pass the regression
 - their `detail` field is `negative_check_caught`
-- `e2e_mismatch` coverage is hit by these negative cases
+- `e2e_mismatch` coverage is hit by those negative scenarios
 
-Evidence:
+### Why this matters
 
-- `chiplet_extension/reports/regress_summary.csv`
-- `chiplet_extension/reports/coverage_summary.csv`
+The SoC bench is not only a happy-path demo. It also proves the end-to-end
+checker can catch intentionally bad reference conditions.
 
-### Takeaway
+## 5. Stress-Suite Closure Work
 
-The full-chiplet bench is not a smoke demo only. It includes purposeful
-negative checking and coverage evidence for those conditions.
+### Tests involved
+
+- `prbs_retry_backpressure`
+- `prbs_crc_burst_recover`
+- `prbs_retry_burst`
+- `prbs_crc_storm`
+- `prbs_fault_retrain`
+- `soc_fault_echo`
+- `soc_retry_e2e`
+- `soc_rand_mix`
+
+### What the DV flow proves
+
+- these scenarios remain named and runnable
+- they are intentionally separated from the default stable gate
+- they still generate reproducible logs, CSVs, coverage, and failure buckets
+
+### Why this matters
+
+The project does not hide unfinished closure work. It keeps those tests visible
+as explicit next-step verification targets.
+

@@ -6,11 +6,11 @@
 `include "dv/stats_pkg.sv"
 `include "dv/stats_monitor.sv"
 `include "tests/soc_tests_pkg.sv"
-`include "models/aes_ref_pkg.sv"
 `include "checkers/credit_checker.sv"
 `include "checkers/retry_checker.sv"
 `include "checkers/ucie_link_checker.sv"
 `include "scoreboard/ucie_txn.svh"
+`include "scoreboard/e2e_ref_scoreboard.sv"
 `include "scoreboard/ucie_txn_monitor.sv"
 `include "scoreboard/ucie_scoreboard.sv"
 
@@ -22,10 +22,6 @@ module tb_soc_chiplets;
     localparam int DATA_WIDTH = `TB_DATA_WIDTH;
     localparam int FLIT_WIDTH = `TB_FLIT_WIDTH;
     localparam int LANES = `TB_LANES;
-    localparam int BLOCK_WIDTH = 128;
-    localparam int WORDS_PER_BLOCK = BLOCK_WIDTH / DATA_WIDTH;
-    localparam logic [127:0] AES_KEY = 128'h00112233445566778899aabbccddeeff;
-    localparam int EXPECT_FIFO_DEPTH = 64;
     localparam int POST_TARGET_DRAIN_CYCLES = 256;
 
     logic clk;
@@ -43,10 +39,17 @@ module tb_soc_chiplets;
     logic enable_backpressure_cfg;
     int unsigned backpressure_modulus_cfg;
     int unsigned backpressure_hold_cfg;
+    logic enable_fault_echo_cfg;
+    logic enable_lane_fault_window_cfg;
+    int unsigned lane_fault_start_cfg;
+    int unsigned lane_fault_cycles_cfg;
+    int unsigned training_hold_start_cfg;
+    int unsigned training_hold_cycles_cfg;
     logic wrong_key_mode;
     logic misalign_mode;
     string cov_path;
     string score_path;
+    string ref_path;
     logic forced_rx_ready;
     int unsigned return_bp_hold_q;
     logic e2e_mismatch_event_q;
@@ -96,14 +99,6 @@ module tb_soc_chiplets;
         .crypto_error_flag         (crypto_error_flag)
     );
 
-    // Independent AES reference scoreboard (not shared with DUT).
-    logic [BLOCK_WIDTH-1:0] plain_block_q;
-    int unsigned            plain_word_count_q;
-    logic [DATA_WIDTH-1:0] expected_fifo [0:EXPECT_FIFO_DEPTH-1];
-    int unsigned            exp_head_q;
-    int unsigned            exp_tail_q;
-    int unsigned            exp_count_q;
-
     int unsigned cipher_updates;
     int unsigned mismatch_count;
     int unsigned expected_empty_count;
@@ -127,12 +122,22 @@ module tb_soc_chiplets;
         enable_backpressure_cfg = cfg.link.enable_backpressure;
         backpressure_modulus_cfg = cfg.link.backpressure_modulus;
         backpressure_hold_cfg = cfg.link.backpressure_hold_cycles;
+        enable_fault_echo_cfg = cfg.link.enable_fault_echo;
+        enable_lane_fault_window_cfg = cfg.link.enable_lane_fault_window;
+        lane_fault_start_cfg = cfg.link.lane_fault_start;
+        lane_fault_cycles_cfg = cfg.link.lane_fault_cycles;
+        training_hold_start_cfg = cfg.link.training_hold_start;
+        training_hold_cycles_cfg = cfg.link.training_hold_cycles;
         wrong_key_mode = cfg.neg_wrong_key;
         misalign_mode  = cfg.neg_misalign;
         cov_path = "reports/coverage_soc_chiplets.csv";
         score_path = "reports/scoreboard_soc_chiplets.csv";
+        ref_path = "";
         void'($value$plusargs("COV_OUT=%s", cov_path));
         void'($value$plusargs("SCORE_OUT=%s", score_path));
+        if (!$value$plusargs("REF_CSV=%s", ref_path)) begin
+            $fatal(1, "tb_soc_chiplets requires +REF_CSV=<path>");
+        end
         cfg_ready = 1'b1;
     end
 
@@ -159,69 +164,31 @@ module tb_soc_chiplets;
         end
     end
 
+    initial begin
+        wait (cfg_ready);
+        wait (rst_n);
+        if (enable_fault_echo_cfg || enable_lane_fault_window_cfg) begin
+            repeat (lane_fault_start_cfg) @(posedge clk);
+            force u_chiplet.u_die_a.lane_adapter_lane_fault = 1'b1;
+            repeat ((lane_fault_cycles_cfg == 0) ? 1 : lane_fault_cycles_cfg) @(posedge clk);
+            release u_chiplet.u_die_a.lane_adapter_lane_fault;
+        end
+    end
+
+    initial begin
+        wait (cfg_ready);
+        wait (rst_n);
+        if (training_hold_cycles_cfg != 0) begin
+            repeat (training_hold_start_cfg) @(posedge clk);
+            force u_chiplet.u_die_a.training_done = 1'b0;
+            repeat (training_hold_cycles_cfg) @(posedge clk);
+            release u_chiplet.u_die_a.training_done;
+        end
+    end
+
     // Internal handshake signals from Die A stream interface.
     wire tx_fire = u_chiplet.u_die_a.tx_stream_valid && u_chiplet.u_die_a.tx_stream_ready;
     wire rx_fire = u_chiplet.u_die_a.rx_stream_valid && u_chiplet.u_die_a.rx_stream_ready;
-
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            plain_block_q       <= '0;
-            plain_word_count_q  <= 0;
-            exp_head_q          <= 0;
-            exp_tail_q          <= 0;
-            exp_count_q         <= 0;
-            cipher_updates      <= 0;
-            mismatch_count      <= 0;
-            expected_empty_count<= 0;
-            e2e_mismatch_event_q <= 1'b0;
-            expected_empty_event_q <= 1'b0;
-            for (int idx = 0; idx < EXPECT_FIFO_DEPTH; idx++) begin
-                expected_fifo[idx] <= '0;
-            end
-        end else begin
-            e2e_mismatch_event_q <= 1'b0;
-            expected_empty_event_q <= 1'b0;
-            if (tx_fire) begin
-                int insert_idx;
-                logic [BLOCK_WIDTH-1:0] block_next;
-                insert_idx = misalign_mode ? ((plain_word_count_q + 1) % WORDS_PER_BLOCK) : plain_word_count_q;
-                block_next = plain_block_q;
-                block_next[DATA_WIDTH*insert_idx +: DATA_WIDTH] = u_chiplet.u_die_a.tx_stream_data;
-                plain_block_q <= block_next;
-                if (plain_word_count_q == WORDS_PER_BLOCK-1) begin
-                    logic [127:0] ref_key;
-                    logic [127:0] cipher_block;
-                    ref_key = wrong_key_mode ? 128'h0 : AES_KEY;
-                    cipher_block = aes_ref_pkg::aes_encrypt(ref_key, block_next);
-                    for (int i = 0; i < WORDS_PER_BLOCK; i++) begin
-                        expected_fifo[(exp_tail_q + i) % EXPECT_FIFO_DEPTH] <= cipher_block[DATA_WIDTH*i +: DATA_WIDTH];
-                    end
-                    exp_tail_q <= (exp_tail_q + WORDS_PER_BLOCK) % EXPECT_FIFO_DEPTH;
-                    exp_count_q <= exp_count_q + WORDS_PER_BLOCK;
-                    plain_word_count_q <= 0;
-                end else begin
-                    plain_word_count_q <= plain_word_count_q + 1;
-                end
-            end
-
-            if (rx_fire) begin
-                cipher_updates <= cipher_updates + 1;
-                if (exp_count_q == 0) begin
-                    expected_empty_count <= expected_empty_count + 1;
-                    expected_empty_event_q <= 1'b1;
-                end else begin
-                    logic [DATA_WIDTH-1:0] expected_word;
-                    expected_word = expected_fifo[exp_head_q];
-                    if (u_chiplet.u_die_a.rx_stream_data !== expected_word) begin
-                        mismatch_count <= mismatch_count + 1;
-                        e2e_mismatch_event_q <= 1'b1;
-                    end
-                    exp_head_q <= (exp_head_q + 1) % EXPECT_FIFO_DEPTH;
-                    exp_count_q <= exp_count_q - 1;
-                end
-            end
-        end
-    end
 
     // Link-level scoreboard using FLIT handshakes between Die A and Die B.
     logic latency_valid;
@@ -240,9 +207,9 @@ module tb_soc_chiplets;
     ucie_txn_monitor_tx u_txn_mon_tx (
         .clk           (clk),
         .rst_n         (rst_n),
-        .flit_valid    (u_chiplet.u_die_a.flit_tx_valid),
-        .flit_ready    (u_chiplet.u_die_a.flit_tx_ready),
-        .flit_data     (u_chiplet.u_die_a.flit_tx_payload),
+        .flit_valid    (u_chiplet.u_die_a.u_tx.debug_send_fire),
+        .flit_ready    (1'b1),
+        .flit_data     (u_chiplet.u_die_a.u_tx.debug_send_flit),
         .resend_request(u_chiplet.u_die_a.resend_request),
         .txn_valid     (tx_txn_valid),
         .txn           (tx_txn)
@@ -283,6 +250,28 @@ module tb_soc_chiplets;
                               !u_chiplet.u_die_a.flit_tx_valid &&
                               !u_chiplet.u_die_b.flit_tx_valid &&
                               !u_chiplet.u_die_a.rx_stream_valid;
+
+    e2e_ref_scoreboard #(
+        .DATA_WIDTH(DATA_WIDTH),
+        .DEPTH(1024)
+    ) u_e2e_scoreboard (
+        .clk                 (clk),
+        .rst_n               (rst_n),
+        .rx_valid            (u_chiplet.u_die_a.rx_stream_valid),
+        .rx_ready            (u_chiplet.u_die_a.rx_stream_ready),
+        .rx_data             (u_chiplet.u_die_a.rx_stream_data),
+        .observed_count      (cipher_updates),
+        .mismatch_count      (mismatch_count),
+        .expected_empty_count(expected_empty_count),
+        .update_event        (),
+        .mismatch_event      (e2e_mismatch_event_q),
+        .expected_empty_event(expected_empty_event_q)
+    );
+
+    initial begin
+        wait (cfg_ready);
+        u_e2e_scoreboard.load_reference(ref_path);
+    end
 
     stats_monitor u_stats (
         .clk               (clk),
@@ -332,27 +321,27 @@ module tb_soc_chiplets;
 
     retry_checker #(
         .FLIT_WIDTH   (`TB_FLIT_WIDTH),
-        .RESEND_WINDOW(32)
+        .RESEND_WINDOW(256)
     ) u_retry_chk_a (
         .clk           (clk),
         .rst_n         (rst_n),
         .crc_error     (u_chiplet.u_die_a.depacketizer_crc_error),
         .resend_request(u_chiplet.u_die_a.resend_request),
-        .tx_fire       (u_chiplet.u_die_a.flit_tx_valid && u_chiplet.u_die_a.flit_tx_ready),
-        .tx_flit       (u_chiplet.u_die_a.flit_tx_payload),
+        .tx_fire       (u_chiplet.u_die_a.u_tx.debug_send_fire),
+        .tx_flit       (u_chiplet.u_die_a.u_tx.debug_send_flit),
         .link_ready    (u_chiplet.u_die_a.link_ready)
     );
 
     retry_checker #(
         .FLIT_WIDTH   (`TB_FLIT_WIDTH),
-        .RESEND_WINDOW(32)
+        .RESEND_WINDOW(256)
     ) u_retry_chk_b (
         .clk           (clk),
         .rst_n         (rst_n),
         .crc_error     (u_chiplet.u_die_b.depacketizer_crc_error),
         .resend_request(u_chiplet.u_die_b.resend_request),
-        .tx_fire       (u_chiplet.u_die_b.flit_tx_valid && u_chiplet.u_die_b.flit_tx_ready),
-        .tx_flit       (u_chiplet.u_die_b.flit_tx_payload),
+        .tx_fire       (u_chiplet.u_die_b.u_tx.debug_send_fire),
+        .tx_flit       (u_chiplet.u_die_b.u_tx.debug_send_flit),
         .link_ready    (u_chiplet.u_die_b.link_ready)
     );
 

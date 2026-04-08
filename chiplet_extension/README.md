@@ -1,15 +1,30 @@
 # UCIe Chiplet Extension for the Power-Aware RISC-V SoC
 
-`chiplet_extension/` turns the original single-die RISC-V SoC into a dual-die
-system linked by a behavioral UCIe-style fabric. Die A produces plaintext
-traffic, packetizes it into CRC-protected FLITs, and checks the returned
-ciphertext. Die B receives the traffic, runs AES-128 encryption, and sends the
-result back across the link.
+`chiplet_extension/` is the flagship part of this repository. It turns the
+original single-die RISC-V SoC into a dual-die system linked by a behavioral
+UCIe-style fabric, then verifies that link with a lightweight coverage-driven
+SystemVerilog flow built around Verilator, named tests, passive monitors,
+scoreboards, assertions, bug injection, and Python-generated dashboards.
 
-The verification environment stays intentionally lightweight. It does not try to
-be full UVM. Instead, it upgrades the original benches into a coverage-driven DV
-project built around named tests, passive monitors, scoreboards, assertions,
-machine-readable result lines, and Python-generated regression dashboards.
+## Regression Snapshot
+
+Current checked-in stable-suite evidence, regenerated locally on April 6, 2026:
+
+- Stable runs meeting expectation: `16 / 16`
+- Nominal pass rate: `13 / 13`
+- Randomized runs meeting expectation: `3 / 3`
+- Expected bug-validation failures: `3 / 3`
+- Stable functional coverage: `18 / 23` bins (`78.3%`)
+
+Current stable reports:
+
+- `reports/regress_summary.csv`
+- `reports/coverage_summary.csv`
+- `reports/failure_buckets.csv`
+- `reports/top_failures.md`
+- `reports/verification_dashboard.md`
+- `reports/regression_history.csv`
+- `reports/closure_targets.md`
 
 ## Layout
 
@@ -17,16 +32,16 @@ machine-readable result lines, and Python-generated regression dashboards.
   - Dual-die RTL, packetizer/depacketizer, credit manager, retry logic, UCIe
     Tx/Rx, PHY/channel models, and `soc_chiplet_top.sv`
 - `sim/`
-  - `tb_ucie_prbs.sv` for link-level PRBS traffic
-  - `tb_soc_chiplets.sv` for the full Die A -> Die B -> Die A datapath
-  - `dv/` for shared config, coverage, and stats packages
+  - `tb_ucie_prbs.sv` for link-level traffic
+  - `tb_soc_chiplets.sv` for the Die A -> Die B -> Die A datapath
+  - `dv/` for shared config, coverage, stats, and result-line infrastructure
   - `tests/` for named directed and randomized scenarios
-  - `checkers/` and `scoreboard/` for assertions, monitors, and checking
+  - `checkers/` and `scoreboard/` for assertions, passive monitors, and checking
 - `scripts/`
-  - Verilator regression runner plus CSV/Markdown post-processing scripts
+  - Verilator regression runner plus CSV/Markdown post-processing tools
 - `reports/`
-  - Generated regression summary, coverage summary, failure buckets, dashboard,
-    and per-run coverage / scoreboard CSVs
+  - Checked-in regression summary, coverage summary, failure buckets, dashboard,
+    trend history, and per-run artifacts
 - `openlane/`
   - LibreLane/OpenLane2 configuration for `soc_chiplet_top`
 - `upf/`
@@ -34,66 +49,52 @@ machine-readable result lines, and Python-generated regression dashboards.
 
 ## Verification Methodology
 
-### Benches
+The environment stays intentionally lightweight. It does not try to be full
+UVM. Instead, it upgrades the original benches into a coverage-driven DV
+project with:
 
-- `tb_ucie_prbs.sv`
-  - Drives the packetizer, adapter, PHY, and channel path with PRBS-derived
-    traffic
-  - Exercises credit starvation, backpressure, reset, and retry-oriented
-    scenarios
-- `tb_soc_chiplets.sv`
-  - Runs the complete two-die AES datapath
-  - Checks returned ciphertext against an independent reference path
-  - Includes negative scenarios such as wrong-key and misalignment checks
+- named tests instead of bench edits
+- lightweight config objects plus plusargs
+- passive monitors and reusable scoreboards
+- machine-readable `DV_RESULT|...` lines
+- monitor-driven functional coverage counters
+- automated Verilator regressions and report generation
 
-### Lightweight DV infrastructure
+Key verification components:
 
 - `sim/dv/txn_pkg.sv`
-  - Lightweight config objects and plusarg-driven runtime knobs
+  - lightweight config objects and runtime knob handling
 - `sim/dv/stats_pkg.sv`
-  - Standardized machine-readable `DV_RESULT|...` lines
+  - standardized result-line formatting
 - `sim/dv/stats_monitor.sv`
-  - Monitor-driven functional coverage counters and per-run CSV emission
+  - monitor-driven functional coverage counters and CSV output
 - `sim/dv/ucie_cov_pkg.sv`
-  - Coverage bin accounting shared between benches and Python reporting
-
-### Checking
-
+  - shared coverage-bin accounting
 - `sim/checkers/credit_checker.sv`
-  - Credit accounting assertions and bug-mode detection
+  - credit-accounting assertions and bug-mode detection
 - `sim/checkers/retry_checker.sv`
-  - Retry/resend behavior checks
+  - replay / resend checks wired to the actual adapter send path
 - `sim/checkers/ucie_link_checker.sv`
-  - Bounded training and progress assertions
+  - bounded training and forward-progress checks
 - `sim/scoreboard/ucie_txn_monitor.sv`
-  - Passive FLIT-level monitor
+  - passive FLIT monitor
 - `sim/scoreboard/ucie_scoreboard.sv`
-  - Queue-based FLIT scoreboard with latency tracking
-
-### Coverage intent
-
-Coverage is portable and simulator-friendly by design. The benches do not rely
-on UCIS databases. Instead, `stats_monitor.sv` writes CSV coverage counters for:
-
-- link FSM state visibility
-- credit regions
-- backpressure
-- retry / CRC / lane-fault hooks
-- latency buckets
-- end-to-end update and mismatch behavior
-- visible reset / idle proxies
-
-The Python scripts aggregate those per-run CSVs into
-`reports/coverage_summary.csv`.
+  - retry-aware FLIT scoreboard with latency tracking
+- `sim/scoreboard/e2e_ref_scoreboard.sv`
+  - file-backed end-to-end checker for the SoC bench
+- `scripts/gen_reference_vectors.py`
+  - Python golden-model vector generation for `tb_soc_chiplets.sv`
 
 ## Named Tests
 
-The environment currently ships with 15 named tests:
+The project currently exposes 22 named tests.
 
 ### Stable suite
 
 - `prbs_smoke`
 - `prbs_credit_starve`
+- `prbs_retry_single`
+- `prbs_lane_fault_recover`
 - `prbs_reset_midflight`
 - `prbs_backpressure_wave`
 - `prbs_rand_stress`
@@ -101,19 +102,23 @@ The environment currently ships with 15 named tests:
 - `soc_wrong_key`
 - `soc_misalign`
 - `soc_backpressure`
-- `soc_fault_echo`
-- `soc_rand_mix`
 - `bug_credit_off_by_one`
+- `bug_crc_poly`
+- `bug_retry_seq`
 
-### Exploratory stress suite
+### Stress and closure suite
 
+- `prbs_retry_backpressure`
+- `prbs_crc_burst_recover`
 - `prbs_retry_burst`
 - `prbs_crc_storm`
 - `prbs_fault_retrain`
+- `soc_fault_echo`
+- `soc_retry_e2e`
+- `soc_rand_mix`
 
-The stable suite is what generates the checked-in dashboard artifacts. The
-stress suite is intentionally kept separate because it is currently useful as an
-exploratory recovery-stress workload, not as a clean default pass target.
+The stable suite is the default pass gate. The stress suite remains checked in
+and runnable, but it is explicitly treated as closure work rather than hidden.
 
 ## Running the DV Flow
 
@@ -123,10 +128,10 @@ From `chiplet_extension/`:
 # Quick smoke run for both benches
 make chiplet-sim
 
-# Full default regression (stable suite + bug validation)
+# Default stable regression
 make regress
 
-# Exploratory retry/fault stress suite
+# Exploratory retry/fault closure suite
 make stress
 
 # Bug-validation-only sweep
@@ -139,66 +144,128 @@ Equivalent direct script usage:
 python3 scripts/run_regression.py
 python3 scripts/run_regression.py --suite stress
 python3 scripts/run_regression.py --suite bug
+python3 scripts/run_regression.py --tests prbs_rand_stress --random-seeds 5
 ```
 
-The flow uses Verilator.
-
-Verified in this workspace on March 30, 2026: `make regress` was rerun after
-the latest synthesis-compatible RTL cleanup and the stable suite still finished
-with 14 / 14 runs meeting expectation.
+The SoC bench requires a Python-generated reference file and the regression
+runner handles that automatically by passing `+REF_CSV=<path>` to
+`tb_soc_chiplets.sv`.
 
 ## Result Format and Reports
 
-Each passing run emits a standardized result line like:
+Passing runs emit a standardized machine-readable line such as:
 
 ```text
 DV_RESULT|bench=tb_ucie_prbs|test=prbs_smoke|scenario=directed|seed=...|status=PASS|...
 ```
 
-`scripts/parse_regression_results.py` turns those lines plus assertion/log
-signatures into `reports/regress_summary.csv`. The other report scripts then
-generate:
+The report flow is:
 
+1. `scripts/run_regression.py`
+2. `scripts/parse_regression_results.py`
+3. `scripts/gen_coverage_report.py`
+4. `scripts/gen_failure_summary.py`
+
+Generated outputs:
+
+- `reports/regress_summary.csv`
 - `reports/coverage_summary.csv`
 - `reports/failure_buckets.csv`
 - `reports/top_failures.md`
 - `reports/verification_dashboard.md`
+- `reports/regression_history.csv`
+- `reports/closure_targets.md`
 
-Per-run artifacts also land in `reports/`:
+Per-run artifacts also land in `reports/` as `*_coverage.csv` and
+`*_scoreboard.csv`.
 
-- `*_coverage.csv`
-- `*_scoreboard.csv`
+## Coverage Intent
 
-## Current Stable Regression Snapshot
+Coverage is CSV-based and Verilator-friendly by design. The shared
+`stats_monitor.sv` tracks:
 
-The checked-in reports were regenerated from the Verilator stable suite on
-March 30, 2026.
+- link FSM visibility
+  - reset
+  - train
+  - active
+  - retrain
+  - degraded
+  - recoveries
+- credit regions
+  - zero
+  - low
+  - mid
+  - high
+- retry / fault hooks
+  - CRC error
+  - resend request
+  - lane fault
+- backpressure behavior
+  - direct backpressure
+  - retry under backpressure
+- latency buckets
+  - low
+  - nominal
+  - high
+- end-to-end behavior
+  - updates
+  - mismatches
+  - expected-empty underflow
+- power visibility proxies
+  - reset proxy
+  - idle proxy
 
-- Total runs: 14
-- Runs meeting expectation: 14
-- Nominal pass rate: 13 / 13
-- Randomized runs meeting expectation: 4 / 4
-- Expected bug-validation failures: 1
-- Stable functional coverage: 11 / 23 bins (47.8%)
+The current stable suite covers `18 / 23` bins. The remaining uncovered bins in
+the checked-in stable dashboard are:
 
-The bug-validation result is:
+- `credit_low`
+- `retry_backpressure_cross`
+- `latency_low`
+- `latency_high`
+- `expected_empty`
 
-- `bug_credit_off_by_one` with `UCIE_BUG_CREDIT_OFF_BY_ONE`
-  - observed status: `FAIL`
-  - bucket: `credit_accounting`
+Those gaps are now understood well enough to be intentional follow-on closure
+work rather than unknown blind spots: some appear in stress-only recovery
+scenarios that still need stabilization, while `expected_empty` needs a
+dedicated negative reference-underflow test.
+
+## Bug Validation
+
+The repo supports three documented injected bug modes:
+
+- `UCIE_BUG_CREDIT_OFF_BY_ONE`
+- `UCIE_BUG_CRC_POLY`
+- `UCIE_BUG_RETRY_SEQ`
+
+The stable regression demonstrates all three expected failures and buckets them
+correctly:
+
+- `bug_credit_off_by_one` -> `credit_accounting`
+- `bug_crc_poly` -> `crc_integrity`
+- `bug_retry_seq` -> `retry_identity`
+
+## CI Workflows
+
+Two GitHub Actions workflows are included:
+
+- `.github/workflows/smoke_bug.yml`
+  - runs `make chiplet-sim`
+  - runs `make bug-validate`
+- `.github/workflows/nightly_regress.yml`
+  - runs the stable regression
+  - runs a non-gating randomized closure matrix for `prbs_rand_stress` and
+    `soc_rand_mix`
+
+These workflows are included for reproducibility and portfolio presentation.
+The checked-in metrics above were generated locally in this workspace.
 
 ## Known Gaps
 
-- Retry / CRC / lane-fault bins are modeled and tracked, but they are not yet
-  covered by the default stable suite.
-- The exploratory stress tests currently bucket as `link_progress` under heavy
-  retry churn and are kept out of the default pass gate until that recovery
-  behavior is tightened.
+- The stress suite is preserved on purpose and still serves as the active
+  closure bucket for heavier retry/backpressure and SoC fault-recovery mixes.
 - Power-state coverage is proxy-based (`reset` / `idle`) rather than true
   UPF-aware power simulation.
-
-These limitations are documented on purpose. The project is meant to show a DV
-workflow with clear evidence, not to pretend the coverage story is finished.
+- The UPF files remain scaffolding and are not integrated into UPF-aware DV.
 
 ## Physical-Design Hook
 
@@ -213,9 +280,8 @@ librelane \
   <repo-root>/chiplet_extension/openlane/chiplet/config.json
 ```
 
-The physical-design flow is separate from the DV benches. The verification
-packages and test-only files live under `sim/` and do not enter the synthesis
-file list used by LibreLane.
+The DV benches and helper packages live under `sim/` and do not enter the
+synthesis file list used by LibreLane.
 
 Verified in this workspace on March 30, 2026: the full LibreLane run completed
 78 / 78 stages and wrote final outputs under

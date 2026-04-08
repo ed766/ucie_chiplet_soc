@@ -1,0 +1,47 @@
+name: smoke-bug
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  smoke-and-bugs:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Verilator
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y verilator
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install cryptography
+
+      - name: Run smoke suite
+        run: make -C chiplet_extension chiplet-sim SEED=20260406
+
+      - name: Run bug-validation suite
+        run: make -C chiplet_extension bug-validate SEED=20260406
+
+      - name: Upload verification reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-bug-reports
+          path: |
+            chiplet_extension/reports/*.csv
+            chiplet_extension/reports/*.md
+

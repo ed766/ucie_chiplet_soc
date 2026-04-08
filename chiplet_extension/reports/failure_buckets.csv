@@ -1,2 +1,4 @@
 bucket,count,unexpected_failures,expected_failures,tests,example_run_id,example_detail,example_log
-credit_accounting,1,0,1,bug_credit_off_by_one,bug_credit_off_by_one_seed6be68c02,credit_assertion,/home/esgha/ucie_chiplet_soc/chiplet_extension/build/verilator_regression/logs/bug_credit_off_by_one_seed6be68c02.log
+crc_integrity,1,0,1,bug_crc_poly,bug_crc_poly_seed5cf0fb8f,crc_integrity,/home/esgha/ucie_chiplet_soc/chiplet_extension/build/verilator_regression/logs/bug_crc_poly_seed5cf0fb8f.log
+credit_accounting,1,0,1,bug_credit_off_by_one,bug_credit_off_by_one_seed7eb79798,credit_assertion,/home/esgha/ucie_chiplet_soc/chiplet_extension/build/verilator_regression/logs/bug_credit_off_by_one_seed7eb79798.log
+retry_identity,1,0,1,bug_retry_seq,bug_retry_seq_seed0906b7f5,retry_identity,/home/esgha/ucie_chiplet_soc/chiplet_extension/build/verilator_regression/logs/bug_retry_seq_seed0906b7f5.log
