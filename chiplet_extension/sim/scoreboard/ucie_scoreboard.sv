@@ -37,6 +37,10 @@ module ucie_scoreboard #(
     logic [15:0] last_seq_id_q;
     logic have_last_q;
     logic duplicate_retry_ok_q;
+    int unsigned latency_sample_count_q;
+    int unsigned latency_total_cycles_q;
+    int unsigned latency_min_cycles_q;
+    int unsigned latency_max_cycles_q;
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -56,6 +60,10 @@ module ucie_scoreboard #(
             latency_violation_count <= 0;
             latency_valid <= 1'b0;
             latency_value <= '0;
+            latency_sample_count_q <= 0;
+            latency_total_cycles_q <= 0;
+            latency_min_cycles_q <= 32'hffff_ffff;
+            latency_max_cycles_q <= 0;
         end else begin
             latency_valid <= 1'b0;
 
@@ -110,6 +118,14 @@ module ucie_scoreboard #(
                     latency_calc = rx_txn.timestamp - fifo_timestamp_q[head_q];
                     latency_value <= latency_calc[15:0];
                     latency_valid <= 1'b1;
+                    latency_sample_count_q <= latency_sample_count_q + 1;
+                    latency_total_cycles_q <= latency_total_cycles_q + latency_calc;
+                    if (latency_calc < latency_min_cycles_q) begin
+                        latency_min_cycles_q <= latency_calc;
+                    end
+                    if (latency_calc > latency_max_cycles_q) begin
+                        latency_max_cycles_q <= latency_calc;
+                    end
                     if (latency_calc > LATENCY_MAX) begin
                         latency_violation_count <= latency_violation_count + 1;
                     end
@@ -133,6 +149,11 @@ module ucie_scoreboard #(
             $fdisplay(fd, "drop_count,%0d", drop_count);
             $fdisplay(fd, "retry_count,%0d", retry_count);
             $fdisplay(fd, "latency_violation_count,%0d", latency_violation_count);
+            $fdisplay(fd, "latency_sample_count,%0d", latency_sample_count_q);
+            $fdisplay(fd, "latency_min_cycles,%0d", (latency_sample_count_q == 0) ? 0 : latency_min_cycles_q);
+            $fdisplay(fd, "latency_max_cycles,%0d", latency_max_cycles_q);
+            $fdisplay(fd, "latency_avg_cycles,%0d",
+                      (latency_sample_count_q == 0) ? 0 : (latency_total_cycles_q / latency_sample_count_q));
             $fclose(fd);
         end
     endtask

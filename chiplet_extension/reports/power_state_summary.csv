@@ -1,0 +1,8 @@
+test,power_mode,status,meets_expectation,illegal_activity_violations,resume_events,resume_violations,states_visited,transitions_visited,visited_states,visited_transitions,power_csv
+__overall__,summary,,6,0,,0,4/4,6/6,run;crypto_only;sleep;deep_sleep,run_to_crypto_only;crypto_only_to_run;run_to_sleep;sleep_to_run;run_to_deep_sleep;deep_sleep_to_run,
+power_run_mode,run,PASS,1,0,0,0,1,0,run,,/home/esgha/ucie_chiplet_soc/chiplet_extension/reports/power_run_mode_power.csv
+power_crypto_only,crypto_only,PASS,1,0,0,0,2,2,run;crypto_only,run_to_crypto_only;crypto_only_to_run,/home/esgha/ucie_chiplet_soc/chiplet_extension/reports/power_crypto_only_power.csv
+power_sleep_entry_exit,sleep,PASS,1,0,1,0,2,2,run;sleep,run_to_sleep;sleep_to_run,/home/esgha/ucie_chiplet_soc/chiplet_extension/reports/power_sleep_entry_exit_power.csv
+power_deep_sleep_recover,deep_sleep,PASS,1,0,1,0,2,2,run;deep_sleep,run_to_deep_sleep;deep_sleep_to_run,/home/esgha/ucie_chiplet_soc/chiplet_extension/reports/power_deep_sleep_recover_power.csv
+dma_power_sleep_resume_queue,sleep,PASS,1,0,0,1,2,2,run;sleep,run_to_sleep;sleep_to_run,/home/esgha/ucie_chiplet_soc/chiplet_extension/reports/dma_power_sleep_resume_queue_power.csv
+dma_power_state_retention_matrix,none,PASS,1,0,1,0,3,3,run;sleep;deep_sleep,run_to_sleep;sleep_to_run;deep_sleep_to_run,/home/esgha/ucie_chiplet_soc/chiplet_extension/reports/dma_power_state_retention_matrix_power.csv
