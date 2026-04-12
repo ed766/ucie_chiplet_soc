@@ -1,0 +1,11 @@
+metric,value
+tx_count,0
+rx_count,0
+mismatch_count,0
+drop_count,0
+retry_count,0
+latency_violation_count,0
+latency_sample_count,0
+latency_min_cycles,0
+latency_max_cycles,0
+latency_avg_cycles,0

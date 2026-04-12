@@ -5,3 +5,7 @@ mismatch_count,0
 drop_count,0
 retry_count,1
 latency_violation_count,0
+latency_sample_count,64
+latency_min_cycles,41
+latency_max_cycles,41
+latency_avg_cycles,41

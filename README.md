@@ -1,27 +1,31 @@
 # UCIe Chiplet SoC Project
 
-This repository stages a two-die extension of the original three-domain RISC-V SoC. The original project lives under `base_soc/` and remains available as supporting earlier work. The flagship project lives under `chiplet_extension/` and adds a behavioral UCIe-style link, die partitioning, AES-backed crypto services, and a lightweight coverage-driven DV flow built around Verilator, named tests, passive monitors, scoreboards, assertions, bug injection, and regression dashboards.
+This repository stages a two-die extension of the original three-domain RISC-V SoC. The original project lives under `base_soc/` and remains available as supporting earlier work. The flagship project lives under `chiplet_extension/`, where the behavioral UCIe-style link, a CSR-programmable cross-die DMA crypto offload path, a banked local memory subsystem with parity and retention semantics, AES-backed services, and a coverage-driven Verilator DV flow now carry the strongest verification evidence in the repo.
 
 ## Verification Snapshot
 
-- Stable runs meeting expectation: `16 / 16`
-- Nominal pass rate: `13 / 13`
-- Randomized runs meeting expectation: `3 / 3`
-- Expected bug-validation failures: `3 / 3`
-- Stable functional coverage: `18 / 23` bins (`78.3%`)
+- Stable runs meeting expectation: `57 / 57`
+- Nominal pass rate: `52 / 52`
+- Randomized runs meeting expectation: `1 / 1`
+- Expected bug-validation failures: `5 / 5`
+- DMA nominal runs meeting expectation: `17 / 17`
+- Memory nominal runs meeting expectation: `13 / 13`
+- Power-proxy tests meeting expectation: `6 / 6`
+- Stable functional coverage: `60 / 60` bins (`100.0%`)
+- LibreLane ASIC flow: complete end-to-end, with DRC/LVS passing and residual antenna/max slew/max cap warnings still documented
 
 ```mermaid
 flowchart LR
-    A["Die A (RV32 + packetizer)"] --> B["Behavioral UCIe-style link"]
+    A["Die A (RV32 + DMA offload + packetizer)"] --> B["Behavioral UCIe-style link"]
     B --> C["Die B (AES-128 service chiplet)"]
     C --> B
-    B --> D["Monitors + scoreboards"]
-    D --> E["Coverage CSVs + failure buckets + dashboards"]
+    B --> D["Passive monitors + scoreboards"]
+    D --> E["Coverage, DMA, power, bug, and closure reports"]
 ```
 
 > Verification closure roadmap
 >
-> Stable suite is green with 3 bug modes validated. The next closure targets are `credit_low`, `retry_backpressure_cross`, `latency_low`, `latency_high`, and `expected_empty`, plus the exploratory stress tests that remain outside the default gate.
+> The stable suite is fully green, four injected bug modes are validated, the DMA offload subsystem is covered in the default gate, and the power-proxy suite is green. Remaining work is optional extension work rather than basic closure.
 
 ```
 ucie_chiplet_soc/
@@ -42,6 +46,8 @@ ucie_chiplet_soc/
 - **Die A (Compute chiplet)**
   - Generates 64‑bit plaintext words via `die_a_system.sv`.
   - Packetizes data into 256‑bit FLITs (`flit_packetizer.sv`), tracks credits, and drives the UCIe adapter (`ucie_tx.sv` / `ucie_rx.sv`).
+  - Includes a CSR-programmable queued DMA offload controller with `256 x 64-bit` source/destination local memories, a 4-entry submit queue, a 4-entry completion FIFO, interrupt-driven completion, timeout/error handling, and monitor-only DMA status outputs.
+  - The local memories are implemented as 2-bank scratchpads with staged maintenance access, parity checking, conflict accounting, and per-bank retained vs invalid behavior across modeled low-power states.
   - Includes a mirrored `aes128_iterative.sv` engine to produce the expected ciphertext for scoreboard checks.
 
 - **Die B (Crypto chiplet)**
@@ -84,9 +90,13 @@ The chiplet DV flow is Verilator-based.
 ```bash
 cd chiplet_extension
 make chiplet-sim      # quick smoke run: prbs_smoke + soc_smoke
-make regress          # stable suite + bug validation
+make regress          # stable suite + power-proxy + bug validation
+make power-regress    # standalone power-proxy suite
+make formal-check     # bounded Verilator property appendix
 make stress           # exploratory retry/fault stress suite
 make bug-validate     # bug-mode-only validation
+make characterize     # protocol/performance tables
+make chiplet-report   # regress + bounded appendix + characterization
 ```
 
 The benches (`tb_ucie_prbs.sv` and `tb_soc_chiplets.sv`) now use named tests,
@@ -100,11 +110,18 @@ Python post-processing. The default regression regenerates:
 - `chiplet_extension/reports/verification_dashboard.md`
 - `chiplet_extension/reports/regression_history.csv`
 - `chiplet_extension/reports/closure_targets.md`
+- `chiplet_extension/reports/power_state_summary.csv`
+- `chiplet_extension/reports/coverage_closure_matrix.md`
+- `chiplet_extension/reports/formal_summary.csv`
+- `chiplet_extension/reports/perf_characterization.csv`
+- `docs/protocol_characterization.md`
 
-Verified in this workspace on April 6, 2026: the stable Verilator regression
-completed with `16 / 16` runs meeting expectation, `13 / 13` nominal passes,
-`3 / 3` randomized passes, `3 / 3` expected bug-validation failures, and
-`18 / 23` covered functional bins.
+Verified in this workspace on April 11, 2026: the stable Verilator regression
+completed with `57 / 57` runs meeting expectation, `52 / 52` nominal passes,
+`1 / 1` randomized passes, `5 / 5` expected bug-validation failures, `17 / 17`
+DMA nominal passes, `13 / 13` memory nominal passes, `6 / 6` power-proxy passes,
+and `60 / 60` covered functional bins. The bounded property appendix also completed with `4 / 4`
+passing invariants plus `1 / 1` expected failing bug demo.
 
 For the full chiplet DV methodology and current test list, see
 `chiplet_extension/README.md`.
@@ -146,21 +163,23 @@ Notes:
 - If your LibreLane setup uses Volare, you can replace `--pdk-root` with `--pdk sky130A`.
 - The alternate config at `<repo-root>/openlane/chiplet/config.json` is equivalent; it points at the same RTL.
 - Running `python3 -m librelane` directly from a plain shell may fail if the LibreLane Python environment or physical-design tools are not already on `PATH`.
-- A full LibreLane run was rechecked in this workspace on March 30, 2026 and completed 78 / 78 stages, writing final GDS / DEF / LEF / SPEF / SDF / LIB outputs under `chiplet_extension/openlane/chiplet/runs/codex_asic_full_20260330_004854/final/`.
+- A full LibreLane run was rechecked in this workspace on April 7, 2026 and completed end-to-end, writing final GDS / DEF / LEF / SPEF / SDF / LIB outputs under `chiplet_extension/openlane/chiplet/runs/codex_asic_full_20260407/final/`.
 - That run passed Magic DRC and LVS, but still reports residual antenna, max slew, and max cap warnings, so it should be described as an end-to-end physical-design bring-up rather than a clean sign-off result.
 
 ## Current Status & Outstanding Work
 
 - LibreLane runs complete end-to-end in this workspace with a relaxed clock target (e.g., 200 ns) and produce final layout outputs, so the flow is operational.
-- RTL has been refactored to remove obvious placeholders (XOR crypto, hard-coded CRC stubs) and to use a proper AES-128 core, but the flow is still functional/behavioral—no sign-off verification has been performed.
-- The stable Verilator regression currently completes with 16 / 16 runs meeting expectation, including 3 / 3 randomized runs and 3 / 3 expected bug-validation failures.
-- The default stable suite currently covers 18 / 23 functional bins. Remaining uncovered bins are `credit_low`, `retry_backpressure_cross`, `latency_low`, `latency_high`, and `expected_empty`.
-- UPF files are skeletal. Additional supply sets, isolation, retention, and power-switch definitions are needed to integrate with UPF-aware toolchains.
-- The heavier retry/fault and SoC recovery scenarios are preserved as a named stress suite rather than being silently removed. They remain closure work, not hidden failures.
+- RTL has been refactored to remove obvious placeholders (XOR crypto, hard-coded CRC stubs) and to use a proper AES-128 core, but the flow is still functional/behavioral rather than sign-off-verified.
+- The stable Verilator regression currently completes with 57 / 57 runs meeting expectation, including 52 / 52 nominal passes, 1 / 1 randomized runs, 5 / 5 expected bug-validation failures, 17 / 17 DMA nominal passes, 13 / 13 memory nominal passes, and 6 / 6 power-proxy passes.
+- The DMA offload path now adds a software-visible queued control plane on Die A with staged CSR submission, a 4-entry submit queue, a 4-entry completion FIFO, level IRQ signaling, reject logging, timeout/error handling, and Python-backed destination-memory comparison.
+- The local memory subsystem behind the DMA is now banked, parity-protected, maintenance-accessible through explicit MEM_OP CSRs, and retention-aware across RUN / CRYPTO_ONLY / SLEEP / DEEP_SLEEP proxy modes.
+- The power-proxy suite currently completes with 6 / 6 runs meeting expectation and exercises the modeled RUN, CRYPTO_ONLY, SLEEP, and DEEP_SLEEP states, including queued-DMA sleep/resume and retention-matrix scenarios.
+- UPF files are still scaffolding. Additional supply sets, isolation, retention, and power-switch definitions are needed for true UPF-aware toolchains.
+- The heavier retry/fault, SoC recovery, and characterization-style sweeps are preserved as named flows rather than being silently removed.
 - Timing closure is not representative yet; tighter clocks still show significant setup violations, and slow-corner max slew/max cap warnings remain.
 
 
-This README will continue to evolve as coverage closure improves. Contributions and fixes—especially around retry/fault stress closure—are welcome.
+This README will continue to evolve as characterization depth and low-power detail improve. Contributions and fixes—especially around retry/fault stress closure—are welcome.
 
 ## Lightweight Core DV Environment
 
@@ -220,5 +239,3 @@ A representative GTKWave screenshot from the lightweight RV32 DV environment is 
 - `branch_taken` when a branch sequence is visible
 
 ![GTKWave capture of the lightweight RV32 DV environment showing instruction handshaking, commit trace, PC progression, branch behavior, and writeback activity under directed and random stimulus.](docs/images/rv32_dv_waveform.png)
-
-GTKWave capture of the lightweight RV32 DV environment showing instruction handshaking, commit trace, PC progression, branch behavior, and writeback activity under directed and random stimulus.

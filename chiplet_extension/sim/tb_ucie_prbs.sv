@@ -5,6 +5,7 @@
 `include "dv/ucie_cov_pkg.sv"
 `include "dv/stats_pkg.sv"
 `include "dv/stats_monitor.sv"
+`include "dv/power_state_monitor.sv"
 `include "tests/prbs_tests_pkg.sv"
 `include "checkers/credit_checker.sv"
 `include "checkers/retry_checker.sv"
@@ -48,7 +49,10 @@ module tb_ucie_prbs;
     int unsigned lane_fault_cycles_cfg;
     int unsigned training_hold_start_cfg;
     int unsigned training_hold_cycles_cfg;
+    int unsigned credit_init_cfg;
+    int unsigned channel_delay_cycles_cfg;
     logic allow_crc_error_cfg;
+    logic randomized_cfg;
     logic enable_midflight_reset_cfg;
     logic enable_credit_starve_cfg;
     logic enable_retry_burst_cfg;
@@ -108,7 +112,10 @@ module tb_ucie_prbs;
         lane_fault_cycles_cfg = cfg.link.lane_fault_cycles;
         training_hold_start_cfg = cfg.link.training_hold_start;
         training_hold_cycles_cfg = cfg.link.training_hold_cycles;
+        credit_init_cfg = cfg.link.enable_credit_init_override ? cfg.link.credit_init_override : 128;
+        channel_delay_cycles_cfg = cfg.link.channel_delay_cycles;
         allow_crc_error_cfg = cfg.allow_crc_error;
+        randomized_cfg = cfg.randomized;
         enable_midflight_reset_cfg = cfg.link.enable_midflight_reset;
         enable_credit_starve_cfg = cfg.link.enable_credit_starve;
         enable_retry_burst_cfg = cfg.link.enable_retry_burst;
@@ -197,18 +204,26 @@ module tb_ucie_prbs;
     logic             lane_channel_link_training;
     logic             lane_channel_lane_clk;
     logic [LANES-1:0] lane_channel_rx_data_raw;
-    logic             lane_channel_rx_valid;
+    logic             lane_channel_rx_valid_raw;
     logic             lane_channel_lane_fault_raw;
     logic             lane_channel_lane_fault_unused;
 
     // Optional error injection between channel and RX PHY.
+    logic [LANES-1:0] lane_channel_rx_data_delayed;
+    logic             lane_channel_rx_valid_delayed;
+    logic             lane_channel_lane_fault_delayed;
     logic [LANES-1:0] lane_channel_rx_data;
+    logic             lane_channel_rx_valid;
     logic             lane_channel_lane_fault;
     logic             inject_lane_fault_q;
     logic             inject_crc_error_now;
     logic             lane_fault_drop_pending_q;
     logic             drop_rx_txn_now;
     logic             random_inject_error_q;
+    localparam int unsigned MAX_CHANNEL_DELAY_CYCLES = 48;
+    logic [LANES-1:0] delayed_lane_data_q  [0:MAX_CHANNEL_DELAY_CYCLES];
+    logic             delayed_lane_valid_q [0:MAX_CHANNEL_DELAY_CYCLES];
+    logic             delayed_lane_fault_q [0:MAX_CHANNEL_DELAY_CYCLES];
 
     // PRBS generator and gap control.
     int unsigned prbs_state;
@@ -225,7 +240,9 @@ module tb_ucie_prbs;
             if (gap_count != 0) begin
                 gap_count <= gap_count - 1;
             end else if (tx_stream_valid && tx_stream_ready) begin
-                gap_count <= ($urandom(seed) % ((gap_ceiling_cfg == 0) ? 1 : (gap_ceiling_cfg + 1)));
+                gap_count <= randomized_cfg ?
+                    ($urandom(seed) % ((gap_ceiling_cfg == 0) ? 1 : (gap_ceiling_cfg + 1))) :
+                    (prbs_state % ((gap_ceiling_cfg == 0) ? 1 : (gap_ceiling_cfg + 1)));
             end
         end
     end
@@ -246,7 +263,10 @@ module tb_ucie_prbs;
             backpressure_hold_q <= 0;
         end else if (backpressure_hold_q != 0) begin
             backpressure_hold_q <= backpressure_hold_q - 1;
-        end else if ($urandom(seed) % ((backpressure_modulus_cfg == 0) ? 1 : backpressure_modulus_cfg) == 0) begin
+        end else if ((randomized_cfg &&
+                      ($urandom(seed) % ((backpressure_modulus_cfg == 0) ? 1 : backpressure_modulus_cfg) == 0)) ||
+                     (!randomized_cfg &&
+                      ((cycle_count_q % ((backpressure_modulus_cfg == 0) ? 1 : backpressure_modulus_cfg)) == 0))) begin
             rx_stream_ready <= ~rx_stream_ready;
             backpressure_hold_q <= backpressure_hold_cfg;
         end
@@ -334,10 +354,11 @@ module tb_ucie_prbs;
                              flit_rx_ready &&
                              !resend_request;
 
-    assign lane_channel_rx_data = lane_channel_rx_data_raw ^
+    assign lane_channel_rx_data = lane_channel_rx_data_delayed ^
                                   (random_inject_error_q ?
                                    {{(LANES-1){1'b0}}, 1'b1} : '0);
-    assign lane_channel_lane_fault = lane_channel_lane_fault_raw |
+    assign lane_channel_rx_valid = lane_channel_rx_valid_delayed;
+    assign lane_channel_lane_fault = lane_channel_lane_fault_delayed |
                                      inject_lane_fault_q |
                                      (enable_fault_echo_cfg && random_inject_error_q);
     assign flit_rx_payload_injected = flit_rx_payload ^
@@ -384,7 +405,7 @@ module tb_ucie_prbs;
     credit_mgr u_credit_mgr (
         .clk              (clk),
         .rst_n            (rst_n),
-        .credit_init      (16'd128),
+        .credit_init      (credit_init_cfg[15:0]),
         .credit_debit     (credit_consumed),
         .credit_return    (credit_return),
         .credit_available (credit_available),
@@ -503,9 +524,39 @@ module tb_ucie_prbs;
         .lane_b_tx_data   ('0),
         .lane_b_tx_valid  (1'b0),
         .lane_b_rx_data   (lane_channel_rx_data_raw),
-        .lane_b_rx_valid  (lane_channel_rx_valid),
+        .lane_b_rx_valid  (lane_channel_rx_valid_raw),
         .lane_b_lane_fault(lane_channel_lane_fault_raw)
     );
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        int delay_idx;
+        if (!rst_n) begin
+            for (int idx = 0; idx <= MAX_CHANNEL_DELAY_CYCLES; idx++) begin
+                delayed_lane_data_q[idx] <= '0;
+                delayed_lane_valid_q[idx] <= 1'b0;
+                delayed_lane_fault_q[idx] <= 1'b0;
+            end
+        end else begin
+            delayed_lane_data_q[0] <= lane_channel_rx_data_raw;
+            delayed_lane_valid_q[0] <= lane_channel_rx_valid_raw;
+            delayed_lane_fault_q[0] <= lane_channel_lane_fault_raw;
+            for (delay_idx = 1; delay_idx <= MAX_CHANNEL_DELAY_CYCLES; delay_idx++) begin
+                delayed_lane_data_q[delay_idx] <= delayed_lane_data_q[delay_idx-1];
+                delayed_lane_valid_q[delay_idx] <= delayed_lane_valid_q[delay_idx-1];
+                delayed_lane_fault_q[delay_idx] <= delayed_lane_fault_q[delay_idx-1];
+            end
+        end
+    end
+
+    assign lane_channel_rx_data_delayed = delayed_lane_data_q[
+        (channel_delay_cycles_cfg > MAX_CHANNEL_DELAY_CYCLES) ? MAX_CHANNEL_DELAY_CYCLES : channel_delay_cycles_cfg
+    ];
+    assign lane_channel_rx_valid_delayed = delayed_lane_valid_q[
+        (channel_delay_cycles_cfg > MAX_CHANNEL_DELAY_CYCLES) ? MAX_CHANNEL_DELAY_CYCLES : channel_delay_cycles_cfg
+    ];
+    assign lane_channel_lane_fault_delayed = delayed_lane_fault_q[
+        (channel_delay_cycles_cfg > MAX_CHANNEL_DELAY_CYCLES) ? MAX_CHANNEL_DELAY_CYCLES : channel_delay_cycles_cfg
+    ];
 
     phy_behavioral #(
         .LANES           (LANES),
@@ -649,7 +700,28 @@ module tb_ucie_prbs;
         .e2e_mismatch      (1'b0),
         .expected_empty    (1'b0),
         .power_reset_proxy (reset_observed_q),
-        .power_idle_proxy  (power_idle_proxy)
+        .power_idle_proxy  (power_idle_proxy),
+        .dma_mode_active   (1'b0),
+        .dma_active_valid  (1'b0),
+        .dma_state         (3'd0),
+        .dma_submit_count  (3'd0),
+        .dma_comp_count    (3'd0),
+        .dma_submit_head   (2'd0),
+        .dma_submit_tail   (2'd0),
+        .dma_comp_head     (2'd0),
+        .dma_comp_tail     (2'd0),
+        .dma_comp_full_stall(1'b0),
+        .dma_submit_accept_event(1'b0),
+        .dma_submit_reject_event(1'b0),
+        .dma_submit_reject_err_code(4'd0),
+        .dma_comp_push_event(1'b0),
+        .dma_comp_pop_event (1'b0),
+        .dma_comp_push_status(2'b00),
+        .dma_comp_push_err_code(4'd0),
+        .dma_reject_overflow_count(32'd0),
+        .dma_retry_seen    (1'b0),
+        .dma_recovery_seen (1'b0),
+        .dma_sleep_resume_seen(1'b0)
     );
 
     // Assertion-based protocol checks.
@@ -658,6 +730,7 @@ module tb_ucie_prbs;
         .rst_n            (rst_n),
         .tx_valid         (flit_tx_valid),
         .tx_ready         (flit_tx_ready),
+        .credit_init      (credit_init_cfg[15:0]),
         .credit_available (credit_available),
         .credit_consumed  (credit_consumed),
         .credit_return    (credit_return)
@@ -730,8 +803,17 @@ module tb_ucie_prbs;
             latency_violation_count,
             0,
             0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
             score_path,
-            cov_path
+            cov_path,
+            ""
         );
         $display("[UCIe PRBS] test=%s tx=%0d rx=%0d retries=%0d crc_err=%0d", test_name, tx_count, rx_count, retry_count, depacketizer_crc_error);
         if (mismatch_count != 0 || drop_count != 0 || latency_violation_count != 0) begin

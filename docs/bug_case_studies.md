@@ -1,4 +1,16 @@
-# Bug Case Studies — UCIe Chiplet DV
+# Bug Case Studies - UCIe Chiplet DV
+
+The project uses injected failures to prove that the checkers are real. These
+case studies are the easiest way to explain the value of the DV environment in
+an interview or on a project page.
+
+```mermaid
+flowchart LR
+    A["Named test or bug mode"] --> B["DUT behavior"]
+    B --> C["Passive monitor / scoreboard / assertion"]
+    C --> D["Machine-readable result line"]
+    D --> E["Failure bucket + dashboard"]
+```
 
 ## 1. Credit Accounting Bug Injection
 
@@ -15,8 +27,8 @@
 
 ### Why this matters
 
-This is direct evidence that the project is doing real protocol checking rather
-than only reporting clean nominal smoke tests.
+This is direct evidence that the project is doing protocol checking rather than
+only reporting clean nominal smoke tests.
 
 ## 2. CRC Polynomial Bug Injection
 
@@ -47,7 +59,7 @@ just credit flow or simple control assertions.
 - `bug_retry_seq` compiles with `-DUCIE_BUG_RETRY_SEQ`
 - the retry checker compares the replayed FLIT against the actual adapter send
   trace
-- the run fails with `Retry payload mismatch`
+- the run fails with a retry identity mismatch
 - the failure bucket is `retry_identity`
 
 ### Why this matters
@@ -62,39 +74,49 @@ checker watches the actual resend path.
 
 - `soc_wrong_key`
 - `soc_misalign`
+- `soc_expected_empty`
 
 ### What the DV flow proves
 
-- both tests are expected to pass the regression
-- their `detail` field is `negative_check_caught`
-- `e2e_mismatch` coverage is hit by those negative scenarios
+- the tests are expected to pass the regression because the checkers detect the
+  bad scenario correctly
+- `soc_wrong_key` and `soc_misalign` hit the end-to-end mismatch coverage
+- `soc_expected_empty` proves the bench can detect a deliberate
+  reference-underflow condition
 
 ### Why this matters
 
 The SoC bench is not only a happy-path demo. It also proves the end-to-end
 checker can catch intentionally bad reference conditions.
 
-## 5. Stress-Suite Closure Work
+## 5. DMA Offload Bug Injection
 
-### Tests involved
+### Bug mode
 
-- `prbs_retry_backpressure`
-- `prbs_crc_burst_recover`
-- `prbs_retry_burst`
-- `prbs_crc_storm`
-- `prbs_fault_retrain`
-- `soc_fault_echo`
-- `soc_retry_e2e`
-- `soc_rand_mix`
+- `UCIE_BUG_DMA_DONE_EARLY`
 
 ### What the DV flow proves
 
-- these scenarios remain named and runnable
-- they are intentionally separated from the default stable gate
-- they still generate reproducible logs, CSVs, coverage, and failure buckets
+- `dma_bug_done_early` compiles with `-DUCIE_BUG_DMA_DONE_EARLY`
+- the DMA controller reports completion before the last destination write
+- the destination scratchpad compare detects the stale ciphertext image
+- the failure bucket is `dma_completion`
 
 ### Why this matters
 
-The project does not hide unfinished closure work. It keeps those tests visible
-as explicit next-step verification targets.
+This case study is the clearest proof that the new CSR-programmable DMA
+offload path is being checked independently, not just exercised nominally.
 
+## 6. What The Case Studies Say About The Project
+
+The bug cases show that the environment has real verification depth:
+
+- credit accounting is checked
+- CRC corruption is observable
+- retry identity is preserved
+- SoC-level reference checks are file-backed and independent
+- DMA completion is validated against a golden destination image and an IRQ
+  completion path
+
+That combination is much more persuasive on a resume than a bench that only
+prints `PASS` on nominal smoke.

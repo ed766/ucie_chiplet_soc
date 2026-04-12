@@ -2,4 +2,4 @@
 
 No unexpected failures were observed in the default regression.
 
-Expected bug-validation failures observed: 3
+Expected bug-validation failures observed: 5

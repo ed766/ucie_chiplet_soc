@@ -27,6 +27,14 @@ package prbs_tests_pkg;
                 cfg.link.credit_block_start = 140;
                 cfg.link.credit_block_cycles = 80;
             end
+            "prbs_credit_low": begin
+                cfg.scenario_kind = "directed";
+                cfg.target_tx_count = 48;
+                cfg.link.enable_backpressure = 1'b0;
+                cfg.link.gap_ceiling = 0;
+                cfg.link.enable_credit_init_override = 1'b1;
+                cfg.link.credit_init_override = 12;
+            end
             "prbs_retry_single": begin
                 cfg.scenario_kind = "directed";
                 cfg.target_tx_count = 64;
@@ -44,23 +52,26 @@ package prbs_tests_pkg;
                 cfg.allow_crc_error = 1'b1;
                 cfg.link.gap_ceiling = 48;
                 cfg.link.enable_crc_window = 1'b1;
-                cfg.link.crc_window_start = 150;
+                cfg.link.crc_window_start = 140;
                 cfg.link.crc_window_count = 2;
-                cfg.link.crc_window_spacing = 24;
+                cfg.link.crc_window_spacing = 16;
                 cfg.link.enable_backpressure = 1'b1;
-                cfg.link.backpressure_modulus = 3;
+                cfg.link.backpressure_modulus = 4;
                 cfg.link.backpressure_hold_cycles = 2;
                 cfg.max_cycles = 14000;
             end
             "prbs_crc_burst_recover": begin
                 cfg.scenario_kind = "directed";
-                cfg.target_tx_count = 96;
+                cfg.target_tx_count = 80;
                 cfg.allow_crc_error = 1'b1;
                 cfg.link.gap_ceiling = 40;
                 cfg.link.enable_crc_window = 1'b1;
-                cfg.link.crc_window_start = 148;
-                cfg.link.crc_window_count = 3;
-                cfg.link.crc_window_spacing = 20;
+                cfg.link.crc_window_start = 140;
+                cfg.link.crc_window_count = 2;
+                cfg.link.crc_window_spacing = 16;
+                cfg.link.enable_backpressure = 1'b1;
+                cfg.link.backpressure_modulus = 5;
+                cfg.link.backpressure_hold_cycles = 1;
                 cfg.max_cycles = 14000;
             end
             "prbs_lane_fault_recover": begin
@@ -74,6 +85,28 @@ package prbs_tests_pkg;
                 cfg.link.training_hold_start = 176;
                 cfg.link.training_hold_cycles = 320;
                 cfg.max_cycles = 15000;
+            end
+            "prbs_latency_low": begin
+                cfg.scenario_kind = "directed";
+                cfg.target_tx_count = 64;
+                cfg.link.enable_backpressure = 1'b0;
+                cfg.link.gap_ceiling = 0;
+                cfg.link.channel_delay_cycles = 0;
+            end
+            "prbs_latency_high": begin
+                cfg.scenario_kind = "directed";
+                cfg.target_tx_count = 64;
+                cfg.link.enable_backpressure = 1'b0;
+                cfg.link.gap_ceiling = 0;
+                cfg.link.channel_delay_cycles = 20;
+                cfg.max_cycles = 14000;
+            end
+            "prbs_latency_nominal": begin
+                cfg.scenario_kind = "directed";
+                cfg.target_tx_count = 64;
+                cfg.link.enable_backpressure = 1'b0;
+                cfg.link.gap_ceiling = 0;
+                cfg.link.channel_delay_cycles = 10;
             end
             "prbs_retry_burst": begin
                 cfg.scenario_kind = "directed";

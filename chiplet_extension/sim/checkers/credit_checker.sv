@@ -2,13 +2,13 @@
 
 module credit_checker #(
     parameter int CREDIT_WIDTH = 16,
-    parameter int MAX_CREDITS  = 256,
-    parameter int CREDIT_INIT  = 128
+    parameter int MAX_CREDITS  = 256
 ) (
     input  logic                    clk,
     input  logic                    rst_n,
     input  logic                    tx_valid,
     input  logic                    tx_ready,
+    input  logic [CREDIT_WIDTH-1:0] credit_init,
     input  logic [CREDIT_WIDTH-1:0] credit_available,
     input  logic [CREDIT_WIDTH-1:0] credit_consumed,
     input  logic [CREDIT_WIDTH-1:0] credit_return
@@ -41,7 +41,7 @@ module credit_checker #(
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            expected_q <= CREDIT_INIT[CREDIT_WIDTH-1:0];
+            expected_q <= credit_init;
         end else begin
             if (tx_valid && tx_ready && credit_available == 0) begin
                 $error("CREDIT_NO_SEND_WITHOUT_CREDIT: accepted flit with zero credits");

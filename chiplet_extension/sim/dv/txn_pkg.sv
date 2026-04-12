@@ -8,11 +8,14 @@ package txn_pkg;
     class ucie_link_txn;
         bit          enable_midflight_reset;
         bit          enable_credit_starve;
+        bit          enable_credit_init_override;
         bit          enable_retry_burst;
         bit          enable_backpressure;
         bit          enable_fault_echo;
         bit          enable_crc_window;
         bit          enable_lane_fault_window;
+        int unsigned credit_init_override;
+        int unsigned channel_delay_cycles;
         int unsigned gap_ceiling;
         int unsigned backpressure_modulus;
         int unsigned backpressure_hold_cycles;
@@ -31,11 +34,14 @@ package txn_pkg;
         function new();
             enable_midflight_reset = 1'b0;
             enable_credit_starve = 1'b0;
+            enable_credit_init_override = 1'b0;
             enable_retry_burst = 1'b0;
             enable_backpressure = 1'b1;
             enable_fault_echo = 1'b0;
             enable_crc_window = 1'b0;
             enable_lane_fault_window = 1'b0;
+            credit_init_override = 128;
+            channel_delay_cycles = 0;
             gap_ceiling = 3;
             backpressure_modulus = 8;
             backpressure_hold_cycles = 1;
@@ -58,14 +64,29 @@ package txn_pkg;
         string       test_name;
         string       scenario_kind;
         string       bug_mode;
+        string       power_mode;
         bit          randomized;
         bit          neg_wrong_key;
         bit          neg_misalign;
+        bit          expect_expected_empty;
+        bit          use_dma;
         bit          allow_crc_error;
         int unsigned seed;
         int unsigned target_tx_count;
         int unsigned target_cipher_updates;
+        int unsigned ref_words;
+        int unsigned power_event_start;
+        int unsigned power_event_cycles;
+        int unsigned power_recovery_cycles;
         int unsigned max_cycles;
+        int unsigned dma_src_base;
+        int unsigned dma_dst_base;
+        int unsigned dma_len_words;
+        int unsigned dma_tag;
+        int unsigned dma_second_src_base;
+        int unsigned dma_second_dst_base;
+        int unsigned dma_second_len_words;
+        int unsigned dma_second_tag;
         ucie_link_txn link;
 
         function new(input string bench = "");
@@ -73,14 +94,29 @@ package txn_pkg;
             test_name = "";
             scenario_kind = "directed";
             bug_mode = "none";
+            power_mode = "none";
             randomized = 1'b0;
             neg_wrong_key = 1'b0;
             neg_misalign = 1'b0;
+            expect_expected_empty = 1'b0;
+            use_dma = 1'b0;
             allow_crc_error = 1'b0;
             seed = `TB_SEED_DEFAULT;
             target_tx_count = 128;
             target_cipher_updates = 8;
+            ref_words = 512;
+            power_event_start = 120;
+            power_event_cycles = 16;
+            power_recovery_cycles = 32;
             max_cycles = 5000;
+            dma_src_base = 0;
+            dma_dst_base = 0;
+            dma_len_words = 4;
+            dma_tag = 16'h0001;
+            dma_second_src_base = 0;
+            dma_second_dst_base = 0;
+            dma_second_len_words = 0;
+            dma_second_tag = 16'h0002;
             link = new();
         endfunction
 
@@ -124,6 +160,7 @@ package txn_pkg;
         function void apply_runtime_plusargs();
             int unsigned local_u32;
             string local_bug_mode;
+            string local_power_mode;
 
             if ($value$plusargs("SEED=%d", local_u32)) begin
                 seed = local_u32;
@@ -140,8 +177,47 @@ package txn_pkg;
             if ($value$plusargs("BUG_MODE=%s", local_bug_mode)) begin
                 bug_mode = local_bug_mode;
             end
+            if ($value$plusargs("POWER_MODE=%s", local_power_mode)) begin
+                power_mode = local_power_mode;
+            end
             if ($value$plusargs("GAP_CEILING=%d", local_u32)) begin
                 link.gap_ceiling = local_u32;
+            end
+            if ($value$plusargs("REF_WORDS=%d", local_u32)) begin
+                ref_words = local_u32;
+            end
+            if ($value$plusargs("POWER_EVENT_START=%d", local_u32)) begin
+                power_event_start = local_u32;
+            end
+            if ($value$plusargs("POWER_EVENT_CYCLES=%d", local_u32)) begin
+                power_event_cycles = local_u32;
+            end
+            if ($value$plusargs("POWER_RECOVERY_CYCLES=%d", local_u32)) begin
+                power_recovery_cycles = local_u32;
+            end
+            if ($value$plusargs("DMA_SRC_BASE=%d", local_u32)) begin
+                dma_src_base = local_u32;
+            end
+            if ($value$plusargs("DMA_DST_BASE=%d", local_u32)) begin
+                dma_dst_base = local_u32;
+            end
+            if ($value$plusargs("DMA_LEN_WORDS=%d", local_u32)) begin
+                dma_len_words = local_u32;
+            end
+            if ($value$plusargs("DMA_TAG=%d", local_u32)) begin
+                dma_tag = local_u32;
+            end
+            if ($value$plusargs("DMA2_SRC_BASE=%d", local_u32)) begin
+                dma_second_src_base = local_u32;
+            end
+            if ($value$plusargs("DMA2_DST_BASE=%d", local_u32)) begin
+                dma_second_dst_base = local_u32;
+            end
+            if ($value$plusargs("DMA2_LEN_WORDS=%d", local_u32)) begin
+                dma_second_len_words = local_u32;
+            end
+            if ($value$plusargs("DMA2_TAG=%d", local_u32)) begin
+                dma_second_tag = local_u32;
             end
             if ($value$plusargs("BACKPRESSURE_MOD=%d", local_u32)) begin
                 link.backpressure_modulus = local_u32;
@@ -157,6 +233,10 @@ package txn_pkg;
             end
             if ($value$plusargs("CREDIT_BLOCK_CYCLES=%d", local_u32)) begin
                 link.credit_block_cycles = local_u32;
+            end
+            if ($value$plusargs("CREDIT_INIT=%d", local_u32)) begin
+                link.enable_credit_init_override = 1'b1;
+                link.credit_init_override = local_u32;
             end
             if ($value$plusargs("RESET_CYCLE=%d", local_u32)) begin
                 link.midflight_reset_cycle = local_u32;
@@ -181,6 +261,9 @@ package txn_pkg;
             end
             if ($value$plusargs("TRAINING_HOLD_CYCLES=%d", local_u32)) begin
                 link.training_hold_cycles = local_u32;
+            end
+            if ($value$plusargs("CHANNEL_DELAY=%d", local_u32)) begin
+                link.channel_delay_cycles = local_u32;
             end
         endfunction
     endclass

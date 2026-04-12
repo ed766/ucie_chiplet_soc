@@ -7,6 +7,15 @@ module soc_die_a_top #(
 ) (
     input  logic                   clk,
     input  logic                   rst_n,
+    input  logic [1:0]             power_state,
+    input  logic                   dma_mode_force,
+    input  logic                   cfg_valid,
+    input  logic                   cfg_write,
+    input  logic [7:0]             cfg_addr,
+    input  logic [31:0]            cfg_wdata,
+    output logic [31:0]            cfg_rdata,
+    output logic                   cfg_ready,
+    output logic                   irq_done,
     output logic [LANES-1:0]       lane_tx_data,
     output logic                   lane_tx_valid,
     output logic                   lane_link_enable,
@@ -17,7 +26,12 @@ module soc_die_a_top #(
     input  logic                   lane_lane_fault,
     output logic [DATA_WIDTH-1:0]  plaintext_monitor,
     output logic [DATA_WIDTH-1:0]  ciphertext_monitor,
-    output logic                   crypto_error_flag
+    output logic                   crypto_error_flag,
+    output logic                   dma_busy_monitor,
+    output logic                   dma_done_monitor,
+    output logic                   dma_error_monitor,
+    output logic                   irq_done_monitor,
+    output logic [15:0]            dma_tag_monitor
 );
 
     localparam int CREDIT_INIT = 128;
@@ -40,6 +54,21 @@ module soc_die_a_top #(
     logic [DATA_WIDTH-1:0] rx_stream_data;
     logic                  rx_stream_valid;
     logic                  rx_stream_ready;
+    logic [DATA_WIDTH-1:0] legacy_tx_stream_data;
+    logic                  legacy_tx_stream_valid;
+    logic                  legacy_tx_stream_ready;
+    logic [DATA_WIDTH-1:0] dma_tx_stream_data;
+    logic                  dma_tx_stream_valid;
+    logic                  dma_tx_stream_ready;
+    logic [DATA_WIDTH-1:0] legacy_rx_stream_data;
+    logic                  legacy_rx_stream_valid;
+    logic                  legacy_rx_stream_ready;
+    logic [DATA_WIDTH-1:0] dma_rx_stream_data;
+    logic                  dma_rx_stream_valid;
+    logic                  dma_rx_stream_ready;
+    logic                  dma_mode_active;
+    logic                  dma_mode_select;
+    logic                  legacy_crypto_error_flag;
 
     // FLIT level signals.
     logic [FLIT_WIDTH-1:0] flit_tx_payload;
@@ -68,15 +97,54 @@ module soc_die_a_top #(
     ) u_die_a_system (
         .clk             (clk),
         .rst_n           (rst_n),
-        .tx_stream_data  (tx_stream_data),
-        .tx_stream_valid (tx_stream_valid),
-        .tx_stream_ready (tx_stream_ready),
-        .rx_stream_data  (rx_stream_data),
-        .rx_stream_valid (rx_stream_valid),
-        .rx_stream_ready (rx_stream_ready),
+        .tx_stream_data  (legacy_tx_stream_data),
+        .tx_stream_valid (legacy_tx_stream_valid),
+        .tx_stream_ready (legacy_tx_stream_ready),
+        .rx_stream_data  (legacy_rx_stream_data),
+        .rx_stream_valid (legacy_rx_stream_valid),
+        .rx_stream_ready (legacy_rx_stream_ready),
         .aon_power_good  (),
-        .crypto_error    (crypto_error_flag)
+        .crypto_error    (legacy_crypto_error_flag)
     );
+
+    dma_offload_ctrl #(
+        .DATA_WIDTH(DATA_WIDTH)
+    ) u_dma (
+        .clk             (clk),
+        .rst_n           (rst_n),
+        .power_state     (power_state),
+        .cfg_valid       (cfg_valid),
+        .cfg_write       (cfg_write),
+        .cfg_addr        (cfg_addr),
+        .cfg_wdata       (cfg_wdata),
+        .cfg_rdata       (cfg_rdata),
+        .cfg_ready       (cfg_ready),
+        .irq_done        (irq_done),
+        .tx_stream_data  (dma_tx_stream_data),
+        .tx_stream_valid (dma_tx_stream_valid),
+        .tx_stream_ready (dma_tx_stream_ready),
+        .rx_stream_data  (dma_rx_stream_data),
+        .rx_stream_valid (dma_rx_stream_valid),
+        .rx_stream_ready (dma_rx_stream_ready),
+        .dma_mode_active (dma_mode_active),
+        .dma_busy_monitor(dma_busy_monitor),
+        .dma_done_monitor(dma_done_monitor),
+        .dma_error_monitor(dma_error_monitor),
+        .irq_done_monitor(irq_done_monitor),
+        .dma_tag_monitor (dma_tag_monitor)
+    );
+
+    assign dma_mode_select = dma_mode_force || dma_mode_active;
+    assign tx_stream_data = dma_mode_select ? dma_tx_stream_data : legacy_tx_stream_data;
+    assign tx_stream_valid = dma_mode_select ? dma_tx_stream_valid : legacy_tx_stream_valid;
+    assign dma_tx_stream_ready = dma_mode_select ? tx_stream_ready : 1'b0;
+    assign legacy_tx_stream_ready = dma_mode_select ? 1'b0 : tx_stream_ready;
+    assign dma_rx_stream_data = rx_stream_data;
+    assign dma_rx_stream_valid = dma_mode_select ? rx_stream_valid : 1'b0;
+    assign legacy_rx_stream_data = rx_stream_data;
+    assign legacy_rx_stream_valid = dma_mode_select ? 1'b0 : rx_stream_valid;
+    assign rx_stream_ready = dma_mode_select ? dma_rx_stream_ready : legacy_rx_stream_ready;
+    assign crypto_error_flag = legacy_crypto_error_flag;
 
     // Packetize words into CRC-protected FLITs.
     flit_packetizer #(

@@ -1,0 +1,15 @@
+metric,value
+power_mode,none
+run_cycles,16
+crypto_only_cycles,0
+sleep_cycles,0
+deep_sleep_cycles,0
+trans_run_to_crypto_only,0
+trans_crypto_only_to_run,0
+trans_run_to_sleep,0
+trans_sleep_to_run,0
+trans_run_to_deep_sleep,0
+trans_deep_sleep_to_run,0
+illegal_activity_violations,0
+resume_events,0
+resume_violations,0
