@@ -31,6 +31,8 @@ TOP_FAILURES = REPORT_ROOT / "top_failures.md"
 VERIFICATION_DASHBOARD = REPORT_ROOT / "verification_dashboard.md"
 REGRESSION_HISTORY = REPORT_ROOT / "regression_history.csv"
 CLOSURE_TARGETS = REPORT_ROOT / "closure_targets.md"
+POWER_SUMMARY = REPORT_ROOT / "power_state_summary.csv"
+COVERAGE_CLOSURE_MATRIX = REPORT_ROOT / "coverage_closure_matrix.md"
 
 VERILATOR_WARNINGS = [
     "-Wno-fatal",
@@ -51,6 +53,7 @@ class TestSpec:
     bug_mode: str = "none"
     defines: tuple[str, ...] = ()
     max_cycles: int = 9000
+    ref_words: int = 512
     suites: tuple[str, ...] = ("stable",)
     plusargs: tuple[str, ...] = ()
 
@@ -66,18 +69,23 @@ class RunSpec:
     bug_mode: str
     defines: tuple[str, ...]
     max_cycles: int
+    ref_words: int
     plusargs: tuple[str, ...] = field(default_factory=tuple)
 
 
 TEST_SPECS: tuple[TestSpec, ...] = (
     TestSpec("prbs_smoke", "tb_ucie_prbs"),
     TestSpec("prbs_credit_starve", "tb_ucie_prbs"),
+    TestSpec("prbs_credit_low", "tb_ucie_prbs"),
     TestSpec("prbs_retry_single", "tb_ucie_prbs", max_cycles=12000),
-    TestSpec("prbs_retry_backpressure", "tb_ucie_prbs", default_enabled=False, max_cycles=14000, suites=("stress",)),
-    TestSpec("prbs_crc_burst_recover", "tb_ucie_prbs", default_enabled=False, max_cycles=14000, suites=("stress",)),
+    TestSpec("prbs_retry_backpressure", "tb_ucie_prbs", max_cycles=14000),
+    TestSpec("prbs_crc_burst_recover", "tb_ucie_prbs", max_cycles=14000),
     TestSpec("prbs_lane_fault_recover", "tb_ucie_prbs", max_cycles=15000),
     TestSpec("prbs_reset_midflight", "tb_ucie_prbs"),
     TestSpec("prbs_backpressure_wave", "tb_ucie_prbs"),
+    TestSpec("prbs_latency_low", "tb_ucie_prbs"),
+    TestSpec("prbs_latency_nominal", "tb_ucie_prbs"),
+    TestSpec("prbs_latency_high", "tb_ucie_prbs", max_cycles=14000),
     TestSpec("prbs_rand_stress", "tb_ucie_prbs", randomized=True, max_cycles=30000),
     TestSpec("prbs_retry_burst", "tb_ucie_prbs", default_enabled=False, suites=("stress",)),
     TestSpec("prbs_crc_storm", "tb_ucie_prbs", default_enabled=False, suites=("stress",)),
@@ -86,9 +94,44 @@ TEST_SPECS: tuple[TestSpec, ...] = (
     TestSpec("soc_wrong_key", "tb_soc_chiplets"),
     TestSpec("soc_misalign", "tb_soc_chiplets"),
     TestSpec("soc_backpressure", "tb_soc_chiplets"),
+    TestSpec("soc_expected_empty", "tb_soc_chiplets", ref_words=4),
     TestSpec("soc_fault_echo", "tb_soc_chiplets", default_enabled=False, suites=("stress",)),
     TestSpec("soc_retry_e2e", "tb_soc_chiplets", default_enabled=False, suites=("stress",)),
     TestSpec("soc_rand_mix", "tb_soc_chiplets", default_enabled=False, randomized=True, suites=("stress",)),
+    TestSpec("power_run_mode", "tb_soc_chiplets", suites=("stable", "power")),
+    TestSpec("power_crypto_only", "tb_soc_chiplets", max_cycles=7000, suites=("stable", "power")),
+    TestSpec("power_sleep_entry_exit", "tb_soc_chiplets", max_cycles=8000, suites=("stable", "power")),
+    TestSpec("power_deep_sleep_recover", "tb_soc_chiplets", max_cycles=9000, suites=("stable", "power")),
+    TestSpec("dma_queue_smoke", "tb_soc_chiplets", max_cycles=12000, ref_words=4),
+    TestSpec("dma_queue_back_to_back", "tb_soc_chiplets", max_cycles=14000, ref_words=12),
+    TestSpec("dma_queue_full_reject", "tb_soc_chiplets", max_cycles=18000, ref_words=16),
+    TestSpec("dma_completion_fifo_drain", "tb_soc_chiplets", max_cycles=18000, ref_words=12),
+    TestSpec("dma_irq_masking", "tb_soc_chiplets", max_cycles=14000, ref_words=4),
+    TestSpec("dma_odd_len_reject", "tb_soc_chiplets", max_cycles=8000, ref_words=0),
+    TestSpec("dma_range_reject", "tb_soc_chiplets", max_cycles=8000, ref_words=0),
+    TestSpec("dma_timeout_error", "tb_soc_chiplets", max_cycles=12000, ref_words=0),
+    TestSpec("dma_retry_recover_queue", "tb_soc_chiplets", max_cycles=22000, ref_words=8),
+    TestSpec("dma_power_sleep_resume_queue", "tb_soc_chiplets", max_cycles=18000, ref_words=8, suites=("stable", "power")),
+    TestSpec("dma_comp_fifo_full_stall", "tb_soc_chiplets", max_cycles=22000, ref_words=20),
+    TestSpec("dma_irq_pending_then_enable", "tb_soc_chiplets", max_cycles=14000, ref_words=4),
+    TestSpec("dma_comp_pop_empty", "tb_soc_chiplets", max_cycles=6000, ref_words=0),
+    TestSpec("dma_reset_mid_queue", "tb_soc_chiplets", max_cycles=12000, ref_words=0),
+    TestSpec("dma_tag_reuse", "tb_soc_chiplets", max_cycles=16000, ref_words=8),
+    TestSpec("dma_power_state_retention_matrix", "tb_soc_chiplets", max_cycles=18000, ref_words=4, suites=("stable", "power")),
+    TestSpec("dma_crypto_only_submit_blocked", "tb_soc_chiplets", max_cycles=10000, ref_words=0, suites=("stable", "power")),
+    TestSpec("mem_bank_parallel_service", "tb_soc_chiplets", max_cycles=16000, ref_words=8, suites=("stable", "memory")),
+    TestSpec("mem_src_bank_conflict", "tb_soc_chiplets", max_cycles=16000, ref_words=8, suites=("stable", "memory")),
+    TestSpec("mem_dst_bank_conflict", "tb_soc_chiplets", max_cycles=18000, ref_words=8, suites=("stable", "memory")),
+    TestSpec("mem_read_while_dma", "tb_soc_chiplets", max_cycles=16000, ref_words=8, suites=("stable", "memory")),
+    TestSpec("mem_write_while_dma_reject", "tb_soc_chiplets", max_cycles=16000, ref_words=8, suites=("stable", "memory")),
+    TestSpec("mem_parity_src_detect", "tb_soc_chiplets", max_cycles=12000, ref_words=0, suites=("stable", "memory")),
+    TestSpec("mem_parity_dst_maint_detect", "tb_soc_chiplets", max_cycles=10000, ref_words=0, suites=("stable", "memory")),
+    TestSpec("mem_sleep_retained_bank", "tb_soc_chiplets", max_cycles=12000, ref_words=0, suites=("stable", "power", "memory")),
+    TestSpec("mem_sleep_nonretained_bank", "tb_soc_chiplets", max_cycles=12000, ref_words=0, suites=("stable", "power", "memory")),
+    TestSpec("mem_nonretained_readback_poison_clean", "tb_soc_chiplets", max_cycles=12000, ref_words=0, suites=("stable", "power", "memory")),
+    TestSpec("mem_invalid_clear_on_write", "tb_soc_chiplets", max_cycles=12000, ref_words=0, suites=("stable", "power", "memory")),
+    TestSpec("mem_deep_sleep_retention_matrix", "tb_soc_chiplets", max_cycles=14000, ref_words=0, suites=("stable", "power", "memory")),
+    TestSpec("mem_crypto_only_cfg_access", "tb_soc_chiplets", max_cycles=12000, ref_words=0, suites=("stable", "power", "memory")),
     TestSpec(
         "bug_credit_off_by_one",
         "tb_ucie_prbs",
@@ -113,6 +156,26 @@ TEST_SPECS: tuple[TestSpec, ...] = (
         defines=("UCIE_BUG_RETRY_SEQ",),
         max_cycles=12000,
         suites=("stable", "bug"),
+    ),
+    TestSpec(
+        "dma_bug_done_early",
+        "tb_soc_chiplets",
+        expected_status="FAIL",
+        bug_mode="UCIE_BUG_DMA_DONE_EARLY",
+        defines=("UCIE_BUG_DMA_DONE_EARLY",),
+        max_cycles=14000,
+        ref_words=8,
+        suites=("stable", "bug"),
+    ),
+    TestSpec(
+        "mem_bug_parity_skip",
+        "tb_soc_chiplets",
+        expected_status="FAIL",
+        bug_mode="UCIE_BUG_MEM_PARITY_SKIP",
+        defines=("UCIE_BUG_MEM_PARITY_SKIP",),
+        max_cycles=12000,
+        ref_words=0,
+        suites=("stable", "bug", "memory"),
     ),
 )
 
@@ -224,6 +287,7 @@ def expand_runs(specs: Iterable[TestSpec], base_seed: int, random_seed_count: in
                     bug_mode=spec.bug_mode,
                     defines=spec.defines,
                     max_cycles=spec.max_cycles,
+                    ref_words=spec.ref_words,
                     plusargs=spec.plusargs,
                 )
             )
@@ -249,6 +313,7 @@ def write_manifest(rows: list[dict[str, str]]) -> None:
                 "compile_log_path",
                 "cov_csv",
                 "score_csv",
+                "power_csv",
                 "ref_csv",
                 "elapsed_s",
                 "returncode",
@@ -371,8 +436,10 @@ def run_suite(args: argparse.Namespace) -> int:
 
         cov_csv = REPORT_ROOT / f"{run.run_id}_coverage.csv"
         score_csv = REPORT_ROOT / f"{run.run_id}_scoreboard.csv"
+        power_csv = REPORT_ROOT / f"{run.run_id}_power.csv"
         ref_csv = REFERENCE_ROOT / f"{run.run_id}_expected.csv"
         ref_csv_str = ""
+        power_csv_str = ""
         log_path = LOG_ROOT / f"{run.run_id}.log"
         plusargs = [
             f"+TEST={run.test}",
@@ -390,11 +457,13 @@ def run_suite(args: argparse.Namespace) -> int:
                 "--output",
                 str(ref_csv),
                 "--words",
-                "512",
+                str(run.ref_words),
             ]
             subprocess.run(ref_cmd, cwd=ROOT, check=True)
             plusargs.append(f"+REF_CSV={ref_csv}")
+            plusargs.append(f"+POWER_OUT={power_csv}")
             ref_csv_str = str(ref_csv)
+            power_csv_str = str(power_csv)
         if run.bug_mode != "none":
             plusargs.append(f"+BUG_MODE={run.bug_mode}")
         plusargs.extend(f"+{arg}" for arg in run.plusargs)
@@ -427,6 +496,7 @@ def run_suite(args: argparse.Namespace) -> int:
                 "compile_log_path": str(compile_log),
                 "cov_csv": str(cov_csv) if cov_csv.exists() else "",
                 "score_csv": str(score_csv) if score_csv.exists() else "",
+                "power_csv": power_csv_str if power_csv_str and power_csv.exists() else "",
                 "ref_csv": ref_csv_str if ref_csv_str and ref_csv.exists() else "",
                 "elapsed_s": f"{elapsed:.3f}",
                 "returncode": str(result.returncode),
@@ -451,6 +521,14 @@ def run_suite(args: argparse.Namespace) -> int:
         "--output",
         str(COVERAGE_SUMMARY),
     ]
+    power_cmd = [
+        sys.executable,
+        str(ROOT / "scripts" / "gen_power_report.py"),
+        "--summary",
+        str(REGRESS_SUMMARY),
+        "--output",
+        str(POWER_SUMMARY),
+    ]
     failure_cmd = [
         sys.executable,
         str(ROOT / "scripts" / "gen_failure_summary.py"),
@@ -458,6 +536,8 @@ def run_suite(args: argparse.Namespace) -> int:
         str(REGRESS_SUMMARY),
         "--coverage",
         str(COVERAGE_SUMMARY),
+        "--power-summary",
+        str(POWER_SUMMARY),
         "--failure-csv",
         str(FAILURE_BUCKETS),
         "--top-failures",
@@ -465,25 +545,41 @@ def run_suite(args: argparse.Namespace) -> int:
         "--dashboard",
         str(VERIFICATION_DASHBOARD),
     ]
-    for cmd in (parser_cmd, coverage_cmd, failure_cmd):
+    for cmd in (parser_cmd, coverage_cmd, power_cmd, failure_cmd):
         subprocess.run(cmd, cwd=ROOT, check=True)
 
     if not args.tests and args.suite == "stable":
         write_regression_history(REGRESS_SUMMARY, COVERAGE_SUMMARY, REGRESSION_HISTORY)
         write_closure_targets(REGRESS_SUMMARY, COVERAGE_SUMMARY, CLOSURE_TARGETS)
+        subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / "scripts" / "gen_coverage_closure.py"),
+                "--coverage",
+                str(COVERAGE_SUMMARY),
+                "--history",
+                str(REGRESSION_HISTORY),
+                "--output",
+                str(COVERAGE_CLOSURE_MATRIX),
+            ],
+            cwd=ROOT,
+            check=True,
+        )
 
     print(f"Regression summary: {REGRESS_SUMMARY}")
     print(f"Coverage summary:   {COVERAGE_SUMMARY}")
     print(f"Failure buckets:    {FAILURE_BUCKETS}")
     print(f"Dashboard:          {VERIFICATION_DASHBOARD}")
+    print(f"Power summary:      {POWER_SUMMARY}")
     print(f"Trend history:      {REGRESSION_HISTORY}")
     print(f"Closure targets:    {CLOSURE_TARGETS}")
+    print(f"Closure matrix:     {COVERAGE_CLOSURE_MATRIX}")
     return 0
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the Verilator DV regression for the UCIe chiplet benches.")
-    parser.add_argument("--suite", default="stable", choices=["stable", "stress", "bug"], help="Named regression suite.")
+    parser.add_argument("--suite", default="stable", choices=["stable", "stress", "bug", "power"], help="Named regression suite.")
     parser.add_argument("--tests", default="", help="Comma-separated explicit test list. Overrides --suite.")
     parser.add_argument("--random-seeds", type=int, default=3, help="Seeds to sweep for randomized named tests.")
     parser.add_argument("--seed", type=int, default=20260329, help="Master regression seed.")

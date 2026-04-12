@@ -7,10 +7,24 @@ module soc_chiplet_top #(
 ) (
     input  logic                   clk,
     input  logic                   rst_n,
+    input  logic [1:0]             power_state,
+    input  logic                   dma_mode_force,
+    input  logic                   cfg_valid,
+    input  logic                   cfg_write,
+    input  logic [7:0]             cfg_addr,
+    input  logic [31:0]            cfg_wdata,
+    output logic [31:0]            cfg_rdata,
+    output logic                   cfg_ready,
+    output logic                   irq_done,
     output logic [DATA_WIDTH-1:0]  plaintext_monitor,
     output logic [DATA_WIDTH-1:0]  ciphertext_monitor,
     output logic [DATA_WIDTH-1:0]  die_b_ciphertext_monitor,
-    output logic                   crypto_error_flag
+    output logic                   crypto_error_flag,
+    output logic                   dma_busy_monitor,
+    output logic                   dma_done_monitor,
+    output logic                   dma_error_monitor,
+    output logic                   irq_done_monitor,
+    output logic [15:0]            dma_tag_monitor
 );
 
     // Lane wires for each die; the channel model cross-connects these paths.
@@ -40,6 +54,15 @@ module soc_chiplet_top #(
     ) u_die_a (
         .clk                 (clk),
         .rst_n               (rst_n),
+        .power_state         (power_state),
+        .dma_mode_force      (dma_mode_force),
+        .cfg_valid           (cfg_valid),
+        .cfg_write           (cfg_write),
+        .cfg_addr            (cfg_addr),
+        .cfg_wdata           (cfg_wdata),
+        .cfg_rdata           (cfg_rdata),
+        .cfg_ready           (cfg_ready),
+        .irq_done            (irq_done),
         .lane_tx_data        (lane_die_a_tx_data),
         .lane_tx_valid       (lane_die_a_tx_valid),
         .lane_link_enable    (lane_die_a_link_enable),
@@ -50,7 +73,12 @@ module soc_chiplet_top #(
         .lane_lane_fault     (lane_die_a_lane_fault),
         .plaintext_monitor   (plaintext_monitor),
         .ciphertext_monitor  (ciphertext_monitor),
-        .crypto_error_flag   (crypto_error_flag)
+        .crypto_error_flag   (crypto_error_flag),
+        .dma_busy_monitor    (dma_busy_monitor),
+        .dma_done_monitor    (dma_done_monitor),
+        .dma_error_monitor   (dma_error_monitor),
+        .irq_done_monitor    (irq_done_monitor),
+        .dma_tag_monitor     (dma_tag_monitor)
     );
 
     // Die B consumes plaintext, runs AES, and returns ciphertext.

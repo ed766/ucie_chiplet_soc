@@ -33,6 +33,43 @@ COVERAGE_METRICS = [
     "expected_empty",
     "power_reset_proxy",
     "power_idle_proxy",
+    "dma_submit_occ_0",
+    "dma_submit_occ_1",
+    "dma_submit_occ_23",
+    "dma_submit_occ_4",
+    "dma_comp_occ_0",
+    "dma_comp_occ_1",
+    "dma_comp_occ_23",
+    "dma_comp_occ_4",
+    "dma_submit_accept",
+    "dma_reject_odd",
+    "dma_reject_range",
+    "dma_reject_qfull",
+    "dma_reject_blocked",
+    "dma_reject_overflow",
+    "dma_submit_head_wrap",
+    "dma_submit_tail_wrap",
+    "dma_comp_head_wrap",
+    "dma_comp_tail_wrap",
+    "dma_active_present",
+    "dma_multi_queued",
+    "dma_comp_success",
+    "dma_comp_runtime_error",
+    "dma_comp_submit_reject",
+    "dma_retire_stall",
+    "dma_queue_drain_full_to_empty",
+    "dma_completion_under_retry",
+    "dma_completion_after_recovery",
+    "dma_completion_after_sleep_resume",
+    "mem_src_conflict",
+    "mem_dst_conflict",
+    "mem_wait",
+    "mem_parity_maint",
+    "mem_parity_dma",
+    "mem_invalid_read",
+    "mem_write_reject",
+    "mem_invalid_bank_present",
+    "mem_wake_apply",
 ]
 
 
@@ -49,6 +86,22 @@ def metric_category(metric: str) -> str:
         return "latency"
     if metric.startswith("e2e_") or metric == "expected_empty":
         return "end_to_end"
+    if metric.startswith("dma_submit_occ_") or metric.startswith("dma_comp_occ_"):
+        return "dma_queue"
+    if metric.startswith("dma_reject_"):
+        return "dma_error"
+    if metric.endswith("_wrap"):
+        return "dma_queue"
+    if metric in {"dma_submit_accept", "dma_active_present", "dma_multi_queued"}:
+        return "dma_queue"
+    if metric in {"dma_comp_success", "dma_comp_runtime_error", "dma_comp_submit_reject"}:
+        return "dma_completion"
+    if metric in {"dma_retire_stall", "dma_queue_drain_full_to_empty"}:
+        return "dma_queue"
+    if metric.startswith("dma_completion_"):
+        return "dma_interaction"
+    if metric.startswith("mem_"):
+        return "memory"
     return "power"
 
 
