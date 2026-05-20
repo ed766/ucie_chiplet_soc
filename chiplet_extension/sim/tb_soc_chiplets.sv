@@ -1,6 +1,7 @@
 `timescale 1ns/1ps
 `include "tb_params.svh"
 `include "sva_macros.svh"
+`include "assertions/chiplet_protocol_assertions.svh"
 `include "dv/txn_pkg.sv"
 `include "dv/ucie_cov_pkg.sv"
 `include "dv/stats_pkg.sv"
@@ -18,7 +19,13 @@
 `include "scoreboard/ucie_txn_monitor.sv"
 `include "scoreboard/ucie_scoreboard.sv"
 
-module tb_soc_chiplets;
+module tb_soc_chiplets #(
+    parameter int DMA_SUBMIT_QUEUE_DEPTH = 4,
+    parameter int DMA_COMP_QUEUE_DEPTH = 4,
+    parameter int DMA_BANKS = 2,
+    parameter bit DMA_PARITY_ENABLE = 1'b1,
+    parameter int DMA_TIMEOUT_CYCLES = 1024
+);
 
     import txn_pkg::*;
     import soc_tests_pkg::*;
@@ -75,6 +82,9 @@ module tb_soc_chiplets;
     localparam logic [3:0] DMA_ERR_SUBMIT_BLOCKED = 4'd5;
     localparam logic [3:0] DMA_ERR_MEM_PARITY = 4'd6;
     localparam logic [3:0] DMA_ERR_MEM_INVALID = 4'd7;
+    localparam string CHAR_RESULT_PREFIX = "CHAR_RESULT";
+    localparam int CHAR_MAX_ACCEPTED = 64;
+    localparam int CHAR_MAX_MAINT = 256;
 
     logic clk;
     logic rst_n;
@@ -172,7 +182,12 @@ module tb_soc_chiplets;
     soc_chiplet_top #(
         .DATA_WIDTH(DATA_WIDTH),
         .FLIT_WIDTH(FLIT_WIDTH),
-        .LANES     (LANES)
+        .LANES     (LANES),
+        .DMA_SUBMIT_QUEUE_DEPTH(DMA_SUBMIT_QUEUE_DEPTH),
+        .DMA_COMP_QUEUE_DEPTH(DMA_COMP_QUEUE_DEPTH),
+        .DMA_BANKS(DMA_BANKS),
+        .DMA_PARITY_ENABLE(DMA_PARITY_ENABLE),
+        .DMA_TIMEOUT_CYCLES(DMA_TIMEOUT_CYCLES)
     ) u_chiplet (
         .clk                       (clk),
         .rst_n                     (rst_n),
@@ -229,6 +244,29 @@ module tb_soc_chiplets;
     logic dma_cov_reset_q;
     logic [31:0] dma_submit_result_word_q;
     logic [31:0] dma_front_comp_status_word_q;
+    bit char_collect_q;
+    int unsigned char_cycle_count_q;
+    int unsigned char_completion_occupancy_sum_q;
+    int unsigned char_completion_occupancy_max_q;
+    int unsigned char_completion_full_cycles_q;
+    int unsigned char_submit_reject_count_q;
+    int unsigned char_invalid_abort_count_q;
+    int unsigned char_latency_wr_idx_q;
+    int unsigned char_latency_rd_idx_q;
+    int unsigned char_latency_pending_q;
+    int unsigned char_latency_count_q;
+    int unsigned char_latency_sum_q;
+    int unsigned char_latency_max_q;
+    int unsigned char_enqueue_cycle_q [0:CHAR_MAX_ACCEPTED-1];
+    int unsigned char_maint_wait_count_q;
+    int unsigned char_maint_wait_sum_q;
+    int unsigned char_maint_wait_max_q;
+    int unsigned char_maint_wait_above32_q;
+    int unsigned char_maint_wait_samples_q [0:CHAR_MAX_MAINT-1];
+    int unsigned char_src_conflicts_base_q;
+    int unsigned char_dst_conflicts_base_q;
+    int unsigned char_src_wait_base_q;
+    int unsigned char_dst_wait_base_q;
 
     assign dma_submit_result_word_q = {10'd0,
                                        u_chiplet.u_die_a.u_dma.submit_reject_tag_q,
@@ -248,6 +286,7 @@ module tb_soc_chiplets;
         cfg_wdata = '0;
         cfg_rdata_capture_q = '0;
         dma_cov_reset_q = 1'b0;
+        char_collect_q = 1'b0;
         if (!$value$plusargs("TEST=%s", test_name)) begin
             test_name = "soc_smoke";
         end
@@ -440,6 +479,23 @@ module tb_soc_chiplets;
     int unsigned power_illegal_activity_violations;
     int unsigned power_resume_events;
     int unsigned power_resume_violations;
+    int unsigned power_domain_combo_run;
+    int unsigned power_domain_combo_crypto_only;
+    int unsigned power_domain_combo_sleep;
+    int unsigned power_domain_combo_deep_sleep;
+    int unsigned power_isolation_assert_cycles;
+    int unsigned power_isolation_deassert_cycles;
+    int unsigned power_isolation_blocked_cycles;
+    int unsigned power_isolation_release_traffic_seen;
+    int unsigned power_dma_sleep_save_seen;
+    int unsigned power_dma_sleep_restore_seen;
+    int unsigned power_dma_mem_save_seen;
+    int unsigned power_dma_mem_restore_seen;
+    int unsigned power_activity_cross_no_traffic;
+    int unsigned power_activity_cross_link_traffic;
+    int unsigned power_activity_cross_dma_queued;
+    int unsigned power_activity_cross_dma_active;
+    int unsigned power_activity_cross_completion_pending;
     ucie_txn_t tx_txn;
     ucie_txn_t rx_txn;
     logic tx_txn_valid;
@@ -564,6 +620,88 @@ module tb_soc_chiplets;
         end
     end
 
+    always_ff @(posedge clk or negedge rst_n) begin : char_metrics
+        int unsigned local_latency;
+        if (!rst_n) begin
+            char_cycle_count_q <= 0;
+            char_completion_occupancy_sum_q <= 0;
+            char_completion_occupancy_max_q <= 0;
+            char_completion_full_cycles_q <= 0;
+            char_submit_reject_count_q <= 0;
+            char_invalid_abort_count_q <= 0;
+            char_latency_wr_idx_q <= 0;
+            char_latency_rd_idx_q <= 0;
+            char_latency_pending_q <= 0;
+            char_latency_count_q <= 0;
+            char_latency_sum_q <= 0;
+            char_latency_max_q <= 0;
+            char_maint_wait_count_q <= 0;
+            char_maint_wait_sum_q <= 0;
+            char_maint_wait_max_q <= 0;
+            char_maint_wait_above32_q <= 0;
+            char_src_conflicts_base_q <= 0;
+            char_dst_conflicts_base_q <= 0;
+            char_src_wait_base_q <= 0;
+            char_dst_wait_base_q <= 0;
+        end else if (dma_cov_reset_q) begin
+            char_cycle_count_q <= 0;
+            char_completion_occupancy_sum_q <= 0;
+            char_completion_occupancy_max_q <= 0;
+            char_completion_full_cycles_q <= 0;
+            char_submit_reject_count_q <= 0;
+            char_invalid_abort_count_q <= 0;
+            char_latency_wr_idx_q <= 0;
+            char_latency_rd_idx_q <= 0;
+            char_latency_pending_q <= 0;
+            char_latency_count_q <= 0;
+            char_latency_sum_q <= 0;
+            char_latency_max_q <= 0;
+            char_maint_wait_count_q <= 0;
+            char_maint_wait_sum_q <= 0;
+            char_maint_wait_max_q <= 0;
+            char_maint_wait_above32_q <= 0;
+            char_src_conflicts_base_q <= u_chiplet.u_die_a.u_dma.src_conflicts_q;
+            char_dst_conflicts_base_q <= u_chiplet.u_die_a.u_dma.dst_conflicts_q;
+            char_src_wait_base_q <= u_chiplet.u_die_a.u_dma.src_wait_cycles_q;
+            char_dst_wait_base_q <= u_chiplet.u_die_a.u_dma.dst_wait_cycles_q;
+        end else begin
+            if (char_collect_q) begin
+                char_cycle_count_q <= char_cycle_count_q + 1;
+                char_completion_occupancy_sum_q <= char_completion_occupancy_sum_q + u_chiplet.u_die_a.u_dma.comp_count_q;
+                if (u_chiplet.u_die_a.u_dma.comp_count_q > char_completion_occupancy_max_q) begin
+                    char_completion_occupancy_max_q <= u_chiplet.u_die_a.u_dma.comp_count_q;
+                end
+                if (u_chiplet.u_die_a.u_dma.comp_count_q == DMA_COMP_QUEUE_DEPTH) begin
+                    char_completion_full_cycles_q <= char_completion_full_cycles_q + 1;
+                end
+                if (u_chiplet.u_die_a.u_dma.submit_accept_event_q && (char_latency_pending_q < CHAR_MAX_ACCEPTED)) begin
+                    char_enqueue_cycle_q[char_latency_wr_idx_q] <= char_cycle_count_q;
+                    char_latency_wr_idx_q <= (char_latency_wr_idx_q + 1) % CHAR_MAX_ACCEPTED;
+                    char_latency_pending_q <= char_latency_pending_q + 1;
+                end
+                if (u_chiplet.u_die_a.u_dma.submit_reject_event_q) begin
+                    char_submit_reject_count_q <= char_submit_reject_count_q + 1;
+                end
+                if (u_chiplet.u_die_a.u_dma.comp_push_event_q) begin
+                    if ((u_chiplet.u_die_a.u_dma.comp_push_status_q != DMA_COMP_SUBMIT_REJECT) && (char_latency_pending_q != 0)) begin
+                        local_latency = char_cycle_count_q - char_enqueue_cycle_q[char_latency_rd_idx_q];
+                        char_latency_rd_idx_q <= (char_latency_rd_idx_q + 1) % CHAR_MAX_ACCEPTED;
+                        char_latency_pending_q <= char_latency_pending_q - 1;
+                        char_latency_count_q <= char_latency_count_q + 1;
+                        char_latency_sum_q <= char_latency_sum_q + local_latency;
+                        if (local_latency > char_latency_max_q) begin
+                            char_latency_max_q <= local_latency;
+                        end
+                    end
+                    if ((u_chiplet.u_die_a.u_dma.comp_push_status_q == DMA_COMP_RUNTIME_ERROR) &&
+                        (u_chiplet.u_die_a.u_dma.comp_push_err_code_q == DMA_ERR_MEM_INVALID)) begin
+                        char_invalid_abort_count_q <= char_invalid_abort_count_q + 1;
+                    end
+                end
+            end
+        end
+    end
+
     power_state_monitor u_power_mon (
         .clk                        (clk),
         .mon_rst_n                  (mon_rst_n),
@@ -571,7 +709,27 @@ module tb_soc_chiplets;
         .producer_valid             (u_chiplet.u_die_a.tx_stream_valid),
         .tx_fire                    (tx_fire),
         .rx_fire                    (rx_fire),
-        .e2e_update                 (rx_fire),
+        .e2e_update                 (rx_fire || u_chiplet.u_die_a.u_dma.comp_push_event_q),
+        .sw_pd_a_traffic            (u_chiplet.u_pwr_ctrl.sw_pd_a_traffic),
+        .sw_pd_a_dma                (u_chiplet.u_pwr_ctrl.sw_pd_a_dma),
+        .sw_pd_a_link               (u_chiplet.u_pwr_ctrl.sw_pd_a_link),
+        .sw_pd_b_crypto             (u_chiplet.u_pwr_ctrl.sw_pd_b_crypto),
+        .sw_pd_b_link               (u_chiplet.u_pwr_ctrl.sw_pd_b_link),
+        .sw_pd_channel              (u_chiplet.u_pwr_ctrl.sw_pd_channel),
+        .iso_pd_a_traffic_n         (u_chiplet.u_pwr_ctrl.iso_pd_a_traffic_n),
+        .iso_pd_a_dma_n             (u_chiplet.u_pwr_ctrl.iso_pd_a_dma_n),
+        .iso_pd_a_link_n            (u_chiplet.u_pwr_ctrl.iso_pd_a_link_n),
+        .iso_pd_b_crypto_n          (u_chiplet.u_pwr_ctrl.iso_pd_b_crypto_n),
+        .iso_pd_b_link_n            (u_chiplet.u_pwr_ctrl.iso_pd_b_link_n),
+        .iso_pd_channel_n           (u_chiplet.u_pwr_ctrl.iso_pd_channel_n),
+        .save_dma_sleep             (u_chiplet.u_pwr_ctrl.save_dma_sleep),
+        .restore_dma_sleep          (u_chiplet.u_pwr_ctrl.restore_dma_sleep),
+        .save_dma_mem               (u_chiplet.u_pwr_ctrl.save_dma_mem),
+        .restore_dma_mem            (u_chiplet.u_pwr_ctrl.restore_dma_mem),
+        .dma_active_valid           (u_chiplet.u_die_a.u_dma.active_valid_q),
+        .dma_submit_count           (4'(u_chiplet.u_die_a.u_dma.submit_count_q)),
+        .dma_comp_count             (4'(u_chiplet.u_die_a.u_dma.comp_count_q)),
+        .irq_pending                (irq_done_monitor),
         .run_cycles                 (power_run_cycles),
         .crypto_only_cycles         (power_crypto_only_cycles),
         .sleep_cycles               (power_sleep_cycles),
@@ -584,7 +742,24 @@ module tb_soc_chiplets;
         .trans_deep_sleep_to_run    (trans_deep_sleep_to_run),
         .illegal_activity_violations(power_illegal_activity_violations),
         .resume_events              (power_resume_events),
-        .resume_violations          (power_resume_violations)
+        .resume_violations          (power_resume_violations),
+        .domain_combo_run           (power_domain_combo_run),
+        .domain_combo_crypto_only   (power_domain_combo_crypto_only),
+        .domain_combo_sleep         (power_domain_combo_sleep),
+        .domain_combo_deep_sleep    (power_domain_combo_deep_sleep),
+        .isolation_assert_cycles    (power_isolation_assert_cycles),
+        .isolation_deassert_cycles  (power_isolation_deassert_cycles),
+        .isolation_blocked_cycles   (power_isolation_blocked_cycles),
+        .isolation_release_traffic_seen(power_isolation_release_traffic_seen),
+        .dma_sleep_save_seen        (power_dma_sleep_save_seen),
+        .dma_sleep_restore_seen     (power_dma_sleep_restore_seen),
+        .dma_mem_save_seen          (power_dma_mem_save_seen),
+        .dma_mem_restore_seen       (power_dma_mem_restore_seen),
+        .activity_cross_no_traffic  (power_activity_cross_no_traffic),
+        .activity_cross_link_traffic(power_activity_cross_link_traffic),
+        .activity_cross_dma_queued  (power_activity_cross_dma_queued),
+        .activity_cross_dma_active  (power_activity_cross_dma_active),
+        .activity_cross_completion_pending(power_activity_cross_completion_pending)
     );
 
     always_ff @(posedge clk or negedge rst_n) begin
@@ -772,6 +947,23 @@ module tb_soc_chiplets;
         .reject_overflow_count(u_chiplet.u_die_a.u_dma.reject_overflow_count_q),
         .power_state          (power_state_q)
     );
+
+    `CHIPLET_ASSERT_DEEP_SLEEP_CLEARS_CONTEXT(
+        p_deep_sleep_clears_dma_context,
+        clk,
+        rst_n,
+        (dma_prev_power_state_q == PWR_DEEP_SLEEP) && (power_state_q == PWR_RUN),
+        u_chiplet.u_die_a.u_dma.submit_count_q,
+        u_chiplet.u_die_a.u_dma.comp_count_q,
+        u_chiplet.u_die_a.u_dma.active_valid_q
+    )
+    `CHIPLET_ASSERT_NO_PROGRESS_WHILE_OFF(
+        p_no_dma_completion_while_dma_domain_off,
+        clk,
+        rst_n,
+        !u_chiplet.u_pwr_ctrl.sw_pd_a_dma,
+        u_chiplet.u_die_a.u_dma.comp_push_event_q
+    )
 
     function automatic logic [DATA_WIDTH-1:0] dma_source_word(input int unsigned index);
         dma_source_word = 64'h1000_0000_0000_0000 | DATA_WIDTH'(index);
@@ -1104,6 +1296,20 @@ module tb_soc_chiplets;
         end
     endtask
 
+    task automatic dma_mem_read_inject_status(
+        output bit busy,
+        output bit done,
+        output bit reject_busy
+    );
+        logic [31:0] status_word;
+        begin
+            cfg_read32(DMA_MEM_INJECT_STATUS_ADDR, status_word);
+            busy = status_word[0];
+            done = status_word[1];
+            reject_busy = status_word[2];
+        end
+    endtask
+
     task automatic dma_scratch_write64(
         input bit is_dst,
         input int unsigned index,
@@ -1361,6 +1567,206 @@ module tb_soc_chiplets;
         end
     endtask
 
+    function automatic int unsigned tb_bank_id_from_addr(input int unsigned addr);
+        if (DMA_BANKS == 1) begin
+            return 0;
+        end
+        return addr[0];
+    endfunction
+
+    task automatic char_begin_collection();
+        begin
+            char_collect_q = 1'b1;
+        end
+    endtask
+
+    task automatic char_end_collection();
+        begin
+            char_collect_q = 1'b0;
+        end
+    endtask
+
+    task automatic char_record_maint_wait(input int unsigned wait_cycles);
+        begin
+            if (char_maint_wait_count_q < CHAR_MAX_MAINT) begin
+                char_maint_wait_samples_q[char_maint_wait_count_q] = wait_cycles;
+            end
+            char_maint_wait_count_q = char_maint_wait_count_q + 1;
+            char_maint_wait_sum_q = char_maint_wait_sum_q + wait_cycles;
+            if (wait_cycles > char_maint_wait_max_q) begin
+                char_maint_wait_max_q = wait_cycles;
+            end
+            if (wait_cycles > 32) begin
+                char_maint_wait_above32_q = char_maint_wait_above32_q + 1;
+            end
+        end
+    endtask
+
+    task automatic char_dma_mem_read64(
+        input bit is_dst,
+        input int unsigned index,
+        output logic [DATA_WIDTH-1:0] value,
+        output int unsigned wait_cycles,
+        output bit wait_conflict,
+        output bit parity_error,
+        output bit invalid_read_seen
+    );
+        logic [31:0] lo_word;
+        logic [31:0] hi_word;
+        bit busy;
+        bit done;
+        bit op_reject_busy;
+        bit write_reject_dma_active;
+        begin
+            dma_mem_start_read(is_dst, index);
+            wait_cycles = 0;
+            wait_conflict = 1'b0;
+            parity_error = 1'b0;
+            invalid_read_seen = 1'b0;
+            for (int unsigned cycle = 0; cycle < 4096; cycle++) begin
+                dma_mem_read_status(busy,
+                                    done,
+                                    wait_conflict,
+                                    parity_error,
+                                    invalid_read_seen,
+                                    op_reject_busy,
+                                    write_reject_dma_active);
+                if (!busy && done) begin
+                    cfg_read32(DMA_SCRATCH_LO_ADDR, lo_word);
+                    cfg_read32(DMA_SCRATCH_HI_ADDR, hi_word);
+                    value = {hi_word, lo_word};
+                    char_record_maint_wait(wait_cycles);
+                    return;
+                end
+                @(posedge clk);
+                wait_cycles = wait_cycles + 1;
+            end
+            $fatal(1, "characterization MEM_OP read timed out is_dst=%0d index=%0d", is_dst, index);
+        end
+    endtask
+
+    task automatic char_dma_mem_write64(
+        input bit is_dst,
+        input int unsigned index,
+        input logic [DATA_WIDTH-1:0] value,
+        output int unsigned wait_cycles,
+        output bit write_reject_dma_active
+    );
+        bit busy;
+        bit done;
+        bit wait_conflict;
+        bit parity_error;
+        bit invalid_read_seen;
+        bit op_reject_busy;
+        begin
+            dma_mem_start_write(is_dst, index, value);
+            wait_cycles = 0;
+            write_reject_dma_active = 1'b0;
+            for (int unsigned cycle = 0; cycle < 4096; cycle++) begin
+                dma_mem_read_status(busy,
+                                    done,
+                                    wait_conflict,
+                                    parity_error,
+                                    invalid_read_seen,
+                                    op_reject_busy,
+                                    write_reject_dma_active);
+                if (write_reject_dma_active) begin
+                    char_record_maint_wait(wait_cycles);
+                    return;
+                end
+                if (!busy && done) begin
+                    char_record_maint_wait(wait_cycles);
+                    return;
+                end
+                @(posedge clk);
+                wait_cycles = wait_cycles + 1;
+            end
+            $fatal(1, "characterization MEM_OP write timed out is_dst=%0d index=%0d", is_dst, index);
+        end
+    endtask
+
+    task automatic char_compute_wait_p95(output int unsigned p95);
+        int unsigned sample_count;
+        int unsigned sorted [0:CHAR_MAX_MAINT-1];
+        int unsigned key;
+        int signed idx;
+        int unsigned rank;
+        begin
+            sample_count = (char_maint_wait_count_q > CHAR_MAX_MAINT) ? CHAR_MAX_MAINT : char_maint_wait_count_q;
+            if (sample_count == 0) begin
+                p95 = 0;
+            end else begin
+                for (int unsigned ii = 0; ii < sample_count; ii++) begin
+                    sorted[ii] = char_maint_wait_samples_q[ii];
+                end
+                for (int unsigned ii = 1; ii < sample_count; ii++) begin
+                    key = sorted[ii];
+                    idx = ii - 1;
+                    while ((idx >= 0) && (sorted[idx] > key)) begin
+                        sorted[idx + 1] = sorted[idx];
+                        idx = idx - 1;
+                    end
+                    sorted[idx + 1] = key;
+                end
+                rank = ((sample_count * 95) + 99) / 100;
+                if (rank == 0) begin
+                    rank = 1;
+                end
+                p95 = sorted[rank - 1];
+            end
+        end
+    endtask
+
+    task automatic emit_char_result_line(
+        input string workload,
+        input bit pass,
+        input string detail,
+        input int unsigned recovery_writes,
+        input int unsigned recovery_cycles
+    );
+        int unsigned wait_p95;
+        int unsigned src_conflicts_delta;
+        int unsigned dst_conflicts_delta;
+        int unsigned src_wait_delta;
+        int unsigned dst_wait_delta;
+        int unsigned latency_avg;
+        begin
+            char_compute_wait_p95(wait_p95);
+            src_conflicts_delta = u_chiplet.u_die_a.u_dma.src_conflicts_q - char_src_conflicts_base_q;
+            dst_conflicts_delta = u_chiplet.u_die_a.u_dma.dst_conflicts_q - char_dst_conflicts_base_q;
+            src_wait_delta = u_chiplet.u_die_a.u_dma.src_wait_cycles_q - char_src_wait_base_q;
+            dst_wait_delta = u_chiplet.u_die_a.u_dma.dst_wait_cycles_q - char_dst_wait_base_q;
+            latency_avg = (char_latency_count_q == 0) ? 0 : (char_latency_sum_q / char_latency_count_q);
+            $display("%s|test=%s|workload=%s|status=%s|detail=%s|sample_cycles=%0d|desc_completed=%0d|latency_avg_cycles=%0d|latency_max_cycles=%0d|submit_reject_count=%0d|completion_occupancy_sum=%0d|completion_occupancy_samples=%0d|completion_occupancy_max=%0d|completion_full_cycles=%0d|src_conflicts=%0d|dst_conflicts=%0d|src_wait_cycles=%0d|dst_wait_cycles=%0d|maint_wait_count=%0d|maint_wait_sum=%0d|maint_wait_p95=%0d|maint_wait_max=%0d|maint_wait_above32=%0d|invalid_abort_count=%0d|recovery_writes=%0d|recovery_cycles=%0d",
+                     CHAR_RESULT_PREFIX,
+                     test_name,
+                     workload,
+                     pass ? "PASS" : "FAIL",
+                     detail,
+                     char_cycle_count_q,
+                     char_latency_count_q,
+                     latency_avg,
+                     char_latency_max_q,
+                     char_submit_reject_count_q,
+                     char_completion_occupancy_sum_q,
+                     char_cycle_count_q,
+                     char_completion_occupancy_max_q,
+                     char_completion_full_cycles_q,
+                     src_conflicts_delta,
+                     dst_conflicts_delta,
+                     src_wait_delta,
+                     dst_wait_delta,
+                     char_maint_wait_count_q,
+                     char_maint_wait_sum_q,
+                     wait_p95,
+                     char_maint_wait_max_q,
+                     char_maint_wait_above32_q,
+                     char_invalid_abort_count_q,
+                     recovery_writes,
+                     recovery_cycles);
+        end
+    endtask
+
     task automatic wait_for_link_drain();
         for (int unsigned drain_cycle = 0; drain_cycle < POST_TARGET_DRAIN_CYCLES; drain_cycle++) begin
             @(posedge clk);
@@ -1408,6 +1814,9 @@ module tb_soc_chiplets;
         bit mem_invalid_read_seen;
         bit mem_op_reject_busy;
         bit mem_write_reject_dma_active;
+        bit mem_inject_busy;
+        bit mem_inject_done;
+        bit mem_inject_reject_busy;
         bit mem_last_is_dst;
         bit mem_last_on_dma;
         bit mem_last_bank_id;
@@ -1639,6 +2048,38 @@ module tb_soc_chiplets;
                 pass_q = hit_target && dma_sleep_resume_seen_q && (dma_mem_mismatch_count == 0);
                 detail_q = pass_q ? "dma_power_sleep_resume_queue_clean" : "dma_completion_violation";
             end
+            "dma_sleep_during_queued_work": begin
+                dma_preload_source_range(84, 4);
+                dma_clear_dest_range(124, 4);
+                power_state_q = PWR_SLEEP;
+                repeat (2) @(posedge clk);
+                dma_enqueue_desc(84, 124, 4, 16'h2501);
+                dma_wait_for_submit_count(1, 256, hit_target);
+                local_ok = local_ok && hit_target && (power_dma_sleep_save_seen != 0);
+                repeat (8) @(posedge clk);
+                power_state_q = PWR_RUN;
+                dma_wait_for_completion_pushes(dma_completion_push_count + 1, max_cycles_cfg, hit_target);
+                local_ok = local_ok && hit_target && (power_dma_sleep_restore_seen != 0);
+                dma_compare_dest_range(124, 4);
+                pass_q = local_ok && dma_sleep_resume_seen_q && (dma_mem_mismatch_count == 0);
+                detail_q = pass_q ? "dma_sleep_during_queued_work_clean" : "dma_completion_violation";
+            end
+            "dma_sleep_during_active_transfer": begin
+                dma_preload_source_range(88, 8);
+                dma_clear_dest_range(132, 8);
+                dma_enqueue_desc(88, 132, 8, 16'h2502);
+                dma_wait_for_state(2, 512, hit_target);
+                local_ok = local_ok && hit_target && u_chiplet.u_die_a.u_dma.active_valid_q;
+                power_state_q = PWR_SLEEP;
+                repeat (12) @(posedge clk);
+                local_ok = local_ok && (power_dma_sleep_save_seen != 0);
+                power_state_q = PWR_RUN;
+                dma_wait_for_completion_pushes(dma_completion_push_count + 1, max_cycles_cfg, hit_target);
+                local_ok = local_ok && hit_target && (power_dma_sleep_restore_seen != 0);
+                dma_compare_dest_range(132, 8);
+                pass_q = local_ok && dma_sleep_resume_seen_q && (dma_mem_mismatch_count == 0);
+                detail_q = pass_q ? "dma_sleep_during_active_transfer_clean" : "dma_completion_violation";
+            end
             "dma_comp_fifo_full_stall": begin
                 dma_set_irq_en(2'b00);
                 dma_preload_source_range(120, 20);
@@ -1739,6 +2180,164 @@ module tb_soc_chiplets;
                 power_state_q = PWR_RUN;
                 pass_q = local_ok;
                 detail_q = pass_q ? "dma_crypto_only_submit_blocked_clean" : "dma_config_violation";
+            end
+            "power_illegal_access_error_response": begin
+                power_state_q = PWR_CRYPTO_ONLY;
+                repeat (2) @(posedge clk);
+                dma_enqueue_desc(8, 40, 4, 16'h2b10);
+                dma_read_submit_result(accepted, rejected, err_code, tag);
+                dma_read_front_completion(empty, tag, status, err_code, words_retired);
+                local_ok = local_ok && !accepted && rejected &&
+                           (status == DMA_COMP_SUBMIT_REJECT) &&
+                           (err_code == DMA_ERR_SUBMIT_BLOCKED) &&
+                           (words_retired == 0);
+                dma_pop_completion();
+                power_state_q = PWR_RUN;
+                pass_q = local_ok;
+                detail_q = pass_q ? "power_illegal_access_error_response_clean" : "dma_config_violation";
+            end
+            "power_traffic_cross_test": begin
+                dma_set_irq_en(2'b01);
+                dma_preload_source_range(cfg.dma_src_base, cfg.dma_len_words);
+                dma_preload_source_range(cfg.dma_second_src_base, cfg.dma_second_len_words);
+                dma_clear_dest_range(cfg.dma_dst_base, cfg.dma_len_words);
+                dma_clear_dest_range(cfg.dma_second_dst_base, cfg.dma_second_len_words);
+                push_before = dma_completion_push_count;
+                dma_enqueue_desc(cfg.dma_src_base, cfg.dma_dst_base, cfg.dma_len_words, 16'h2c00);
+                dma_enqueue_desc(cfg.dma_second_src_base, cfg.dma_second_dst_base, cfg.dma_second_len_words, 16'h2c01);
+
+                dma_wait_for_state(2, 512, hit_target);
+                local_ok = local_ok && hit_target && u_chiplet.u_die_a.u_dma.active_valid_q;
+
+                power_state_q = PWR_CRYPTO_ONLY;
+                repeat (16) @(posedge clk);
+                local_ok = local_ok && (power_domain_combo_crypto_only != 0);
+                power_state_q = PWR_RUN;
+                repeat (8) @(posedge clk);
+
+                power_state_q = PWR_SLEEP;
+                repeat (14) @(posedge clk);
+                local_ok = local_ok &&
+                           (power_isolation_assert_cycles != 0) &&
+                           (power_isolation_blocked_cycles != 0) &&
+                           (power_dma_sleep_save_seen != 0) &&
+                           (power_dma_mem_save_seen != 0);
+                power_state_q = PWR_RUN;
+
+                dma_wait_for_completion_pushes(push_before + 2, max_cycles_cfg, hit_target);
+                local_ok = local_ok && hit_target &&
+                           (power_dma_sleep_restore_seen != 0) &&
+                           (power_dma_mem_restore_seen != 0) &&
+                           dma_sleep_resume_seen_q &&
+                           dma_retry_seen_q &&
+                           dma_recovery_seen_q;
+                dma_read_front_completion(empty, tag, status, err_code, words_retired);
+                local_ok = local_ok && !empty && (tag == 16'h2c00) &&
+                           (status == DMA_COMP_SUCCESS) && (words_retired == cfg.dma_len_words[8:0]);
+                dma_pop_completion();
+                dma_read_front_completion(empty, tag, status, err_code, words_retired);
+                local_ok = local_ok && !empty && (tag == 16'h2c01) &&
+                           (status == DMA_COMP_SUCCESS) && (words_retired == cfg.dma_second_len_words[8:0]);
+                dma_pop_completion();
+                dma_compare_dest_range(cfg.dma_dst_base, cfg.dma_len_words);
+                dma_compare_dest_range(cfg.dma_second_dst_base, cfg.dma_second_len_words);
+                pass_q = local_ok &&
+                         (dma_mem_mismatch_count == 0) &&
+                         (power_illegal_activity_violations == 0) &&
+                         (power_resume_violations == 0);
+                detail_q = pass_q ? "power_traffic_cross_test_clean" : "power_traffic_cross_violation";
+            end
+            "random_manifest_scenario": begin
+                dma_set_irq_en(2'b11);
+                if (cfg.parity_injection == "dst_maint") begin
+                    programmed_word = 64'h4456_0000_0000_0000 | DATA_WIDTH'(cfg.dma_dst_base[7:0]);
+                    dma_scratch_write64(1'b1, cfg.dma_dst_base, programmed_word);
+                    dma_mem_invert_parity(1'b1, cfg.dma_dst_base);
+                    dma_scratch_read64(1'b1, cfg.dma_dst_base, observed_word);
+                    dma_mem_read_status(mem_busy, mem_done, mem_wait_conflict, mem_parity_error,
+                                        mem_invalid_read_seen, mem_op_reject_busy, mem_write_reject_dma_active);
+                    pass_q = mem_done && mem_parity_error && !mem_invalid_read_seen &&
+                             (observed_word == programmed_word);
+                    detail_q = pass_q ? "random_manifest_dst_parity_clean" : "random_manifest_dst_parity_violation";
+                end else begin
+                    dma_preload_source_range(cfg.dma_src_base, cfg.dma_len_words);
+                    dma_clear_dest_range(cfg.dma_dst_base, cfg.dma_len_words);
+                    push_before = dma_completion_push_count;
+                    if (cfg.parity_injection == "src") begin
+                        dma_mem_invert_parity(1'b0, cfg.dma_src_base);
+                    end
+
+                    if (cfg.queue_pressure == "full_queue") begin
+                        power_state_q = PWR_SLEEP;
+                        for (int qidx = 0; qidx < 4; qidx++) begin
+                            dma_preload_source_range(cfg.dma_src_base + (qidx * cfg.dma_len_words), cfg.dma_len_words);
+                            dma_clear_dest_range(cfg.dma_dst_base + (qidx * cfg.dma_len_words), cfg.dma_len_words);
+                            dma_enqueue_desc(cfg.dma_src_base + (qidx * cfg.dma_len_words),
+                                             cfg.dma_dst_base + (qidx * cfg.dma_len_words),
+                                             cfg.dma_len_words,
+                                             16'h5100 + qidx);
+                        end
+                        dma_wait_for_submit_count(4, 512, hit_target);
+                        local_ok = local_ok && hit_target;
+                        dma_enqueue_desc(cfg.dma_src_base + (4 * cfg.dma_len_words),
+                                         cfg.dma_dst_base + (4 * cfg.dma_len_words),
+                                         cfg.dma_len_words,
+                                         16'h5104);
+                        dma_read_front_completion(empty, tag, status, err_code, words_retired);
+                        local_ok = local_ok && !empty && (status == DMA_COMP_SUBMIT_REJECT) &&
+                                   (err_code == DMA_ERR_QUEUE_FULL) && (words_retired == 0);
+                        dma_pop_completion();
+                        power_state_q = PWR_RUN;
+                        dma_wait_for_completion_pushes(push_before + 5, max_cycles_cfg, hit_target);
+                        local_ok = local_ok && hit_target;
+                        for (int pop_idx = 0; pop_idx < 4; pop_idx++) begin
+                            dma_read_front_completion(empty, tag, status, err_code, words_retired);
+                            local_ok = local_ok && !empty && (status == DMA_COMP_SUCCESS) &&
+                                       (words_retired == cfg.dma_len_words[8:0]);
+                            dma_pop_completion();
+                        end
+                        pass_q = local_ok;
+                        detail_q = pass_q ? "random_manifest_full_queue_clean" : "random_manifest_full_queue_violation";
+                    end else begin
+                        dma_enqueue_desc(cfg.dma_src_base, cfg.dma_dst_base, cfg.dma_len_words, cfg.dma_tag);
+                        if ((cfg.queue_pressure == "pair") && (cfg.parity_injection == "none")) begin
+                            dma_preload_source_range(cfg.dma_second_src_base, cfg.dma_second_len_words);
+                            dma_clear_dest_range(cfg.dma_second_dst_base, cfg.dma_second_len_words);
+                            dma_enqueue_desc(cfg.dma_second_src_base,
+                                             cfg.dma_second_dst_base,
+                                             cfg.dma_second_len_words,
+                                             cfg.dma_second_tag);
+                            dma_wait_for_completion_pushes(push_before + 2, max_cycles_cfg, hit_target);
+                        end else begin
+                            dma_wait_for_completion_pushes(push_before + 1, max_cycles_cfg, hit_target);
+                        end
+                        local_ok = local_ok && hit_target;
+                        dma_read_front_completion(empty, tag, status, err_code, words_retired);
+                        if (cfg.parity_injection == "src") begin
+                            local_ok = local_ok && !empty &&
+                                       (status == DMA_COMP_RUNTIME_ERROR) &&
+                                       (err_code == DMA_ERR_MEM_PARITY) &&
+                                       (words_retired == 0);
+                            dma_pop_completion();
+                        end else begin
+                            local_ok = local_ok && !empty &&
+                                       (status == DMA_COMP_SUCCESS) &&
+                                       (words_retired == cfg.dma_len_words[8:0]);
+                            dma_pop_completion();
+                            dma_compare_dest_range(cfg.dma_dst_base, cfg.dma_len_words);
+                            if (cfg.queue_pressure == "pair") begin
+                                dma_read_front_completion(empty, tag, status, err_code, words_retired);
+                                local_ok = local_ok && !empty &&
+                                           (status == DMA_COMP_SUCCESS) &&
+                                           (words_retired == cfg.dma_second_len_words[8:0]);
+                                dma_pop_completion();
+                                dma_compare_dest_range(cfg.dma_second_dst_base, cfg.dma_second_len_words);
+                            end
+                        end
+                        pass_q = local_ok && (dma_mem_mismatch_count == 0);
+                        detail_q = pass_q ? "random_manifest_dma_clean" : "random_manifest_dma_violation";
+                    end
+                end
             end
             "mem_bank_parallel_service": begin
                 dma_preload_source_range(32, 8);
@@ -1850,6 +2449,58 @@ module tb_soc_chiplets;
                 dma_compare_dest_range(128, 8);
                 pass_q = local_ok && hit_target && (dma_mem_mismatch_count == 0);
                 detail_q = pass_q ? "mem_write_while_dma_reject_clean" : "memory_write_reject_violation";
+            end
+            "mem_op_start_busy_reject": begin
+                dma_preload_source_range(64, 8);
+                dma_clear_dest_range(128, 8);
+                push_before = dma_completion_push_count;
+                dma_enqueue_desc(64, 128, 8, 16'h3100);
+                dma_wait_for_state(2, 512, hit_target);
+                local_ok = local_ok && hit_target;
+                force u_chiplet.u_die_a.tx_stream_ready = 1'b0;
+                repeat (4) @(posedge clk);
+                count_local = u_chiplet.u_die_a.u_dma.tx_src_bank ? 65 : 64;
+                dma_mem_start_read(1'b0, count_local);
+                cfg_write32(DMA_MEM_OP_CTRL_ADDR, 32'd1);
+                dma_mem_read_status(mem_busy, mem_done, mem_wait_conflict, mem_parity_error,
+                                    mem_invalid_read_seen, mem_op_reject_busy, mem_write_reject_dma_active);
+                local_ok = local_ok && mem_busy && mem_op_reject_busy &&
+                           !mem_parity_error && !mem_invalid_read_seen;
+                release u_chiplet.u_die_a.tx_stream_ready;
+                dma_mem_wait_done(2048, hit_target);
+                local_ok = local_ok && hit_target;
+                dma_mem_read_status(mem_busy, mem_done, mem_wait_conflict, mem_parity_error,
+                                    mem_invalid_read_seen, mem_op_reject_busy, mem_write_reject_dma_active);
+                local_ok = local_ok && mem_done && mem_op_reject_busy;
+                dma_wait_for_completion_pushes(push_before + 1, max_cycles_cfg, hit_target);
+                local_ok = local_ok && hit_target;
+                dma_pop_completion();
+                pass_q = local_ok;
+                detail_q = pass_q ? "mem_op_start_busy_reject_clean" : "memory_busy_reject_violation";
+            end
+            "mem_inject_start_busy_reject": begin
+                dma_preload_source_range(72, 8);
+                dma_clear_dest_range(136, 8);
+                push_before = dma_completion_push_count;
+                dma_enqueue_desc(72, 136, 8, 16'h3101);
+                dma_wait_for_state(2, 512, hit_target);
+                local_ok = local_ok && hit_target;
+                force u_chiplet.u_die_a.tx_stream_ready = 1'b0;
+                repeat (4) @(posedge clk);
+                count_local = u_chiplet.u_die_a.u_dma.tx_src_bank ? 73 : 72;
+                dma_mem_start_read(1'b0, count_local);
+                cfg_write32(DMA_MEM_INJECT_ADDR_ADDR, count_local[31:0]);
+                cfg_write32(DMA_MEM_INJECT_CTRL_ADDR, 32'h0000_0001);
+                dma_mem_read_inject_status(mem_inject_busy, mem_inject_done, mem_inject_reject_busy);
+                local_ok = local_ok && !mem_inject_busy && mem_inject_reject_busy;
+                release u_chiplet.u_die_a.tx_stream_ready;
+                dma_mem_wait_done(2048, hit_target);
+                local_ok = local_ok && hit_target;
+                dma_wait_for_completion_pushes(push_before + 1, max_cycles_cfg, hit_target);
+                local_ok = local_ok && hit_target;
+                dma_pop_completion();
+                pass_q = local_ok;
+                detail_q = pass_q ? "mem_inject_start_busy_reject_clean" : "memory_inject_reject_violation";
             end
             "mem_parity_src_detect": begin
                 dma_preload_source_range(72, 4);
@@ -2013,6 +2664,232 @@ module tb_soc_chiplets;
                 pass_q = local_ok;
                 detail_q = pass_q ? "mem_crypto_only_cfg_access_clean" : "memory_power_mode_violation";
             end
+            "char_dma_nominal_stream": begin
+                int unsigned push_target_local;
+                for (int unsigned didx = 0; didx < 16; didx++) begin
+                    dma_preload_source_range(didx * 4, 4);
+                    dma_clear_dest_range(128 + (didx * 4), 4);
+                end
+                char_begin_collection();
+                for (int unsigned didx = 0; didx < 16; didx++) begin
+                    push_target_local = dma_completion_push_count + 1;
+                    dma_enqueue_desc(didx * 4, 128 + (didx * 4), 4, 16'h4000 + didx);
+                    dma_wait_for_completion_pushes(push_target_local, max_cycles_cfg, hit_target);
+                    local_ok = local_ok && hit_target;
+                    dma_read_front_completion(empty, tag, status, err_code, words_retired);
+                    local_ok = local_ok && !empty &&
+                               (status == DMA_COMP_SUCCESS) &&
+                               (words_retired == 9'd4);
+                    dma_pop_completion();
+                end
+                char_end_collection();
+                pass_q = local_ok && (char_submit_reject_count_q == 0) && (char_latency_count_q == 16);
+                detail_q = pass_q ? "char_dma_nominal_stream_clean" : "char_dma_nominal_stream_violation";
+                emit_char_result_line("dma_nominal_stream", pass_q, detail_q, 0, 0);
+            end
+            "char_dma_back_to_back": begin
+                int unsigned next_desc_local;
+                int unsigned completed_local;
+                int unsigned submit_count_shadow;
+                bit empty_local;
+                bit full_local;
+                int unsigned queue_head_local;
+                int unsigned queue_tail_local;
+                for (int unsigned word_idx = 0; word_idx < 128; word_idx++) begin
+                    dma_scratch_write64(1'b0, word_idx, dma_source_word(word_idx));
+                    dma_scratch_write64(1'b1, 128 + word_idx, '0);
+                end
+                next_desc_local = 0;
+                completed_local = 0;
+                char_begin_collection();
+                while (completed_local < 32) begin
+                    dma_read_queue_status(DMA_SUBMIT_Q_STATUS_ADDR,
+                                          empty_local, full_local, submit_count_shadow, queue_head_local, queue_tail_local);
+                    if ((next_desc_local < 32) && !full_local) begin
+                        dma_enqueue_desc(next_desc_local * 4, 128 + (next_desc_local * 4), 4, 16'h4100 + next_desc_local);
+                        next_desc_local = next_desc_local + 1;
+                    end
+                    dma_read_queue_status(DMA_COMP_Q_STATUS_ADDR,
+                                          empty, full, count_local, head_local, tail_local);
+                    if (!empty) begin
+                        dma_read_front_completion(empty, tag, status, err_code, words_retired);
+                        local_ok = local_ok && !empty &&
+                                   (status == DMA_COMP_SUCCESS) &&
+                                   (words_retired == 9'd4);
+                        dma_pop_completion();
+                        completed_local = completed_local + 1;
+                    end
+                    @(posedge clk);
+                end
+                dma_wait_for_idle(1024, hit_target);
+                char_end_collection();
+                local_ok = local_ok && hit_target && (next_desc_local == 32);
+                pass_q = local_ok && (char_submit_reject_count_q == 0) && (char_latency_count_q == 32);
+                detail_q = pass_q ? "char_dma_back_to_back_clean" : "char_dma_back_to_back_violation";
+                emit_char_result_line("dma_back_to_back", pass_q, detail_q, 0, 0);
+            end
+            "char_mem_conflict_light",
+            "char_mem_conflict_heavy": begin
+                bit heavy_conflict;
+                int unsigned next_desc_local;
+                int unsigned completed_local;
+                int unsigned maint_issue_idx;
+                int unsigned next_maint_cycle;
+                int unsigned base_addr;
+                int unsigned target_bank;
+                int unsigned target_addr;
+                int unsigned active_bank;
+                int unsigned wait_cycles_local;
+                bit wait_conflict_local;
+                bit parity_error_local;
+                bit invalid_read_local;
+                bit target_is_dst;
+                bit empty_local;
+                bit full_local;
+                int unsigned queue_head_local;
+                int unsigned queue_tail_local;
+                heavy_conflict = (test_name == "char_mem_conflict_heavy");
+                for (int unsigned word_idx = 0; word_idx < 64; word_idx++) begin
+                    dma_scratch_write64(1'b0, word_idx, dma_source_word(word_idx));
+                    dma_scratch_write64(1'b1, 128 + word_idx, '0);
+                end
+                next_desc_local = 0;
+                completed_local = 0;
+                maint_issue_idx = 0;
+                next_maint_cycle = 16;
+                char_begin_collection();
+                while (completed_local < 16) begin
+                    dma_read_queue_status(DMA_SUBMIT_Q_STATUS_ADDR,
+                                          empty_local, full_local, submit_count_local, queue_head_local, queue_tail_local);
+                    if ((next_desc_local < 16) && !full_local) begin
+                        dma_enqueue_desc(next_desc_local * 4, 128 + (next_desc_local * 4), 4, 16'h4200 + next_desc_local);
+                        next_desc_local = next_desc_local + 1;
+                    end
+                    if ((char_cycle_count_q >= next_maint_cycle) && u_chiplet.u_die_a.u_dma.active_valid_q) begin
+                        target_is_dst = maint_issue_idx[0];
+                        if (target_is_dst) begin
+                            base_addr = u_chiplet.u_die_a.u_dma.active_dst_base_q + u_chiplet.u_die_a.u_dma.recv_count_q;
+                        end else begin
+                            base_addr = u_chiplet.u_die_a.u_dma.active_src_base_q + u_chiplet.u_die_a.u_dma.send_count_q;
+                        end
+                        active_bank = tb_bank_id_from_addr(base_addr);
+                        if (DMA_BANKS == 1) begin
+                            target_bank = 0;
+                        end else if (heavy_conflict) begin
+                            target_bank = ((maint_issue_idx % 5) == 4) ? (active_bank ^ 1'b1) : active_bank;
+                        end else begin
+                            target_bank = ((maint_issue_idx % 5) == 4) ? active_bank : (active_bank ^ 1'b1);
+                        end
+                        target_addr = (DMA_BANKS == 1) ? base_addr : ((base_addr & 'hfe) | target_bank);
+                        char_dma_mem_read64(target_is_dst,
+                                            target_addr,
+                                            observed_word,
+                                            wait_cycles_local,
+                                            wait_conflict_local,
+                                            parity_error_local,
+                                            invalid_read_local);
+                        local_ok = local_ok && !parity_error_local && !invalid_read_local;
+                        maint_issue_idx = maint_issue_idx + 1;
+                        next_maint_cycle = next_maint_cycle + 16;
+                    end
+                    dma_read_queue_status(DMA_COMP_Q_STATUS_ADDR,
+                                          empty, full, count_local, head_local, tail_local);
+                    if (!empty) begin
+                        dma_read_front_completion(empty, tag, status, err_code, words_retired);
+                        local_ok = local_ok && !empty &&
+                                   (status == DMA_COMP_SUCCESS) &&
+                                   (words_retired == 9'd4);
+                        dma_pop_completion();
+                        completed_local = completed_local + 1;
+                    end
+                    @(posedge clk);
+                end
+                dma_wait_for_idle(1024, hit_target);
+                char_end_collection();
+                local_ok = local_ok && hit_target;
+                pass_q = local_ok && (char_submit_reject_count_q == 0) && (char_latency_count_q == 16);
+                detail_q = pass_q ? {test_name, "_clean"} : {test_name, "_violation"};
+                emit_char_result_line(heavy_conflict ? "mem_conflict_heavy" : "mem_conflict_light",
+                                      pass_q,
+                                      detail_q,
+                                      0,
+                                      0);
+            end
+            "char_invalid_memory_recovery": begin
+                int unsigned recovery_start_cycle;
+                int unsigned recovery_cycles_local;
+                int unsigned recovery_writes_local;
+                int unsigned wait_cycles_local;
+                bit write_reject_local;
+                dma_mem_set_ret_cfg(2'b00, 2'b00, 2'b00, 2'b00);
+                dma_scratch_write64(1'b0, 40, dma_source_word(40));
+                dma_scratch_write64(1'b0, 41, dma_source_word(41));
+                dma_scratch_write64(1'b1, 120, '0);
+                dma_scratch_write64(1'b1, 121, '0);
+                power_state_q = PWR_SLEEP;
+                repeat (8) @(posedge clk);
+                power_state_q = PWR_RUN;
+                repeat (4) @(posedge clk);
+                dma_mem_read_valid_masks(src_invalid_bank_mask, dst_invalid_bank_mask);
+                local_ok = local_ok && (src_invalid_bank_mask == 2'b11) && (dst_invalid_bank_mask == 2'b11);
+                recovery_writes_local = 0;
+                recovery_cycles_local = 0;
+                char_begin_collection();
+                dma_enqueue_desc(40, 120, 2, 16'h4300);
+                dma_wait_for_completion_pushes(dma_completion_push_count + 1, max_cycles_cfg, hit_target);
+                local_ok = local_ok && hit_target;
+                dma_read_front_completion(empty, tag, status, err_code, words_retired);
+                local_ok = local_ok && !empty &&
+                           (status == DMA_COMP_RUNTIME_ERROR) &&
+                           (err_code == DMA_ERR_MEM_INVALID);
+                dma_pop_completion();
+                recovery_start_cycle = char_cycle_count_q;
+                dma_mem_read_valid_masks(src_invalid_bank_mask, dst_invalid_bank_mask);
+                if (src_invalid_bank_mask[0]) begin
+                    char_dma_mem_write64(1'b0, 40, dma_source_word(40), wait_cycles_local, write_reject_local);
+                    local_ok = local_ok && !write_reject_local;
+                    recovery_writes_local = recovery_writes_local + 1;
+                end
+                if (src_invalid_bank_mask[1]) begin
+                    char_dma_mem_write64(1'b0, 41, dma_source_word(41), wait_cycles_local, write_reject_local);
+                    local_ok = local_ok && !write_reject_local;
+                    recovery_writes_local = recovery_writes_local + 1;
+                end
+                if (dst_invalid_bank_mask[0]) begin
+                    char_dma_mem_write64(1'b1, 120, '0, wait_cycles_local, write_reject_local);
+                    local_ok = local_ok && !write_reject_local;
+                    recovery_writes_local = recovery_writes_local + 1;
+                end
+                if (dst_invalid_bank_mask[1]) begin
+                    char_dma_mem_write64(1'b1, 121, '0, wait_cycles_local, write_reject_local);
+                    local_ok = local_ok && !write_reject_local;
+                    recovery_writes_local = recovery_writes_local + 1;
+                end
+                dma_mem_read_valid_masks(src_invalid_bank_mask, dst_invalid_bank_mask);
+                local_ok = local_ok && (src_invalid_bank_mask == 2'b00) && (dst_invalid_bank_mask == 2'b00);
+                recovery_cycles_local = char_cycle_count_q - recovery_start_cycle;
+                dma_enqueue_desc(40, 120, 2, 16'h4301);
+                dma_wait_for_completion_pushes(dma_completion_push_count + 1, max_cycles_cfg, hit_target);
+                local_ok = local_ok && hit_target;
+                dma_read_front_completion(empty, tag, status, err_code, words_retired);
+                local_ok = local_ok && !empty &&
+                           (status == DMA_COMP_SUCCESS) &&
+                           (words_retired == 9'd2);
+                dma_pop_completion();
+                dma_wait_for_idle(512, hit_target);
+                char_end_collection();
+                dma_scratch_read64(1'b1, 120, observed_word);
+                local_ok = local_ok && (observed_word == dma_source_word(40));
+                dma_scratch_read64(1'b1, 121, observed_word_b);
+                local_ok = local_ok && (observed_word_b == dma_source_word(41));
+                pass_q = local_ok && hit_target;
+                detail_q = pass_q ? "char_invalid_memory_recovery_clean" : "char_invalid_memory_recovery_violation";
+                emit_char_result_line("invalid_memory_recovery",
+                                      pass_q,
+                                      detail_q,
+                                      recovery_writes_local,
+                                      recovery_cycles_local);
+            end
             "mem_bug_parity_skip": begin
                 programmed_word = 64'h0BAD_F00D_1111_2222;
                 dma_scratch_write64(1'b1, 94, programmed_word);
@@ -2065,9 +2942,11 @@ module tb_soc_chiplets;
             wait_for_link_drain();
             if (pass_q) begin
                 if ((test_name == "dma_retry_recover_queue") ||
-                    (test_name == "dma_power_sleep_resume_queue")) begin
+                    (test_name == "dma_power_sleep_resume_queue") ||
+                    (test_name == "dma_queue_full_reject") ||
+                    (test_name == "power_traffic_cross_test")) begin
                     pass_q = (latency_violation_count == 0 &&
-                              power_illegal_activity_violations == 0);
+                              power_resume_violations == 0);
                 end else begin
                     pass_q = (flit_mismatch_count == 0 && flit_drop_count == 0 && latency_violation_count == 0 &&
                               power_illegal_activity_violations == 0 && power_resume_violations == 0);
@@ -2091,6 +2970,20 @@ module tb_soc_chiplets;
                 pass_q = (mismatch_count == 0 && expected_empty_count == 0 && !crypto_error_flag &&
                           flit_mismatch_count == 0 && flit_drop_count == 0 && latency_violation_count == 0 &&
                           power_illegal_activity_violations == 0 && power_resume_violations == 0);
+                if (test_name == "power_isolation_blocks_tx") begin
+                    pass_q = pass_q &&
+                             (power_isolation_assert_cycles != 0) &&
+                             (power_isolation_blocked_cycles != 0);
+                end else if (test_name == "power_wakeup_releases_isolation_cleanly") begin
+                    pass_q = pass_q &&
+                             (power_isolation_assert_cycles != 0) &&
+                             (power_isolation_deassert_cycles != 0) &&
+                             (power_isolation_release_traffic_seen != 0);
+                end else if (test_name == "power_transition_with_link_backpressure") begin
+                    pass_q = pass_q &&
+                             (power_isolation_assert_cycles != 0) &&
+                             (power_activity_cross_link_traffic != 0);
+                end
                 detail_q = pass_q ? "power_proxy_clean" : "power_proxy_violation";
             end else begin
                 pass_q = (mismatch_count == 0 && expected_empty_count == 0 && !crypto_error_flag &&

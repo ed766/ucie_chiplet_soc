@@ -3,7 +3,12 @@
 module soc_die_a_top #(
     parameter int DATA_WIDTH = 64,
     parameter int FLIT_WIDTH = 264,
-    parameter int LANES = 16
+    parameter int LANES = 16,
+    parameter int DMA_SUBMIT_QUEUE_DEPTH = 4,
+    parameter int DMA_COMP_QUEUE_DEPTH = 4,
+    parameter int DMA_BANKS = 2,
+    parameter bit DMA_PARITY_ENABLE = 1'b1,
+    parameter int DMA_TIMEOUT_CYCLES = 1024
 ) (
     input  logic                   clk,
     input  logic                   rst_n,
@@ -108,7 +113,12 @@ module soc_die_a_top #(
     );
 
     dma_offload_ctrl #(
-        .DATA_WIDTH(DATA_WIDTH)
+        .DATA_WIDTH(DATA_WIDTH),
+        .DMA_TIMEOUT_CYCLES(DMA_TIMEOUT_CYCLES),
+        .SUBMIT_QUEUE_DEPTH(DMA_SUBMIT_QUEUE_DEPTH),
+        .COMP_QUEUE_DEPTH(DMA_COMP_QUEUE_DEPTH),
+        .BANKS(DMA_BANKS),
+        .PARITY_ENABLE(DMA_PARITY_ENABLE)
     ) u_dma (
         .clk             (clk),
         .rst_n           (rst_n),

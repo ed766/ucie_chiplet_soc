@@ -5,7 +5,10 @@ module dma_offload_ctrl #(
     parameter int DATA_WIDTH = 64,
     parameter int SRAM_DEPTH = 256,
     parameter int DMA_TIMEOUT_CYCLES = 1024,
-    parameter int QUEUE_DEPTH = 4
+    parameter int SUBMIT_QUEUE_DEPTH = 4,
+    parameter int COMP_QUEUE_DEPTH = 4,
+    parameter int BANKS = 2,
+    parameter bit PARITY_ENABLE = 1'b1
 ) (
     input  logic                  clk,
     input  logic                  rst_n,
@@ -96,11 +99,13 @@ module dma_offload_ctrl #(
     localparam logic [2:0] ERR_KIND_PARITY_DMA_SRC       = 3'd2;
     localparam logic [2:0] ERR_KIND_RETENTION_INVALID_RD = 3'd3;
 
-    localparam int BANKS = 2;
+    localparam int MAX_BANKS = 2;
     localparam int BANK_DEPTH = SRAM_DEPTH / BANKS;
     localparam int BANK_ROW_W = $clog2(BANK_DEPTH);
-    localparam int PTR_WIDTH     = (QUEUE_DEPTH <= 1) ? 1 : $clog2(QUEUE_DEPTH);
-    localparam int COUNT_WIDTH   = $clog2(QUEUE_DEPTH + 1);
+    localparam int SUBMIT_PTR_WIDTH = (SUBMIT_QUEUE_DEPTH <= 1) ? 1 : $clog2(SUBMIT_QUEUE_DEPTH);
+    localparam int SUBMIT_COUNT_WIDTH = $clog2(SUBMIT_QUEUE_DEPTH + 1);
+    localparam int COMP_PTR_WIDTH = (COMP_QUEUE_DEPTH <= 1) ? 1 : $clog2(COMP_QUEUE_DEPTH);
+    localparam int COMP_COUNT_WIDTH = $clog2(COMP_QUEUE_DEPTH + 1);
     localparam int TIMEOUT_WIDTH = $clog2(DMA_TIMEOUT_CYCLES + 1);
 
     logic [DATA_WIDTH-1:0] src_bank_mem [0:BANKS-1][0:BANK_DEPTH-1];
@@ -119,21 +124,21 @@ module dma_offload_ctrl #(
     logic [DATA_WIDTH-1:0] scratch_data_q;
     logic dma_mode_active_q;
 
-    logic [7:0] submit_src_base_q   [0:QUEUE_DEPTH-1];
-    logic [7:0] submit_dst_base_q   [0:QUEUE_DEPTH-1];
-    logic [8:0] submit_len_words_q  [0:QUEUE_DEPTH-1];
-    logic [15:0] submit_tag_q       [0:QUEUE_DEPTH-1];
-    logic [PTR_WIDTH-1:0] submit_head_q;
-    logic [PTR_WIDTH-1:0] submit_tail_q;
-    logic [COUNT_WIDTH-1:0] submit_count_q;
+    logic [7:0] submit_src_base_q   [0:SUBMIT_QUEUE_DEPTH-1];
+    logic [7:0] submit_dst_base_q   [0:SUBMIT_QUEUE_DEPTH-1];
+    logic [8:0] submit_len_words_q  [0:SUBMIT_QUEUE_DEPTH-1];
+    logic [15:0] submit_tag_q       [0:SUBMIT_QUEUE_DEPTH-1];
+    logic [SUBMIT_PTR_WIDTH-1:0] submit_head_q;
+    logic [SUBMIT_PTR_WIDTH-1:0] submit_tail_q;
+    logic [SUBMIT_COUNT_WIDTH-1:0] submit_count_q;
 
-    logic [15:0] comp_tag_q         [0:QUEUE_DEPTH-1];
-    logic [1:0]  comp_status_q      [0:QUEUE_DEPTH-1];
-    logic [3:0]  comp_err_code_q    [0:QUEUE_DEPTH-1];
-    logic [8:0]  comp_words_q       [0:QUEUE_DEPTH-1];
-    logic [PTR_WIDTH-1:0] comp_head_q;
-    logic [PTR_WIDTH-1:0] comp_tail_q;
-    logic [COUNT_WIDTH-1:0] comp_count_q;
+    logic [15:0] comp_tag_q         [0:COMP_QUEUE_DEPTH-1];
+    logic [1:0]  comp_status_q      [0:COMP_QUEUE_DEPTH-1];
+    logic [3:0]  comp_err_code_q    [0:COMP_QUEUE_DEPTH-1];
+    logic [8:0]  comp_words_q       [0:COMP_QUEUE_DEPTH-1];
+    logic [COMP_PTR_WIDTH-1:0] comp_head_q;
+    logic [COMP_PTR_WIDTH-1:0] comp_tail_q;
+    logic [COMP_COUNT_WIDTH-1:0] comp_count_q;
 
     logic submit_accepted_q;
     logic submit_rejected_q;
@@ -158,18 +163,18 @@ module dma_offload_ctrl #(
     logic [8:0] retire_words_q;
     logic [3:0] last_err_code_q;
 
-    logic [1:0] src_sleep_retain_bank_mask_q;
-    logic [1:0] dst_sleep_retain_bank_mask_q;
-    logic [1:0] src_deep_retain_bank_mask_q;
-    logic [1:0] dst_deep_retain_bank_mask_q;
+    logic [MAX_BANKS-1:0] src_sleep_retain_bank_mask_q;
+    logic [MAX_BANKS-1:0] dst_sleep_retain_bank_mask_q;
+    logic [MAX_BANKS-1:0] src_deep_retain_bank_mask_q;
+    logic [MAX_BANKS-1:0] dst_deep_retain_bank_mask_q;
     logic lp_entry_seen_q;
     logic wake_apply_seen_q;
     logic src_corruption_seen_q;
     logic dst_corruption_seen_q;
     logic [1:0] last_low_power_state_q;
     logic [1:0] last_power_state_q;
-    logic [1:0] src_invalid_bank_mask_q;
-    logic [1:0] dst_invalid_bank_mask_q;
+    logic [MAX_BANKS-1:0] src_invalid_bank_mask_q;
+    logic [MAX_BANKS-1:0] dst_invalid_bank_mask_q;
 
     logic mem_op_busy_q;
     logic mem_op_done_q;
@@ -224,10 +229,10 @@ module dma_offload_ctrl #(
     logic submit_full;
     logic comp_empty;
     logic comp_full;
-    logic [PTR_WIDTH-1:0] submit_head_next;
-    logic [PTR_WIDTH-1:0] submit_tail_next;
-    logic [PTR_WIDTH-1:0] comp_head_next;
-    logic [PTR_WIDTH-1:0] comp_tail_next;
+    logic [SUBMIT_PTR_WIDTH-1:0] submit_head_next;
+    logic [SUBMIT_PTR_WIDTH-1:0] submit_tail_next;
+    logic [COMP_PTR_WIDTH-1:0] comp_head_next;
+    logic [COMP_PTR_WIDTH-1:0] comp_tail_next;
     logic [8:0] next_send_count;
     logic [8:0] next_recv_count;
     logic tx_src_bank;
@@ -236,6 +241,12 @@ module dma_offload_ctrl #(
     logic tx_word_parity_bad;
     logic tx_word_invalid;
     logic can_progress_dma;
+    logic [2:0] submit_count_csr;
+    logic [2:0] comp_count_csr;
+    logic [1:0] submit_head_csr;
+    logic [1:0] submit_tail_csr;
+    logic [1:0] comp_head_csr;
+    logic [1:0] comp_tail_csr;
 
     function automatic logic parity_bit(input logic [DATA_WIDTH-1:0] data);
         parity_bit = ^data;
@@ -252,8 +263,26 @@ module dma_offload_ctrl #(
         poison_word = 64'hDEAD_0000_0000_0000 ^ DATA_WIDTH'(addr);
     endfunction
 
+    function automatic logic bank_id_from_addr(input logic [7:0] addr);
+        if (BANKS == 1) begin
+            return 1'b0;
+        end
+        return addr[0];
+    endfunction
+
+    function automatic logic [BANK_ROW_W-1:0] bank_row_from_addr(input logic [7:0] addr);
+        if (BANKS == 1) begin
+            return addr[BANK_ROW_W-1:0];
+        end
+        return addr[7:1];
+    endfunction
+
     function automatic logic [7:0] bank_word_addr(input int row_idx, input int bank_id);
-        bank_word_addr = 8'((row_idx << 1) | bank_id);
+        if (BANKS == 1) begin
+            bank_word_addr = 8'(row_idx);
+        end else begin
+            bank_word_addr = 8'((row_idx << 1) | bank_id);
+        end
     endfunction
 
     task automatic write_mem_word(
@@ -265,10 +294,10 @@ module dma_offload_ctrl #(
         begin
             if (is_dst) begin
                 dst_bank_mem[bank][row] = data;
-                dst_bank_parity[bank][row] = parity_bit(data);
+                dst_bank_parity[bank][row] = PARITY_ENABLE ? parity_bit(data) : 1'b0;
             end else begin
                 src_bank_mem[bank][row] = data;
-                src_bank_parity[bank][row] = parity_bit(data);
+                src_bank_parity[bank][row] = PARITY_ENABLE ? parity_bit(data) : 1'b0;
             end
         end
     endtask
@@ -301,7 +330,7 @@ module dma_offload_ctrl #(
             comp_err_code_q[comp_tail_q] <= err_code;
             comp_words_q[comp_tail_q] <= words;
             comp_tail_q <= comp_tail_next;
-            comp_count_q <= comp_count_q + COUNT_WIDTH'(1);
+            comp_count_q <= comp_count_q + COMP_COUNT_WIDTH'(1);
             comp_push_event_q <= 1'b1;
             comp_push_tag_q <= tag;
             comp_push_status_q <= status;
@@ -311,19 +340,25 @@ module dma_offload_ctrl #(
     endtask
 
     assign cfg_ready = 1'b1;
-    assign submit_empty = (submit_count_q == COUNT_WIDTH'(0));
-    assign submit_full = (submit_count_q == COUNT_WIDTH'(QUEUE_DEPTH));
-    assign comp_empty = (comp_count_q == COUNT_WIDTH'(0));
-    assign comp_full = (comp_count_q == COUNT_WIDTH'(QUEUE_DEPTH));
-    assign submit_head_next = (submit_head_q == PTR_WIDTH'(QUEUE_DEPTH - 1)) ? '0 : (submit_head_q + 1'b1);
-    assign submit_tail_next = (submit_tail_q == PTR_WIDTH'(QUEUE_DEPTH - 1)) ? '0 : (submit_tail_q + 1'b1);
-    assign comp_head_next = (comp_head_q == PTR_WIDTH'(QUEUE_DEPTH - 1)) ? '0 : (comp_head_q + 1'b1);
-    assign comp_tail_next = (comp_tail_q == PTR_WIDTH'(QUEUE_DEPTH - 1)) ? '0 : (comp_tail_q + 1'b1);
+    assign submit_empty = (submit_count_q == SUBMIT_COUNT_WIDTH'(0));
+    assign submit_full = (submit_count_q == SUBMIT_COUNT_WIDTH'(SUBMIT_QUEUE_DEPTH));
+    assign comp_empty = (comp_count_q == COMP_COUNT_WIDTH'(0));
+    assign comp_full = (comp_count_q == COMP_COUNT_WIDTH'(COMP_QUEUE_DEPTH));
+    assign submit_head_next = (submit_head_q == SUBMIT_PTR_WIDTH'(SUBMIT_QUEUE_DEPTH - 1)) ? '0 : (submit_head_q + 1'b1);
+    assign submit_tail_next = (submit_tail_q == SUBMIT_PTR_WIDTH'(SUBMIT_QUEUE_DEPTH - 1)) ? '0 : (submit_tail_q + 1'b1);
+    assign comp_head_next = (comp_head_q == COMP_PTR_WIDTH'(COMP_QUEUE_DEPTH - 1)) ? '0 : (comp_head_q + 1'b1);
+    assign comp_tail_next = (comp_tail_q == COMP_PTR_WIDTH'(COMP_QUEUE_DEPTH - 1)) ? '0 : (comp_tail_q + 1'b1);
+    assign submit_count_csr = 3'(submit_count_q);
+    assign comp_count_csr = 3'(comp_count_q);
+    assign submit_head_csr = 2'(submit_head_q);
+    assign submit_tail_csr = 2'(submit_tail_q);
+    assign comp_head_csr = 2'(comp_head_q);
+    assign comp_tail_csr = 2'(comp_tail_q);
     assign tx_index = active_src_base_q + send_count_q[7:0];
-    assign tx_src_bank = tx_index[0];
-    assign tx_src_row = tx_index[7:1];
+    assign tx_src_bank = bank_id_from_addr(tx_index);
+    assign tx_src_row = bank_row_from_addr(tx_index);
     assign tx_word = src_bank_mem[tx_src_bank][tx_src_row];
-    assign tx_word_parity_bad = (src_bank_parity[tx_src_bank][tx_src_row] != parity_bit(tx_word));
+    assign tx_word_parity_bad = PARITY_ENABLE && (src_bank_parity[tx_src_bank][tx_src_row] != parity_bit(tx_word));
     assign tx_word_invalid = src_invalid_bank_mask_q[tx_src_bank];
     assign tx_stream_data = tx_word;
     assign can_progress_dma = (power_state == PWR_RUN);
@@ -367,13 +402,13 @@ module dma_offload_ctrl #(
             ADDR_SCRATCH_SEL: cfg_rdata = {31'd0, scratch_sel_q};
             ADDR_SCRATCH_LO: cfg_rdata = scratch_data_q[31:0];
             ADDR_SCRATCH_HI: cfg_rdata = scratch_data_q[63:32];
-            ADDR_SUBMIT_Q_STATUS: cfg_rdata = {23'd0, submit_count_q, submit_tail_q, submit_head_q, submit_full, submit_empty};
-            ADDR_COMP_Q_STATUS: cfg_rdata = {23'd0, comp_count_q, comp_tail_q, comp_head_q, comp_full, comp_empty};
+            ADDR_SUBMIT_Q_STATUS: cfg_rdata = {23'd0, submit_count_csr, submit_tail_csr, submit_head_csr, submit_full, submit_empty};
+            ADDR_COMP_Q_STATUS: cfg_rdata = {23'd0, comp_count_csr, comp_tail_csr, comp_head_csr, comp_full, comp_empty};
             ADDR_COMP_TAG: cfg_rdata = comp_empty ? 32'd0 : {16'd0, comp_tag_q[comp_head_q]};
             ADDR_COMP_STATUS: cfg_rdata = comp_empty ? 32'd0 : {26'd0, comp_status_q[comp_head_q], comp_err_code_q[comp_head_q]};
             ADDR_COMP_WORDS: cfg_rdata = comp_empty ? 32'd0 : {23'd0, comp_words_q[comp_head_q]};
             ADDR_ACTIVE_TAG: cfg_rdata = active_valid_q ? {16'd0, active_tag_q} : 32'd0;
-            ADDR_ACTIVE_STATUS: cfg_rdata = {21'd0, comp_count_q, submit_count_q, comp_full_stall_q, active_valid_q, state_q};
+            ADDR_ACTIVE_STATUS: cfg_rdata = {21'd0, comp_count_csr, submit_count_csr, comp_full_stall_q, active_valid_q, state_q};
             ADDR_SUBMIT_RESULT: begin
                 cfg_rdata = {10'd0, submit_reject_tag_q, submit_reject_err_code_q, submit_rejected_q, submit_accepted_q};
             end
@@ -525,11 +560,13 @@ module dma_offload_ctrl #(
                     dst_bank_parity[bank][row] = 1'b0;
                 end
             end
-            for (int qidx = 0; qidx < QUEUE_DEPTH; qidx++) begin
+            for (int qidx = 0; qidx < SUBMIT_QUEUE_DEPTH; qidx++) begin
                 submit_src_base_q[qidx] = '0;
                 submit_dst_base_q[qidx] = '0;
                 submit_len_words_q[qidx] = '0;
                 submit_tag_q[qidx] = '0;
+            end
+            for (int qidx = 0; qidx < COMP_QUEUE_DEPTH; qidx++) begin
                 comp_tag_q[qidx] = '0;
                 comp_status_q[qidx] = COMP_STATUS_RSVD;
                 comp_err_code_q[qidx] = ERR_NONE;
@@ -583,8 +620,8 @@ module dma_offload_ctrl #(
             staged_src_sum = {1'b0, staged_src_base_q} + staged_len_words_q;
             staged_dst_sum = {1'b0, staged_dst_base_q} + staged_len_words_q;
             mem_addr = mem_op_addr_q;
-            mem_bank = mem_addr[0];
-            mem_row = mem_addr[7:1];
+            mem_bank = bank_id_from_addr(mem_addr);
+            mem_row = bank_row_from_addr(mem_addr);
             mem_conflict = 1'b0;
             mem_read_word = '0;
             mem_read_parity_bad = 1'b0;
@@ -605,7 +642,7 @@ module dma_offload_ctrl #(
                                 src_corruption_seen_q <= 1'b1;
                                 for (int row = 0; row < BANK_DEPTH; row++) begin
                                     src_bank_mem[bank][row] = poison_word(bank_word_addr(row, bank));
-                                    src_bank_parity[bank][row] = parity_bit(poison_word(bank_word_addr(row, bank)));
+                                    src_bank_parity[bank][row] = PARITY_ENABLE ? parity_bit(poison_word(bank_word_addr(row, bank))) : 1'b0;
                                 end
                             end
                             if (!dst_sleep_retain_bank_mask_q[bank]) begin
@@ -613,7 +650,7 @@ module dma_offload_ctrl #(
                                 dst_corruption_seen_q <= 1'b1;
                                 for (int row = 0; row < BANK_DEPTH; row++) begin
                                     dst_bank_mem[bank][row] = poison_word(bank_word_addr(row, bank));
-                                    dst_bank_parity[bank][row] = parity_bit(poison_word(bank_word_addr(row, bank)));
+                                    dst_bank_parity[bank][row] = PARITY_ENABLE ? parity_bit(poison_word(bank_word_addr(row, bank))) : 1'b0;
                                 end
                             end
                         end
@@ -624,7 +661,7 @@ module dma_offload_ctrl #(
                                 src_corruption_seen_q <= 1'b1;
                                 for (int row = 0; row < BANK_DEPTH; row++) begin
                                     src_bank_mem[bank][row] = poison_word(bank_word_addr(row, bank));
-                                    src_bank_parity[bank][row] = parity_bit(poison_word(bank_word_addr(row, bank)));
+                                    src_bank_parity[bank][row] = PARITY_ENABLE ? parity_bit(poison_word(bank_word_addr(row, bank))) : 1'b0;
                                 end
                             end
                             if (!dst_deep_retain_bank_mask_q[bank]) begin
@@ -632,7 +669,7 @@ module dma_offload_ctrl #(
                                 dst_corruption_seen_q <= 1'b1;
                                 for (int row = 0; row < BANK_DEPTH; row++) begin
                                     dst_bank_mem[bank][row] = poison_word(bank_word_addr(row, bank));
-                                    dst_bank_parity[bank][row] = parity_bit(poison_word(bank_word_addr(row, bank)));
+                                    dst_bank_parity[bank][row] = PARITY_ENABLE ? parity_bit(poison_word(bank_word_addr(row, bank))) : 1'b0;
                                 end
                             end
                         end
@@ -764,7 +801,7 @@ module dma_offload_ctrl #(
                         comp_pop_err_code_q <= comp_err_code_q[comp_head_q];
                         comp_pop_words_q <= comp_words_q[comp_head_q];
                         comp_head_q <= comp_head_next;
-                        comp_count_q <= comp_count_q - COUNT_WIDTH'(1);
+                        comp_count_q <= comp_count_q - COMP_COUNT_WIDTH'(1);
                     end
 
                     if (mem_inject_start_req) begin
@@ -781,12 +818,14 @@ module dma_offload_ctrl #(
                     if (mem_inject_busy_q) begin
                         logic inj_bank;
                         logic [BANK_ROW_W-1:0] inj_row;
-                        inj_bank = mem_inject_addr_q[0];
-                        inj_row = mem_inject_addr_q[7:1];
-                        if (mem_inject_target_dst_q) begin
-                            dst_bank_parity[inj_bank][inj_row] <= dst_bank_parity[inj_bank][inj_row] ^ mem_inject_invert_parity_q;
-                        end else begin
-                            src_bank_parity[inj_bank][inj_row] <= src_bank_parity[inj_bank][inj_row] ^ mem_inject_invert_parity_q;
+                        inj_bank = bank_id_from_addr(mem_inject_addr_q);
+                        inj_row = bank_row_from_addr(mem_inject_addr_q);
+                        if (PARITY_ENABLE) begin
+                            if (mem_inject_target_dst_q) begin
+                                dst_bank_parity[inj_bank][inj_row] <= dst_bank_parity[inj_bank][inj_row] ^ mem_inject_invert_parity_q;
+                            end else begin
+                                src_bank_parity[inj_bank][inj_row] <= src_bank_parity[inj_bank][inj_row] ^ mem_inject_invert_parity_q;
+                            end
                         end
                         mem_inject_busy_q <= 1'b0;
                         mem_inject_done_q <= 1'b1;
@@ -820,8 +859,8 @@ module dma_offload_ctrl #(
                             mem_op_done_q <= 1'b0;
                         end else begin
                             mem_addr = mem_op_addr_q;
-                            mem_bank = mem_addr[0];
-                            mem_row = mem_addr[7:1];
+                            mem_bank = bank_id_from_addr(mem_addr);
+                            mem_row = bank_row_from_addr(mem_addr);
                             mem_conflict = 1'b0;
                             if (!mem_op_is_dst_q &&
                                 active_valid_q &&
@@ -830,7 +869,7 @@ module dma_offload_ctrl #(
                                 mem_conflict = 1'b1;
                             end
                             if (mem_op_is_dst_q && rx_fire &&
-                                (((active_dst_base_q + recv_count_q[7:0]) & 8'h01) == {7'b0, mem_bank})) begin
+                                (bank_id_from_addr(active_dst_base_q + recv_count_q[7:0]) == mem_bank)) begin
                                 mem_conflict = 1'b1;
                             end
 
@@ -845,7 +884,8 @@ module dma_offload_ctrl #(
                                 end
                             end else begin
                                 mem_read_word = mem_op_is_dst_q ? dst_bank_mem[mem_bank][mem_row] : src_bank_mem[mem_bank][mem_row];
-                                mem_read_parity_bad = (mem_op_is_dst_q ? dst_bank_parity[mem_bank][mem_row] : src_bank_parity[mem_bank][mem_row]) != parity_bit(mem_read_word);
+                                mem_read_parity_bad = PARITY_ENABLE &&
+                                                      ((mem_op_is_dst_q ? dst_bank_parity[mem_bank][mem_row] : src_bank_parity[mem_bank][mem_row]) != parity_bit(mem_read_word));
                                 mem_read_invalid = mem_op_is_dst_q ? dst_invalid_bank_mask_q[mem_bank] : src_invalid_bank_mask_q[mem_bank];
 
                                 if (mem_op_is_write_q) begin
@@ -900,7 +940,7 @@ module dma_offload_ctrl #(
                             submit_len_words_q[submit_tail_q] <= staged_len_words_q;
                             submit_tag_q[submit_tail_q] <= staged_tag_q;
                             submit_tail_q <= submit_tail_next;
-                            submit_count_q <= submit_count_q + COUNT_WIDTH'(1);
+                            submit_count_q <= submit_count_q + SUBMIT_COUNT_WIDTH'(1);
                             submit_accepted_q <= 1'b1;
                             submit_accept_event_q <= 1'b1;
                         end
@@ -1001,8 +1041,8 @@ module dma_offload_ctrl #(
                                             logic [BANK_ROW_W-1:0] dst_row;
                                             logic [7:0] dst_addr;
                                             dst_addr = active_dst_base_q + recv_count_q[7:0];
-                                            dst_bank = dst_addr[0];
-                                            dst_row = dst_addr[7:1];
+                                            dst_bank = bank_id_from_addr(dst_addr);
+                                            dst_row = bank_row_from_addr(dst_addr);
                                             write_mem_word(1'b1, dst_bank, dst_row, rx_stream_data);
                                             dst_invalid_bank_mask_q[dst_bank] <= 1'b0;
 `ifdef UCIE_BUG_DMA_DONE_EARLY
@@ -1045,8 +1085,8 @@ module dma_offload_ctrl #(
                                             logic [BANK_ROW_W-1:0] dst_row;
                                             logic [7:0] dst_addr;
                                             dst_addr = active_dst_base_q + recv_count_q[7:0];
-                                            dst_bank = dst_addr[0];
-                                            dst_row = dst_addr[7:1];
+                                            dst_bank = bank_id_from_addr(dst_addr);
+                                            dst_row = bank_row_from_addr(dst_addr);
                                             write_mem_word(1'b1, dst_bank, dst_row, rx_stream_data);
                                             dst_invalid_bank_mask_q[dst_bank] <= 1'b0;
 `ifdef UCIE_BUG_DMA_DONE_EARLY
@@ -1128,7 +1168,7 @@ module dma_offload_ctrl #(
                         timeout_q <= '0;
                         state_q <= DMA_LAUNCH;
                         submit_head_q <= submit_head_next;
-                        submit_count_q <= submit_count_q - COUNT_WIDTH'(1);
+                        submit_count_q <= submit_count_q - SUBMIT_COUNT_WIDTH'(1);
                     end
                 end
             end

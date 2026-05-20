@@ -60,6 +60,30 @@ CASES = (
         rtl_sources=("d2d_adapter/ucie_tx.sv",),
     ),
     PropertyCase(
+        name="flit_crc_reject_policy",
+        top="tb_flit_crc_props",
+        harness="tb_flit_crc_props.sv",
+        rtl_sources=("d2d_adapter/flit_packetizer.sv", "d2d_adapter/flit_depacketizer.sv"),
+    ),
+    PropertyCase(
+        name="dma_queue_completion_props",
+        top="tb_dma_queue_props",
+        harness="tb_dma_queue_props.sv",
+        rtl_sources=("die_a/dma_offload_ctrl.sv",),
+    ),
+    PropertyCase(
+        name="dma_memory_integrity_props",
+        top="tb_dma_mem_props",
+        harness="tb_dma_mem_props.sv",
+        rtl_sources=("die_a/dma_offload_ctrl.sv",),
+    ),
+    PropertyCase(
+        name="chiplet_power_ctrl_props",
+        top="tb_power_ctrl_props",
+        harness="tb_power_ctrl_props.sv",
+        rtl_sources=("power/chiplet_power_ctrl.sv",),
+    ),
+    PropertyCase(
         name="ucie_tx_retry_identity_bug_demo",
         top="tb_ucie_tx_retry_props",
         harness="tb_ucie_tx_retry_props.sv",
@@ -84,6 +108,7 @@ def compile_case(verilator: str, case: PropertyCase) -> tuple[Path, Path]:
         "--assert",
         "-Wall",
         *VERILATOR_WARNINGS,
+        f"+incdir+{ROOT / 'sim' / 'assertions'}",
         *[f"-D{define}" for define in case.defines],
         "--top-module",
         case.top,

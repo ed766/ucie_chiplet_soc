@@ -65,6 +65,9 @@ package txn_pkg;
         string       scenario_kind;
         string       bug_mode;
         string       power_mode;
+        string       queue_pressure;
+        string       parity_injection;
+        string       timeout_profile;
         bit          randomized;
         bit          neg_wrong_key;
         bit          neg_misalign;
@@ -95,6 +98,9 @@ package txn_pkg;
             scenario_kind = "directed";
             bug_mode = "none";
             power_mode = "none";
+            queue_pressure = "single";
+            parity_injection = "none";
+            timeout_profile = "nominal";
             randomized = 1'b0;
             neg_wrong_key = 1'b0;
             neg_misalign = 1'b0;
@@ -161,6 +167,9 @@ package txn_pkg;
             int unsigned local_u32;
             string local_bug_mode;
             string local_power_mode;
+            string local_queue_pressure;
+            string local_parity_injection;
+            string local_timeout_profile;
 
             if ($value$plusargs("SEED=%d", local_u32)) begin
                 seed = local_u32;
@@ -179,6 +188,30 @@ package txn_pkg;
             end
             if ($value$plusargs("POWER_MODE=%s", local_power_mode)) begin
                 power_mode = local_power_mode;
+            end
+            if ($value$plusargs("QUEUE_PRESSURE=%s", local_queue_pressure)) begin
+                queue_pressure = local_queue_pressure;
+            end
+            if ($value$plusargs("PARITY_INJECTION=%s", local_parity_injection)) begin
+                parity_injection = local_parity_injection;
+            end
+            if ($value$plusargs("TIMEOUT_PROFILE=%s", local_timeout_profile)) begin
+                timeout_profile = local_timeout_profile;
+            end
+            if ($value$plusargs("ENABLE_BACKPRESSURE=%d", local_u32)) begin
+                link.enable_backpressure = (local_u32 != 0);
+            end
+            if ($value$plusargs("ENABLE_CRC_WINDOW=%d", local_u32)) begin
+                link.enable_crc_window = (local_u32 != 0);
+                allow_crc_error = allow_crc_error || (local_u32 != 0);
+            end
+            if ($value$plusargs("ENABLE_LANE_FAULT=%d", local_u32)) begin
+                link.enable_lane_fault_window = (local_u32 != 0);
+                link.enable_fault_echo = link.enable_fault_echo || (local_u32 != 0);
+                allow_crc_error = allow_crc_error || (local_u32 != 0);
+            end
+            if ($value$plusargs("ENABLE_FAULT_ECHO=%d", local_u32)) begin
+                link.enable_fault_echo = (local_u32 != 0);
             end
             if ($value$plusargs("GAP_CEILING=%d", local_u32)) begin
                 link.gap_ceiling = local_u32;

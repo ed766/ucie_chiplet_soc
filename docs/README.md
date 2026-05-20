@@ -182,7 +182,9 @@ In short, the chiplet system is a looped crypto service:
 - Bug-injection macros exist to validate checker sensitivity:
 - `UCIE_BUG_CREDIT_OFF_BY_ONE`,
 - `UCIE_BUG_CRC_POLY`,
-- `UCIE_BUG_RETRY_SEQ`.
+- `UCIE_BUG_RETRY_SEQ`,
+- `UCIE_BUG_DMA_DONE_EARLY`,
+- `UCIE_BUG_MEM_PARITY_SKIP`.
 
 ## 7) Reading Order for Engineers
 

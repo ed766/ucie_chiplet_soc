@@ -3,9 +3,10 @@
 ## Goal
 
 Verify the dual-die RISC-V SoC and behavioral UCIe-style link in
-`chiplet_extension/` with a lightweight, coverage-driven methodology instead
-of full UVM. The current milestone is centered on closure, not framework
-replacement:
+`chiplet_extension/` with two verification lanes: the existing lightweight,
+coverage-driven Verilator gate, and an optional parallel full-UVM lane for
+architecture demonstration. The current default milestone remains centered on
+closure, not replacing the stable gate:
 
 - named tests
 - lightweight config objects and plusargs
@@ -13,7 +14,14 @@ replacement:
 - scoreboards and assertions
 - functional coverage counters
 - automated Verilator regressions and dashboards
-- proxy low-power verification
+- UVM-style proxy low-power verification through named Verilator power tests,
+  passive monitor sampling, coverage counters, and optional native covergroups
+- static UPF intent validation through `make -C chiplet_extension upf-check`
+- optional full-UVM lane through `make -C chiplet_extension uvm-check-env`,
+  `uvm-smoke`, `uvm-closure`, and `uvm-regress`
+- UVM/non-UVM closure equivalence through
+  `make -C chiplet_extension closure-equivalence`
+- tool-neutral UPF 4.0 intent documentation, not commercial low-power signoff
 - bounded Verilator property collateral
 - CSR-programmable DMA offload verification with golden-image compare
 
@@ -43,12 +51,52 @@ replacement:
   behaviors that check whether the design reacts correctly to power-state
   intent.
 
+### UPF intent validation
+
+- `chiplet_extension/upf/chiplet_full.upf` captures the chiplet power intent as
+  tool-neutral UPF 4.0.
+- `chiplet_extension/scripts/check_upf_intent.py` statically validates the UPF
+  structure and its RTL hierarchy/control references.
+- This validation is a repo-local intent check, not a commercial UPF-aware
+  simulation, synthesis, or implementation run.
+
 ### Bounded property collateral
 
 - `chiplet_extension/formal/`
-  - compact Verilator assertion harnesses for credit, retry, link FSM, and
-    retry-identity behavior
+  - compact Verilator assertion harnesses for credit, retry, link FSM,
+    retry-identity, CRC reject policy, DMA queue/completion, memory integrity,
+    and chiplet power-control behavior
+- `chiplet_extension/sim/assertions/chiplet_protocol_assertions.svh`
+  - reusable assertion intent for DMA queue integrity, credit bounds, retry
+    replay, memory integrity, IRQ/pending behavior, and power sequencing
+- `docs/assertion_inventory.md`
+  - generated assertion inventory grouped by DMA, link/retry/credit,
+    memory/parity, and power/retention invariants
 - These are bounded property checks, not theorem-proving formal signoff.
+
+### Optional full-UVM bench
+
+- `chiplet_extension/sim/tb_chiplet_uvm.sv`
+  - instantiates `soc_chiplet_top`, verification-only virtual interfaces, and
+    `run_test()` for non-Verilator/full-UVM simulators
+  - uses a Verilator-compatible UVM smoke runner when `VERILATOR` is defined,
+    because the CHIPS Alliance UVM `UVM_NO_DPI` flow still has practical
+    limitations in UVM phase/TLM traversal
+  - passes CSR, power, UCIe stream, and observation interfaces through
+    package-level virtual-interface handles in the Verilator lane
+- `chiplet_extension/sim/uvm/`
+  - contains full-UVM packages for UCIe, DMA/CSR, power, and the chiplet env
+  - keeps UVM agents, sequencers/drivers, passive monitors, analysis ports,
+    scoreboards, coverage subscribers, and first-pass UVM smoke tests for
+    non-Verilator/full-UVM use
+  - mirrors key monitor observations into direct counters for the Verilator
+    smoke/regression lane
+- UVM closure uses the same named scenario intent and closure target as the
+  non-UVM stable lane, under UVM-namespaced reports. The local Verilator path
+  uses a compatibility runner where CHIPS Alliance UVM phase/TLM traversal is
+  not yet practical.
+- This lane requires external `VERILATOR_UVM` and `UVM_HOME`; the local Debian
+  Verilator `5.020` is not treated as sufficient for this optional lane.
 
 ## Stimulus Strategy
 
@@ -64,19 +112,34 @@ Directed tests target:
 - wrong-key, misalignment, and expected-empty negatives
 - explicit bug-validation modes
 - power-state proxy scenarios
+- static UPF intent structure checks
 
 ### Randomized tests
 
 Randomized named scenarios use seed sweeps driven by
 `chiplet_extension/scripts/run_regression.py`.
 
-The project now has 49 named tests spanning:
+Named scenarios span:
 
 - stable gate
 - DMA closure suite
 - stress and closure suite
 - bug-validation suite
 - power-proxy suite
+- optional full-UVM smoke and closure suites
+
+Optional seeded-random stress collateral is generated separately from the
+stable gate:
+
+- `make -C chiplet_extension random-smoke-25`
+- `make -C chiplet_extension stress-retry-50`
+- `make -C chiplet_extension power-dma-cross-25`
+- `make -C chiplet_extension random-stress-summary`
+
+Those targets create 100 reproducible scenario rows across DMA length,
+scratchpad banks, queue pressure, backpressure, CRC/lane faults, parity
+injection, timeout profile, retry window, and power-transition timing. They
+are optional stress evidence, not default closure requirements.
 
 ## Checking Strategy
 
@@ -92,9 +155,13 @@ The project now has 49 named tests spanning:
   - DMA busy/done/error status consistency, IRQ masking, and W1C behavior
 - `dma_mem_ref_scoreboard.sv`
   - destination scratchpad compare against a Python-generated expected image
+- `dma_golden_model.py`
+  - independent Python transaction model for DMA descriptor streams,
+    plaintext, packet order, AES ciphertext, and final destination images
 - `chiplet_extension/formal/`
   - compact property harnesses for credit bounds, link recovery, retry
-    progress, and resend identity
+    progress, resend identity, CRC reject policy, DMA queue/completion,
+    memory integrity, and power-control sidebands
 
 ### Scoreboards and monitors
 
@@ -106,6 +173,75 @@ The project now has 49 named tests spanning:
   - file-backed end-to-end reference checking for the SoC bench
 - `stats_monitor.sv`
   - monitor-driven functional coverage and CSV output
+- `power_state_monitor.sv`
+  - passive low-power monitor for PST states, legal transitions, domain
+    combinations, isolation effects, retention pulses, and transition/activity
+    coverage; it mirrors coverage into CSV counters for Verilator and includes
+    simulator-native covergroups/coverpoints when supported
+
+### Full-UVM components
+
+- `ucie_uvm_pkg`
+  - UCIe sequence item, sequencer, passive monitor, agent, coverage subscriber,
+    and scoreboard
+- `dma_uvm_pkg`
+  - CSR sequence item, sequencer/driver, DMA event monitor, DMA scoreboard, and
+    DMA queue smoke sequence
+- `power_uvm_pkg`
+  - power-state sequence item, sequencer/driver, passive power monitor,
+    coverage subscriber, scoreboard, and sleep/resume sequence
+- `chiplet_uvm_pkg`
+  - top-level UVM environment and first-pass UVM tests:
+    `uvm_prbs_smoke_test`, `uvm_soc_smoke_test`,
+    `uvm_dma_queue_smoke_test`, and `uvm_power_sleep_resume_test`
+
+### UPF Intent Validation
+
+`make -C chiplet_extension upf-check` validates:
+
+- UPF version `4.0`
+- expected chiplet power domains
+- power switches for all switchable domains
+- output isolation for all switchable domains
+- DMA sleep-context and memory-bank retention strategies
+- RUN / CRYPTO_ONLY / SLEEP / DEEP_SLEEP PST values
+- referenced RTL hierarchy and `u_pwr_ctrl` sideband controls
+
+This complements, but does not replace, the Verilator power-proxy tests. The
+proxy tests verify RTL behavior; `upf-check` verifies static power-intent
+structure.
+
+### Low-Power Functional Coverage
+
+The chiplet low-power coverage model stays UVM-style without requiring a full
+UVM library: named tests drive scenario intent, the bench connects hierarchical
+observability from `u_chiplet.u_pwr_ctrl`, and `power_state_monitor.sv`
+passively samples behavior without driving design signals.
+
+The monitor defines native SystemVerilog coverage under non-Verilator
+simulators and maintains equivalent counter mirrors for the Verilator report
+flow. Relevant coverpoints include:
+
+- PST state: RUN, CRYPTO_ONLY, SLEEP, DEEP_SLEEP
+- legal transition: RUN<->CRYPTO_ONLY, RUN<->SLEEP, RUN<->DEEP_SLEEP
+- valid PST domain combination: RUN, CRYPTO_ONLY, SLEEP, DEEP_SLEEP
+- isolation behavior: asserted, deasserted, blocked traffic, release traffic
+- retention event: DMA sleep save/restore and DMA memory save/restore
+- activity class: no traffic, link traffic, DMA queued, DMA active,
+  completion/IRQ pending
+
+Cross coverage focuses on the meaningful UPF interactions rather than
+exhaustive domain permutations:
+
+- power state x valid domain combination
+- legal transition x activity class
+- isolation behavior x activity class
+
+`power_state_summary.csv` is the closure artifact for this proxy coverage. It
+must show all four PST states, all six legal transitions, all four valid
+domain-combo bins, all isolation bins, DMA retention save/restore bins, and the
+selected transition/activity bins. `upf-check` does not contribute to these
+functional coverage bins; it only validates static UPF structure.
 
 ### Result-line contract
 
@@ -164,6 +300,11 @@ Tracked categories:
   - crypto-only
   - sleep
   - deep-sleep
+  - legal power-state transitions
+  - UPF PST domain combinations
+  - isolation assert/deassert and blocked/released traffic behavior
+  - DMA sleep-context and memory-retention save/restore events
+  - power transition crossed with link/DMA/completion activity
 - DMA controller behavior
   - submit/completion queue occupancy
   - queue wrap and drain behavior
@@ -237,10 +378,31 @@ Tracked categories:
 - `power_crypto_only`
 - `power_sleep_entry_exit`
 - `power_deep_sleep_recover`
+- `power_isolation_blocks_tx`
+- `power_wakeup_releases_isolation_cleanly`
+- `power_transition_with_link_backpressure`
+- `power_illegal_access_error_response`
+- `power_traffic_cross_test`
+- `dma_power_sleep_resume_queue`
+- `dma_sleep_during_queued_work`
+- `dma_sleep_during_active_transfer`
+- `dma_power_state_retention_matrix`
+- `dma_crypto_only_submit_blocked`
+- `mem_sleep_retained_bank`
+- `mem_sleep_nonretained_bank`
+- `mem_nonretained_readback_poison_clean`
+- `mem_invalid_clear_on_write`
+- `mem_deep_sleep_retention_matrix`
+- `mem_crypto_only_cfg_access`
 
-The stable suite is the default pass gate. The stress suite remains checked in
-and runnable, but it is explicitly treated as closure and characterization
-work.
+### UPF static validation
+
+- `make upf-check`
+
+The stable suite is the default behavioral pass gate. The UPF static validation
+lane is required for power-intent documentation consistency. The stress suite
+remains checked in and runnable, but it is explicitly treated as closure and
+characterization work.
 
 ## Bug-Validation Plan
 
@@ -260,6 +422,7 @@ Expected behavior:
   - `crc_integrity`
   - `retry_identity`
   - `dma_completion`
+  - `memory_integrity`
 
 ## Regression Plan
 
@@ -274,7 +437,31 @@ Post-processing:
 - `chiplet_extension/scripts/gen_failure_summary.py`
 - `chiplet_extension/scripts/gen_power_report.py`
 - `chiplet_extension/scripts/gen_coverage_closure.py`
+- `chiplet_extension/scripts/dma_golden_model.py`
 - `chiplet_extension/scripts/run_bounded_properties.py`
+- `chiplet_extension/scripts/check_upf_intent.py`
+- `chiplet_extension/scripts/check_uvm_env.py`
+- `chiplet_extension/scripts/run_uvm_regression.py`
+- `chiplet_extension/scripts/check_closure_equivalence.py`
+
+Required validation commands:
+
+- `make -C chiplet_extension regress`
+- `make -C chiplet_extension closure`
+- `make -C chiplet_extension closure-equivalence`
+- `make -C chiplet_extension power-regress`
+- `make -C chiplet_extension upf-check`
+
+Optional full-UVM validation commands:
+
+- `make -C chiplet_extension uvm-check-env`
+- `make -C chiplet_extension uvm-smoke`
+- `make -C chiplet_extension uvm-closure`
+- `make -C chiplet_extension uvm-regress`
+
+The UVM commands are intentionally not part of the default pass gate until the
+external UVM-capable Verilator environment is installed and the lane has
+matching evidence. `uvm-regress` is an alias for the UVM closure lane.
 
 Generated outputs:
 
@@ -287,22 +474,83 @@ Generated outputs:
 - `chiplet_extension/reports/closure_targets.md`
 - `chiplet_extension/reports/power_state_summary.csv`
 - `chiplet_extension/reports/coverage_closure_matrix.md`
+- `chiplet_extension/reports/closure_equivalence.csv`
+- `chiplet_extension/reports/closure_equivalence.md`
+- `chiplet_extension/reports/cross_coverage_summary.csv`
 - `chiplet_extension/reports/formal_summary.csv`
 - `chiplet_extension/reports/perf_characterization.csv`
+- `docs/bug_diary.md`
+- `docs/bug_validation_cases.md`
+- `docs/debug_case_study_dma_retry.md`
+- `docs/images/dma_retry_waveform.png`
 - `docs/protocol_characterization.md`
+
+Optional seeded-random collateral:
+
+- `chiplet_extension/reports/random_smoke_25_manifest.csv`
+- `chiplet_extension/reports/stress_retry_50_manifest.csv`
+- `chiplet_extension/reports/power_dma_cross_25_manifest.csv`
+- `chiplet_extension/reports/random_stress_regress_summary.csv`
+- `docs/random_stress_summary.md`
+
+Assertion collateral:
+
+- `docs/assertion_inventory.md`
+
+UVM collateral:
+
+- `docs/uvm_status.md`
+
+Optional UVM output:
+
+- `chiplet_extension/reports/uvm_regress_summary.csv`
+- `chiplet_extension/reports/uvm_coverage_summary.csv`
+- `chiplet_extension/reports/uvm_power_state_summary.csv`
+- `chiplet_extension/reports/uvm_smoke_summary.csv`
+- `chiplet_extension/reports/uvm_smoke_coverage_summary.csv`
+- `chiplet_extension/reports/uvm_*_uvm_coverage.csv`
+
+The UVM coverage files use the same 60-bin coverage metric schema as the
+stable Verilator regression coverage files. UVM closure is required to cover
+the same required-bin vector as the non-UVM closure lane. `uvm-smoke` remains
+fast and writes smoke-prefixed reports so it does not clobber closure evidence.
+
+Evidence split:
+
+- `chiplet_extension/reports/power_state_summary.csv` records behavioral proxy
+  power evidence from Verilator runs, including low-power functional coverage
+  counter mirrors for states, transitions, domain combinations, isolation,
+  retention, and transition/activity crosses.
+- `chiplet_extension/reports/uvm_power_state_summary.csv` records the same
+  power-proxy closure evidence for the UVM closure lane.
+- `chiplet_extension/reports/closure_equivalence.md` records whether UVM and
+  non-UVM functional coverage, power coverage, and expected bug-validation
+  results are equivalent.
+- `make upf-check` console output records static UPF intent evidence.
+- `coverage_closure_matrix.md` records both the canonical `60 / 60`
+  functional closure vector and non-gating cross-coverage evidence.
+- The seeded-random manifests are optional stress inputs; they are not part of
+  default closure unless explicitly run through their Make targets.
 
 ## Acceptance Status
 
 Current local milestone:
 
-- 49 named tests are documented and runnable
-- stable suite closes at `51 / 51` functional bins
-- stable regression currently runs `43 / 43` tests meeting expectation, including `39 / 39` nominal passes
+- stable regression currently runs `64 / 64` tests meeting expectation
+- nominal stable tests pass at `59 / 59`
 - the stable regression and randomized sweeps are Verilator-based
-- expected bug-validation failures are observed for all four injected modes
-- power-proxy tests meet expectation at `6 / 6`
-- DMA nominal tests meet expectation at `17 / 17`
+- optional seeded-random stress is supporting evidence and its current status is generated in `docs/project_metrics.md`
+- cross-coverage evidence groups are observed at `8 / 8`
+- assertion inventory documents `31` protocol/control invariants
+- expected bug-validation failures are observed at `5 / 5`
+- low-power proxy tests meet expectation at `20 / 20`
+- low-power functional coverage shows PST states `4 / 4`, legal transitions
+  `6 / 6`, PST domain combinations `4 / 4`, isolation bins `4 / 4`,
+  retention bins `4 / 4`, and transition/activity bins `5 / 5`
+- DMA nominal tests meet expectation at `19 / 19`
+- memory nominal tests meet expectation at `13 / 13`
 - DMA bug-validation meets expectation at `1 / 1`
+- static UPF intent validation passes with `make -C chiplet_extension upf-check`
 - bounded Verilator property collateral is checked in and runnable
 - machine-readable result lines and CSV/Markdown reports are generated
 
@@ -310,7 +558,10 @@ Current local milestone:
 
 - `chiplet_extension/` is the flagship verification project.
 - `base_soc/` remains as earlier supporting work.
-- UPF-aware simulation is out of scope for this cycle; power behavior is
-  represented with explicit proxy tests instead.
+- The chiplet extension includes complete tool-neutral UPF 4.0 intent.
+- UPF-aware commercial simulation, synthesis, and implementation signoff remain
+  out of scope for this cycle.
+- Proxy tests and monitor-driven coverage verify modeled low-power behavior;
+  `upf-check` verifies static power-intent structure.
 - The next useful extensions are closure trend reporting, low-power proxy
   breadth, and small protocol/performance characterizations.

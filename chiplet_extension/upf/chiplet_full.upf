@@ -1,0 +1,227 @@
+# Tool-neutral IEEE 1801 / UPF 4.0 power intent for soc_chiplet_top.
+# This file is the canonical chiplet power-intent package. The existing
+# die_a.upf, die_b.upf, and pst_chiplet.upf files remain compatibility
+# entrypoints that source this complete intent.
+
+set_power_intent -upf_version 4.0
+
+# ---------------------------------------------------------------------------
+# Power domains
+# ---------------------------------------------------------------------------
+
+create_power_domain AON_CHIPLET \
+    -elements {soc_chiplet_top soc_chiplet_top/u_pwr_ctrl}
+
+create_power_domain PD_A_TRAFFIC \
+    -elements {soc_chiplet_top/u_die_a/u_die_a_system}
+
+create_power_domain PD_A_DMA \
+    -elements {soc_chiplet_top/u_die_a/u_dma}
+
+create_power_domain PD_A_LINK \
+    -elements {soc_chiplet_top/u_die_a/u_packetizer \
+               soc_chiplet_top/u_die_a/u_depacketizer \
+               soc_chiplet_top/u_die_a/u_credit_mgr \
+               soc_chiplet_top/u_die_a/u_link_fsm \
+               soc_chiplet_top/u_die_a/u_retry_ctrl \
+               soc_chiplet_top/u_die_a/u_tx \
+               soc_chiplet_top/u_die_a/u_rx \
+               soc_chiplet_top/u_die_a/u_phy}
+
+create_power_domain PD_B_CRYPTO \
+    -elements {soc_chiplet_top/u_die_b/u_die_b_system}
+
+create_power_domain PD_B_LINK \
+    -elements {soc_chiplet_top/u_die_b/u_packetizer \
+               soc_chiplet_top/u_die_b/u_depacketizer \
+               soc_chiplet_top/u_die_b/u_credit_mgr \
+               soc_chiplet_top/u_die_b/u_link_fsm \
+               soc_chiplet_top/u_die_b/u_retry_ctrl \
+               soc_chiplet_top/u_die_b/u_tx \
+               soc_chiplet_top/u_die_b/u_rx \
+               soc_chiplet_top/u_die_b/u_phy}
+
+create_power_domain PD_CHANNEL \
+    -elements {soc_chiplet_top/u_channel}
+
+# ---------------------------------------------------------------------------
+# Supplies
+# ---------------------------------------------------------------------------
+
+create_supply_port VDD_AON
+create_supply_port VSS
+create_supply_port VDD_RET
+
+create_supply_net VDD_AON
+create_supply_net VSS
+create_supply_net VDD_RET
+connect_supply_net VDD_AON -ports {VDD_AON}
+connect_supply_net VSS     -ports {VSS}
+connect_supply_net VDD_RET -ports {VDD_RET}
+
+create_supply_net VDD_PD_A_TRAFFIC -domain PD_A_TRAFFIC
+create_supply_net VDD_PD_A_DMA     -domain PD_A_DMA
+create_supply_net VDD_PD_A_LINK    -domain PD_A_LINK
+create_supply_net VDD_PD_B_CRYPTO  -domain PD_B_CRYPTO
+create_supply_net VDD_PD_B_LINK    -domain PD_B_LINK
+create_supply_net VDD_PD_CHANNEL   -domain PD_CHANNEL
+
+set_domain_supply_net AON_CHIPLET  -primary_power_net VDD_AON             -primary_ground_net VSS
+set_domain_supply_net PD_A_TRAFFIC -primary_power_net VDD_PD_A_TRAFFIC    -primary_ground_net VSS
+set_domain_supply_net PD_A_DMA     -primary_power_net VDD_PD_A_DMA        -primary_ground_net VSS
+set_domain_supply_net PD_A_LINK    -primary_power_net VDD_PD_A_LINK       -primary_ground_net VSS
+set_domain_supply_net PD_B_CRYPTO  -primary_power_net VDD_PD_B_CRYPTO     -primary_ground_net VSS
+set_domain_supply_net PD_B_LINK    -primary_power_net VDD_PD_B_LINK       -primary_ground_net VSS
+set_domain_supply_net PD_CHANNEL   -primary_power_net VDD_PD_CHANNEL      -primary_ground_net VSS
+
+# ---------------------------------------------------------------------------
+# Power switches
+# ---------------------------------------------------------------------------
+
+create_power_switch PS_PD_A_TRAFFIC \
+    -domain PD_A_TRAFFIC \
+    -input_supply_port {VIN VDD_AON} \
+    -output_supply_port {VOUT VDD_PD_A_TRAFFIC} \
+    -control_port {SWEN soc_chiplet_top/u_pwr_ctrl/sw_pd_a_traffic} \
+    -on_state {ON VIN {SWEN}}
+
+create_power_switch PS_PD_A_DMA \
+    -domain PD_A_DMA \
+    -input_supply_port {VIN VDD_AON} \
+    -output_supply_port {VOUT VDD_PD_A_DMA} \
+    -control_port {SWEN soc_chiplet_top/u_pwr_ctrl/sw_pd_a_dma} \
+    -on_state {ON VIN {SWEN}}
+
+create_power_switch PS_PD_A_LINK \
+    -domain PD_A_LINK \
+    -input_supply_port {VIN VDD_AON} \
+    -output_supply_port {VOUT VDD_PD_A_LINK} \
+    -control_port {SWEN soc_chiplet_top/u_pwr_ctrl/sw_pd_a_link} \
+    -on_state {ON VIN {SWEN}}
+
+create_power_switch PS_PD_B_CRYPTO \
+    -domain PD_B_CRYPTO \
+    -input_supply_port {VIN VDD_AON} \
+    -output_supply_port {VOUT VDD_PD_B_CRYPTO} \
+    -control_port {SWEN soc_chiplet_top/u_pwr_ctrl/sw_pd_b_crypto} \
+    -on_state {ON VIN {SWEN}}
+
+create_power_switch PS_PD_B_LINK \
+    -domain PD_B_LINK \
+    -input_supply_port {VIN VDD_AON} \
+    -output_supply_port {VOUT VDD_PD_B_LINK} \
+    -control_port {SWEN soc_chiplet_top/u_pwr_ctrl/sw_pd_b_link} \
+    -on_state {ON VIN {SWEN}}
+
+create_power_switch PS_PD_CHANNEL \
+    -domain PD_CHANNEL \
+    -input_supply_port {VIN VDD_AON} \
+    -output_supply_port {VOUT VDD_PD_CHANNEL} \
+    -control_port {SWEN soc_chiplet_top/u_pwr_ctrl/sw_pd_channel} \
+    -on_state {ON VIN {SWEN}}
+
+# ---------------------------------------------------------------------------
+# Isolation
+# ---------------------------------------------------------------------------
+
+set_isolation ISO_PD_A_TRAFFIC \
+    -domain PD_A_TRAFFIC \
+    -applies_to outputs \
+    -isolation_power_net VDD_AON \
+    -isolation_ground_net VSS \
+    -clamp_value 0 \
+    -isolation_signal soc_chiplet_top/u_pwr_ctrl/iso_pd_a_traffic_n \
+    -isolation_sense low
+
+set_isolation ISO_PD_A_DMA \
+    -domain PD_A_DMA \
+    -applies_to outputs \
+    -isolation_power_net VDD_AON \
+    -isolation_ground_net VSS \
+    -clamp_value 0 \
+    -isolation_signal soc_chiplet_top/u_pwr_ctrl/iso_pd_a_dma_n \
+    -isolation_sense low
+
+set_isolation ISO_PD_A_LINK \
+    -domain PD_A_LINK \
+    -applies_to outputs \
+    -isolation_power_net VDD_AON \
+    -isolation_ground_net VSS \
+    -clamp_value 0 \
+    -isolation_signal soc_chiplet_top/u_pwr_ctrl/iso_pd_a_link_n \
+    -isolation_sense low
+
+set_isolation ISO_PD_B_CRYPTO \
+    -domain PD_B_CRYPTO \
+    -applies_to outputs \
+    -isolation_power_net VDD_AON \
+    -isolation_ground_net VSS \
+    -clamp_value 0 \
+    -isolation_signal soc_chiplet_top/u_pwr_ctrl/iso_pd_b_crypto_n \
+    -isolation_sense low
+
+set_isolation ISO_PD_B_LINK \
+    -domain PD_B_LINK \
+    -applies_to outputs \
+    -isolation_power_net VDD_AON \
+    -isolation_ground_net VSS \
+    -clamp_value 0 \
+    -isolation_signal soc_chiplet_top/u_pwr_ctrl/iso_pd_b_link_n \
+    -isolation_sense low
+
+set_isolation ISO_PD_CHANNEL \
+    -domain PD_CHANNEL \
+    -applies_to outputs \
+    -isolation_power_net VDD_AON \
+    -isolation_ground_net VSS \
+    -clamp_value 0 \
+    -isolation_signal soc_chiplet_top/u_pwr_ctrl/iso_pd_channel_n \
+    -isolation_sense low
+
+# ---------------------------------------------------------------------------
+# Retention
+# ---------------------------------------------------------------------------
+
+# DMA control and queue context retained only for SLEEP -> RUN.
+set_retention RET_DMA_SLEEP_CTX \
+    -domain PD_A_DMA \
+    -elements {soc_chiplet_top/u_die_a/u_dma} \
+    -retention_power_net VDD_RET \
+    -retention_ground_net VSS
+
+set_retention_control RET_DMA_SLEEP_CTX \
+    -domain PD_A_DMA \
+    -save_signal {soc_chiplet_top/u_pwr_ctrl/save_dma_sleep high} \
+    -restore_signal {soc_chiplet_top/u_pwr_ctrl/restore_dma_sleep high}
+
+# DMA memory arrays are retention-capable. Software-visible valid/invalid bank
+# policy is still governed by the RTL RET_CFG masks and poison model.
+set_retention RET_DMA_MEM_BANKS \
+    -domain PD_A_DMA \
+    -elements {soc_chiplet_top/u_die_a/u_dma} \
+    -retention_power_net VDD_RET \
+    -retention_ground_net VSS
+
+set_retention_control RET_DMA_MEM_BANKS \
+    -domain PD_A_DMA \
+    -save_signal {soc_chiplet_top/u_pwr_ctrl/save_dma_mem high} \
+    -restore_signal {soc_chiplet_top/u_pwr_ctrl/restore_dma_mem high}
+
+# ---------------------------------------------------------------------------
+# Power-state table
+# ---------------------------------------------------------------------------
+
+create_power_state_table CHIPLET_PST \
+    -domains {AON_CHIPLET PD_A_TRAFFIC PD_A_DMA PD_A_LINK PD_B_CRYPTO PD_B_LINK PD_CHANNEL}
+
+add_pst_state CHIPLET_PST RUN \
+    -domain_state {AON_CHIPLET ON PD_A_TRAFFIC ON PD_A_DMA ON PD_A_LINK ON PD_B_CRYPTO ON PD_B_LINK ON PD_CHANNEL ON}
+
+add_pst_state CHIPLET_PST CRYPTO_ONLY \
+    -domain_state {AON_CHIPLET ON PD_A_TRAFFIC OFF PD_A_DMA ON PD_A_LINK ON PD_B_CRYPTO ON PD_B_LINK ON PD_CHANNEL ON}
+
+add_pst_state CHIPLET_PST SLEEP \
+    -domain_state {AON_CHIPLET ON PD_A_TRAFFIC OFF PD_A_DMA RETAIN PD_A_LINK OFF PD_B_CRYPTO OFF PD_B_LINK OFF PD_CHANNEL OFF}
+
+add_pst_state CHIPLET_PST DEEP_SLEEP \
+    -domain_state {AON_CHIPLET ON PD_A_TRAFFIC OFF PD_A_DMA OFF PD_A_LINK OFF PD_B_CRYPTO OFF PD_B_LINK OFF PD_CHANNEL OFF}

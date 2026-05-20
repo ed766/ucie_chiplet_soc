@@ -13,6 +13,7 @@
   "RT_CLOCK_MIN_LAYER": "met2",
   "RT_CLOCK_MAX_LAYER": "met5",
   "VERILOG_FILES": [
+    "dir::../../rtl/power/chiplet_power_ctrl.sv",
     "dir::../../rtl/soc_chiplet_top.sv",
     "dir::../../rtl/soc_die_a_top.sv",
     "dir::../../rtl/soc_die_b_top.sv",

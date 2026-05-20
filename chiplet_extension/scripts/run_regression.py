@@ -33,6 +33,7 @@ REGRESSION_HISTORY = REPORT_ROOT / "regression_history.csv"
 CLOSURE_TARGETS = REPORT_ROOT / "closure_targets.md"
 POWER_SUMMARY = REPORT_ROOT / "power_state_summary.csv"
 COVERAGE_CLOSURE_MATRIX = REPORT_ROOT / "coverage_closure_matrix.md"
+CROSS_COVERAGE_SUMMARY = REPORT_ROOT / "cross_coverage_summary.csv"
 
 VERILATOR_WARNINGS = [
     "-Wno-fatal",
@@ -98,13 +99,19 @@ TEST_SPECS: tuple[TestSpec, ...] = (
     TestSpec("soc_fault_echo", "tb_soc_chiplets", default_enabled=False, suites=("stress",)),
     TestSpec("soc_retry_e2e", "tb_soc_chiplets", default_enabled=False, suites=("stress",)),
     TestSpec("soc_rand_mix", "tb_soc_chiplets", default_enabled=False, randomized=True, suites=("stress",)),
+    TestSpec("random_manifest_scenario", "tb_soc_chiplets", default_enabled=False, max_cycles=32000, ref_words=0, suites=("stress",)),
     TestSpec("power_run_mode", "tb_soc_chiplets", suites=("stable", "power")),
     TestSpec("power_crypto_only", "tb_soc_chiplets", max_cycles=7000, suites=("stable", "power")),
     TestSpec("power_sleep_entry_exit", "tb_soc_chiplets", max_cycles=8000, suites=("stable", "power")),
     TestSpec("power_deep_sleep_recover", "tb_soc_chiplets", max_cycles=9000, suites=("stable", "power")),
+    TestSpec("power_isolation_blocks_tx", "tb_soc_chiplets", max_cycles=9000, suites=("power",)),
+    TestSpec("power_wakeup_releases_isolation_cleanly", "tb_soc_chiplets", max_cycles=10000, suites=("power",)),
+    TestSpec("power_transition_with_link_backpressure", "tb_soc_chiplets", max_cycles=12000, suites=("power", "negative")),
+    TestSpec("power_illegal_access_error_response", "tb_soc_chiplets", max_cycles=10000, ref_words=0, suites=("power", "negative")),
+    TestSpec("power_traffic_cross_test", "tb_soc_chiplets", max_cycles=24000, ref_words=8, suites=("power",)),
     TestSpec("dma_queue_smoke", "tb_soc_chiplets", max_cycles=12000, ref_words=4),
     TestSpec("dma_queue_back_to_back", "tb_soc_chiplets", max_cycles=14000, ref_words=12),
-    TestSpec("dma_queue_full_reject", "tb_soc_chiplets", max_cycles=18000, ref_words=16),
+    TestSpec("dma_queue_full_reject", "tb_soc_chiplets", max_cycles=18000, ref_words=16, suites=("stable", "negative")),
     TestSpec("dma_completion_fifo_drain", "tb_soc_chiplets", max_cycles=18000, ref_words=12),
     TestSpec("dma_irq_masking", "tb_soc_chiplets", max_cycles=14000, ref_words=4),
     TestSpec("dma_odd_len_reject", "tb_soc_chiplets", max_cycles=8000, ref_words=0),
@@ -112,19 +119,23 @@ TEST_SPECS: tuple[TestSpec, ...] = (
     TestSpec("dma_timeout_error", "tb_soc_chiplets", max_cycles=12000, ref_words=0),
     TestSpec("dma_retry_recover_queue", "tb_soc_chiplets", max_cycles=22000, ref_words=8),
     TestSpec("dma_power_sleep_resume_queue", "tb_soc_chiplets", max_cycles=18000, ref_words=8, suites=("stable", "power")),
+    TestSpec("dma_sleep_during_queued_work", "tb_soc_chiplets", max_cycles=18000, ref_words=4, suites=("power",)),
+    TestSpec("dma_sleep_during_active_transfer", "tb_soc_chiplets", max_cycles=20000, ref_words=8, suites=("power",)),
     TestSpec("dma_comp_fifo_full_stall", "tb_soc_chiplets", max_cycles=22000, ref_words=20),
     TestSpec("dma_irq_pending_then_enable", "tb_soc_chiplets", max_cycles=14000, ref_words=4),
-    TestSpec("dma_comp_pop_empty", "tb_soc_chiplets", max_cycles=6000, ref_words=0),
+    TestSpec("dma_comp_pop_empty", "tb_soc_chiplets", max_cycles=6000, ref_words=0, suites=("stable", "negative")),
     TestSpec("dma_reset_mid_queue", "tb_soc_chiplets", max_cycles=12000, ref_words=0),
     TestSpec("dma_tag_reuse", "tb_soc_chiplets", max_cycles=16000, ref_words=8),
     TestSpec("dma_power_state_retention_matrix", "tb_soc_chiplets", max_cycles=18000, ref_words=4, suites=("stable", "power")),
-    TestSpec("dma_crypto_only_submit_blocked", "tb_soc_chiplets", max_cycles=10000, ref_words=0, suites=("stable", "power")),
+    TestSpec("dma_crypto_only_submit_blocked", "tb_soc_chiplets", max_cycles=10000, ref_words=0, suites=("stable", "power", "negative")),
     TestSpec("mem_bank_parallel_service", "tb_soc_chiplets", max_cycles=16000, ref_words=8, suites=("stable", "memory")),
     TestSpec("mem_src_bank_conflict", "tb_soc_chiplets", max_cycles=16000, ref_words=8, suites=("stable", "memory")),
     TestSpec("mem_dst_bank_conflict", "tb_soc_chiplets", max_cycles=18000, ref_words=8, suites=("stable", "memory")),
     TestSpec("mem_read_while_dma", "tb_soc_chiplets", max_cycles=16000, ref_words=8, suites=("stable", "memory")),
-    TestSpec("mem_write_while_dma_reject", "tb_soc_chiplets", max_cycles=16000, ref_words=8, suites=("stable", "memory")),
-    TestSpec("mem_parity_src_detect", "tb_soc_chiplets", max_cycles=12000, ref_words=0, suites=("stable", "memory")),
+    TestSpec("mem_write_while_dma_reject", "tb_soc_chiplets", max_cycles=16000, ref_words=8, suites=("stable", "memory", "negative")),
+    TestSpec("mem_op_start_busy_reject", "tb_soc_chiplets", default_enabled=False, max_cycles=12000, ref_words=0, suites=("negative",)),
+    TestSpec("mem_inject_start_busy_reject", "tb_soc_chiplets", default_enabled=False, max_cycles=12000, ref_words=0, suites=("negative",)),
+    TestSpec("mem_parity_src_detect", "tb_soc_chiplets", max_cycles=12000, ref_words=0, suites=("stable", "memory", "negative")),
     TestSpec("mem_parity_dst_maint_detect", "tb_soc_chiplets", max_cycles=10000, ref_words=0, suites=("stable", "memory")),
     TestSpec("mem_sleep_retained_bank", "tb_soc_chiplets", max_cycles=12000, ref_words=0, suites=("stable", "power", "memory")),
     TestSpec("mem_sleep_nonretained_bank", "tb_soc_chiplets", max_cycles=12000, ref_words=0, suites=("stable", "power", "memory")),
@@ -197,9 +208,21 @@ def bench_binary_name(bench: str) -> str:
     return f"V{bench}"
 
 
-def compile_key(bench: str, defines: tuple[str, ...]) -> str:
+def normalize_params(params: dict[str, int | str] | tuple[tuple[str, int | str], ...] | None) -> tuple[tuple[str, str], ...]:
+    if params is None:
+        return ()
+    if isinstance(params, dict):
+        items = params.items()
+    else:
+        items = params
+    return tuple(sorted((str(key), str(value)) for key, value in items))
+
+
+def compile_key(bench: str, defines: tuple[str, ...], params: tuple[tuple[str, str], ...] = ()) -> str:
     fingerprint = hashlib.sha1()
     fingerprint.update("|".join((bench, *defines)).encode("utf-8"))
+    if params:
+        fingerprint.update("|".join(f"{key}={value}" for key, value in params).encode("utf-8"))
     for source in [*rtl_sources(), *sim_sources()]:
         path = Path(source)
         stat = path.stat()
@@ -210,11 +233,17 @@ def compile_key(bench: str, defines: tuple[str, ...]) -> str:
     return f"{bench}_{digest}"
 
 
-def compile_binary(verilator: str, bench: str, defines: tuple[str, ...]) -> tuple[Path, Path]:
+def compile_binary(
+    verilator: str,
+    bench: str,
+    defines: tuple[str, ...],
+    params: dict[str, int | str] | tuple[tuple[str, int | str], ...] | None = None,
+) -> tuple[Path, Path]:
     BUILD_ROOT.mkdir(parents=True, exist_ok=True)
     LOG_ROOT.mkdir(parents=True, exist_ok=True)
 
-    key = compile_key(bench, defines)
+    normalized_params = normalize_params(params)
+    key = compile_key(bench, defines, normalized_params)
     build_dir = BUILD_ROOT / key
     build_dir.mkdir(parents=True, exist_ok=True)
     binary = build_dir / bench_binary_name(bench)
@@ -228,6 +257,7 @@ def compile_binary(verilator: str, bench: str, defines: tuple[str, ...]) -> tupl
         "-Wall",
         *VERILATOR_WARNINGS,
         *[f"-D{define}" for define in defines],
+        *[f"-G{param}={value}" for param, value in normalized_params],
         "--top-module",
         bench,
         f"-I{SIM_DIR}",
@@ -261,6 +291,10 @@ def pick_specs(args: argparse.Namespace) -> list[TestSpec]:
             continue
         if args.suite == "stable":
             if spec.default_enabled and args.suite in spec.suites:
+                selected.append(spec)
+            continue
+        if args.suite == "closure":
+            if (spec.default_enabled and "stable" in spec.suites) or ("power" in spec.suites):
                 selected.append(spec)
             continue
         if args.suite in spec.suites:
@@ -323,11 +357,49 @@ def write_manifest(rows: list[dict[str, str]]) -> None:
         writer.writerows(rows)
 
 
+@dataclass(frozen=True)
+class ReportPaths:
+    summary: Path
+    coverage: Path
+    failure_buckets: Path
+    top_failures: Path
+    dashboard: Path
+    history: Path
+    closure_targets: Path
+    power: Path
+    closure_matrix: Path
+
+
+def report_paths(prefix: str) -> ReportPaths:
+    stem = f"{prefix.strip()}_" if prefix.strip() else ""
+    return ReportPaths(
+        summary=REPORT_ROOT / f"{stem}regress_summary.csv",
+        coverage=REPORT_ROOT / f"{stem}coverage_summary.csv",
+        failure_buckets=REPORT_ROOT / f"{stem}failure_buckets.csv",
+        top_failures=REPORT_ROOT / f"{stem}top_failures.md",
+        dashboard=REPORT_ROOT / f"{stem}verification_dashboard.md",
+        history=REPORT_ROOT / f"{stem}regression_history.csv",
+        closure_targets=REPORT_ROOT / f"{stem}closure_targets.md",
+        power=REPORT_ROOT / f"{stem}power_state_summary.csv",
+        closure_matrix=REPORT_ROOT / f"{stem}coverage_closure_matrix.md",
+    )
+
+
 def load_csv_rows(path: Path) -> list[dict[str, str]]:
     if not path.exists():
         return []
     with path.open(newline="") as handle:
         return list(csv.DictReader(handle))
+
+
+def plusarg_map(plusargs: Iterable[str]) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for item in plusargs:
+        if "=" not in item:
+            continue
+        key, value = item.split("=", 1)
+        values[key] = value
+    return values
 
 
 def write_regression_history(summary_path: Path, coverage_path: Path, output_path: Path) -> None:
@@ -424,23 +496,28 @@ def run_suite(args: argparse.Namespace) -> int:
     LOG_ROOT.mkdir(parents=True, exist_ok=True)
     REFERENCE_ROOT.mkdir(parents=True, exist_ok=True)
     (BUILD_ROOT / "artifacts").mkdir(parents=True, exist_ok=True)
+    paths = report_paths(args.report_prefix)
+    run_id_prefix = args.run_id_prefix.strip()
 
     binaries: dict[tuple[str, tuple[str, ...]], tuple[Path, Path]] = {}
     manifest_rows: list[dict[str, str]] = []
 
     for run in expand_runs(specs, args.seed, args.random_seeds):
+        output_run_id = f"{run_id_prefix}_{run.run_id}" if run_id_prefix else run.run_id
+        run_plusargs = [*run.plusargs, *args.plusarg]
+        runtime_arg_map = plusarg_map(run_plusargs)
         key = (run.bench, run.defines)
         if key not in binaries:
             binaries[key] = compile_binary(args.verilator, run.bench, run.defines)
         binary, compile_log = binaries[key]
 
-        cov_csv = REPORT_ROOT / f"{run.run_id}_coverage.csv"
-        score_csv = REPORT_ROOT / f"{run.run_id}_scoreboard.csv"
-        power_csv = REPORT_ROOT / f"{run.run_id}_power.csv"
-        ref_csv = REFERENCE_ROOT / f"{run.run_id}_expected.csv"
+        cov_csv = REPORT_ROOT / f"{output_run_id}_coverage.csv"
+        score_csv = REPORT_ROOT / f"{output_run_id}_scoreboard.csv"
+        power_csv = REPORT_ROOT / f"{output_run_id}_power.csv"
+        ref_csv = REFERENCE_ROOT / f"{output_run_id}_expected.csv"
         ref_csv_str = ""
         power_csv_str = ""
-        log_path = LOG_ROOT / f"{run.run_id}.log"
+        log_path = LOG_ROOT / f"{output_run_id}.log"
         plusargs = [
             f"+TEST={run.test}",
             f"+SEED={run.seed}",
@@ -459,6 +536,20 @@ def run_suite(args: argparse.Namespace) -> int:
                 "--words",
                 str(run.ref_words),
             ]
+            dynamic_ref_options = {
+                "DMA_SRC_BASE": "--dma-src-base",
+                "DMA_DST_BASE": "--dma-dst-base",
+                "DMA_LEN_WORDS": "--dma-len-words",
+                "DMA_TAG": "--dma-tag",
+                "DMA2_SRC_BASE": "--dma2-src-base",
+                "DMA2_DST_BASE": "--dma2-dst-base",
+                "DMA2_LEN_WORDS": "--dma2-len-words",
+                "DMA2_TAG": "--dma2-tag",
+                "QUEUE_PRESSURE": "--queue-pressure",
+            }
+            for plusarg_name, option_name in dynamic_ref_options.items():
+                if plusarg_name in runtime_arg_map:
+                    ref_cmd.extend([option_name, runtime_arg_map[plusarg_name]])
             subprocess.run(ref_cmd, cwd=ROOT, check=True)
             plusargs.append(f"+REF_CSV={ref_csv}")
             plusargs.append(f"+POWER_OUT={power_csv}")
@@ -466,7 +557,7 @@ def run_suite(args: argparse.Namespace) -> int:
             power_csv_str = str(power_csv)
         if run.bug_mode != "none":
             plusargs.append(f"+BUG_MODE={run.bug_mode}")
-        plusargs.extend(f"+{arg}" for arg in run.plusargs)
+        plusargs.extend(f"+{arg}" for arg in run_plusargs)
 
         cmd = [str(binary), *plusargs]
         start = time.time()
@@ -483,7 +574,7 @@ def run_suite(args: argparse.Namespace) -> int:
 
         manifest_rows.append(
             {
-                "run_id": run.run_id,
+                "run_id": output_run_id,
                 "test": run.test,
                 "bench": run.bench,
                 "seed": str(run.seed),
@@ -511,79 +602,89 @@ def run_suite(args: argparse.Namespace) -> int:
         "--manifest",
         str(MANIFEST_PATH),
         "--output",
-        str(REGRESS_SUMMARY),
+        str(paths.summary),
     ]
     coverage_cmd = [
         sys.executable,
         str(ROOT / "scripts" / "gen_coverage_report.py"),
         "--summary",
-        str(REGRESS_SUMMARY),
+        str(paths.summary),
         "--output",
-        str(COVERAGE_SUMMARY),
+        str(paths.coverage),
     ]
     power_cmd = [
         sys.executable,
         str(ROOT / "scripts" / "gen_power_report.py"),
         "--summary",
-        str(REGRESS_SUMMARY),
+        str(paths.summary),
         "--output",
-        str(POWER_SUMMARY),
+        str(paths.power),
     ]
     failure_cmd = [
         sys.executable,
         str(ROOT / "scripts" / "gen_failure_summary.py"),
         "--summary",
-        str(REGRESS_SUMMARY),
+        str(paths.summary),
         "--coverage",
-        str(COVERAGE_SUMMARY),
+        str(paths.coverage),
         "--power-summary",
-        str(POWER_SUMMARY),
+        str(paths.power),
         "--failure-csv",
-        str(FAILURE_BUCKETS),
+        str(paths.failure_buckets),
         "--top-failures",
-        str(TOP_FAILURES),
+        str(paths.top_failures),
         "--dashboard",
-        str(VERIFICATION_DASHBOARD),
+        str(paths.dashboard),
     ]
     for cmd in (parser_cmd, coverage_cmd, power_cmd, failure_cmd):
         subprocess.run(cmd, cwd=ROOT, check=True)
 
-    if not args.tests and args.suite == "stable":
-        write_regression_history(REGRESS_SUMMARY, COVERAGE_SUMMARY, REGRESSION_HISTORY)
-        write_closure_targets(REGRESS_SUMMARY, COVERAGE_SUMMARY, CLOSURE_TARGETS)
+    if not args.tests and args.suite in {"stable", "closure"} and not args.report_prefix:
+        write_regression_history(paths.summary, paths.coverage, paths.history)
+        write_closure_targets(paths.summary, paths.coverage, paths.closure_targets)
         subprocess.run(
             [
                 sys.executable,
                 str(ROOT / "scripts" / "gen_coverage_closure.py"),
                 "--coverage",
-                str(COVERAGE_SUMMARY),
+                str(paths.coverage),
                 "--history",
-                str(REGRESSION_HISTORY),
+                str(paths.history),
                 "--output",
-                str(COVERAGE_CLOSURE_MATRIX),
+                str(paths.closure_matrix),
+                "--cross-output",
+                str(REPORT_ROOT / (f"{args.report_prefix.strip()}_cross_coverage_summary.csv" if args.report_prefix.strip() else "cross_coverage_summary.csv")),
             ],
             cwd=ROOT,
             check=True,
         )
 
-    print(f"Regression summary: {REGRESS_SUMMARY}")
-    print(f"Coverage summary:   {COVERAGE_SUMMARY}")
-    print(f"Failure buckets:    {FAILURE_BUCKETS}")
-    print(f"Dashboard:          {VERIFICATION_DASHBOARD}")
-    print(f"Power summary:      {POWER_SUMMARY}")
-    print(f"Trend history:      {REGRESSION_HISTORY}")
-    print(f"Closure targets:    {CLOSURE_TARGETS}")
-    print(f"Closure matrix:     {COVERAGE_CLOSURE_MATRIX}")
+    print(f"Regression summary: {paths.summary}")
+    print(f"Coverage summary:   {paths.coverage}")
+    print(f"Failure buckets:    {paths.failure_buckets}")
+    print(f"Dashboard:          {paths.dashboard}")
+    print(f"Power summary:      {paths.power}")
+    print(f"Trend history:      {paths.history}")
+    print(f"Closure targets:    {paths.closure_targets}")
+    print(f"Closure matrix:     {paths.closure_matrix}")
     return 0
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the Verilator DV regression for the UCIe chiplet benches.")
-    parser.add_argument("--suite", default="stable", choices=["stable", "stress", "bug", "power"], help="Named regression suite.")
+    parser.add_argument("--suite", default="stable", choices=["stable", "stress", "bug", "power", "closure", "negative"], help="Named regression suite.")
     parser.add_argument("--tests", default="", help="Comma-separated explicit test list. Overrides --suite.")
     parser.add_argument("--random-seeds", type=int, default=3, help="Seeds to sweep for randomized named tests.")
     parser.add_argument("--seed", type=int, default=20260329, help="Master regression seed.")
     parser.add_argument("--verilator", default=os.environ.get("VERILATOR", "verilator"), help="Verilator executable.")
+    parser.add_argument("--report-prefix", default="", help="Prefix aggregate report filenames, e.g. smoke or uvm.")
+    parser.add_argument("--run-id-prefix", default="", help="Prefix per-run artifact IDs to avoid clobbering closure artifacts.")
+    parser.add_argument(
+        "--plusarg",
+        action="append",
+        default=[],
+        help="Additional runtime plusarg without leading '+'. May be repeated.",
+    )
     return parser.parse_args()
 
 

@@ -4,6 +4,10 @@ The project uses injected failures to prove that the checkers are real. These
 case studies are the easiest way to explain the value of the DV environment in
 an interview or on a project page.
 
+For the interview-facing bug diary, see `docs/bug_diary.md`. For the exact
+field-by-field regression diary tied to implemented bug modes, see
+`docs/bug_validation_cases.md`.
+
 ```mermaid
 flowchart LR
     A["Named test or bug mode"] --> B["DUT behavior"]

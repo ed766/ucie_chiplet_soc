@@ -76,6 +76,24 @@ package soc_tests_pkg;
                 cfg.link.training_hold_start = 0;
                 cfg.link.training_hold_cycles = 0;
             end
+            "random_manifest_scenario": begin
+                cfg.scenario_kind = "random_manifest";
+                cfg.randomized = 1'b1;
+                cfg.use_dma = 1'b1;
+                cfg.ref_words = 0;
+                cfg.max_cycles = 32000;
+                cfg.dma_src_base = 8;
+                cfg.dma_dst_base = 128;
+                cfg.dma_len_words = 4;
+                cfg.dma_tag = 16'h5100;
+                cfg.dma_second_src_base = 40;
+                cfg.dma_second_dst_base = 160;
+                cfg.dma_second_len_words = 4;
+                cfg.dma_second_tag = 16'h5101;
+                cfg.link.enable_backpressure = 1'b1;
+                cfg.link.backpressure_modulus = 8;
+                cfg.link.backpressure_hold_cycles = 1;
+            end
             "power_run_mode": begin
                 cfg.scenario_kind = "power_proxy";
                 cfg.target_cipher_updates = 8;
@@ -109,6 +127,67 @@ package soc_tests_pkg;
                 cfg.power_event_cycles = 16;
                 cfg.power_recovery_cycles = 40;
                 cfg.max_cycles = 9000;
+            end
+            "power_isolation_blocks_tx": begin
+                cfg.scenario_kind = "power_proxy";
+                cfg.target_cipher_updates = 8;
+                cfg.power_mode = "sleep";
+                cfg.link.enable_backpressure = 1'b0;
+                cfg.power_event_start = 48;
+                cfg.power_event_cycles = 24;
+                cfg.power_recovery_cycles = 40;
+                cfg.max_cycles = 9000;
+            end
+            "power_wakeup_releases_isolation_cleanly": begin
+                cfg.scenario_kind = "power_proxy";
+                cfg.target_cipher_updates = 10;
+                cfg.power_mode = "sleep";
+                cfg.link.enable_backpressure = 1'b0;
+                cfg.power_event_start = 80;
+                cfg.power_event_cycles = 12;
+                cfg.power_recovery_cycles = 48;
+                cfg.max_cycles = 10000;
+            end
+            "power_transition_with_link_backpressure": begin
+                cfg.scenario_kind = "power_proxy";
+                cfg.target_cipher_updates = 10;
+                cfg.power_mode = "sleep";
+                cfg.link.enable_backpressure = 1'b1;
+                cfg.link.backpressure_modulus = 4;
+                cfg.link.backpressure_hold_cycles = 3;
+                cfg.power_event_start = 96;
+                cfg.power_event_cycles = 16;
+                cfg.power_recovery_cycles = 48;
+                cfg.max_cycles = 12000;
+            end
+            "power_illegal_access_error_response": begin
+                cfg.scenario_kind = "dma_power";
+                cfg.use_dma = 1'b1;
+                cfg.ref_words = 0;
+                cfg.max_cycles = 10000;
+            end
+            "power_traffic_cross_test": begin
+                cfg.scenario_kind = "dma_power";
+                cfg.use_dma = 1'b1;
+                cfg.ref_words = 8;
+                cfg.max_cycles = 24000;
+                cfg.dma_src_base = 100;
+                cfg.dma_dst_base = 180;
+                cfg.dma_len_words = 4;
+                cfg.dma_tag = 16'h2c00;
+                cfg.dma_second_src_base = 104;
+                cfg.dma_second_dst_base = 184;
+                cfg.dma_second_len_words = 4;
+                cfg.dma_second_tag = 16'h2c01;
+                cfg.link.enable_backpressure = 1'b1;
+                cfg.link.backpressure_modulus = 3;
+                cfg.link.backpressure_hold_cycles = 4;
+                cfg.link.enable_fault_echo = 1'b1;
+                cfg.link.enable_lane_fault_window = 1'b1;
+                cfg.link.lane_fault_start = 64;
+                cfg.link.lane_fault_cycles = 3;
+                cfg.link.training_hold_start = 64;
+                cfg.link.training_hold_cycles = 24;
             end
             "dma_queue_smoke": begin
                 cfg.scenario_kind = "dma";
@@ -224,6 +303,18 @@ package soc_tests_pkg;
                 cfg.power_recovery_cycles = 40;
                 cfg.link.enable_backpressure = 1'b0;
             end
+            "dma_sleep_during_queued_work": begin
+                cfg.scenario_kind = "dma_power";
+                cfg.use_dma = 1'b1;
+                cfg.ref_words = 4;
+                cfg.max_cycles = 18000;
+            end
+            "dma_sleep_during_active_transfer": begin
+                cfg.scenario_kind = "dma_power";
+                cfg.use_dma = 1'b1;
+                cfg.ref_words = 8;
+                cfg.max_cycles = 20000;
+            end
             "dma_comp_fifo_full_stall": begin
                 cfg.scenario_kind = "dma";
                 cfg.use_dma = 1'b1;
@@ -296,6 +387,18 @@ package soc_tests_pkg;
                 cfg.ref_words = 8;
                 cfg.max_cycles = 16000;
             end
+            "mem_op_start_busy_reject": begin
+                cfg.scenario_kind = "dma_mem";
+                cfg.use_dma = 1'b1;
+                cfg.ref_words = 0;
+                cfg.max_cycles = 12000;
+            end
+            "mem_inject_start_busy_reject": begin
+                cfg.scenario_kind = "dma_mem";
+                cfg.use_dma = 1'b1;
+                cfg.ref_words = 0;
+                cfg.max_cycles = 12000;
+            end
             "mem_parity_src_detect": begin
                 cfg.scenario_kind = "dma_mem";
                 cfg.use_dma = 1'b1;
@@ -343,6 +446,36 @@ package soc_tests_pkg;
                 cfg.use_dma = 1'b1;
                 cfg.ref_words = 0;
                 cfg.max_cycles = 12000;
+            end
+            "char_dma_nominal_stream": begin
+                cfg.scenario_kind = "dma_mem_char";
+                cfg.use_dma = 1'b1;
+                cfg.ref_words = 0;
+                cfg.max_cycles = 20000;
+            end
+            "char_dma_back_to_back": begin
+                cfg.scenario_kind = "dma_mem_char";
+                cfg.use_dma = 1'b1;
+                cfg.ref_words = 0;
+                cfg.max_cycles = 30000;
+            end
+            "char_mem_conflict_light": begin
+                cfg.scenario_kind = "dma_mem_char";
+                cfg.use_dma = 1'b1;
+                cfg.ref_words = 0;
+                cfg.max_cycles = 24000;
+            end
+            "char_mem_conflict_heavy": begin
+                cfg.scenario_kind = "dma_mem_char";
+                cfg.use_dma = 1'b1;
+                cfg.ref_words = 0;
+                cfg.max_cycles = 28000;
+            end
+            "char_invalid_memory_recovery": begin
+                cfg.scenario_kind = "dma_mem_char";
+                cfg.use_dma = 1'b1;
+                cfg.ref_words = 0;
+                cfg.max_cycles = 24000;
             end
             "dma_bug_done_early": begin
                 cfg.scenario_kind = "dma_bug";

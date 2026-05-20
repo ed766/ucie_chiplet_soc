@@ -1,4 +1,5 @@
 `timescale 1ns/1ps
+`include "chiplet_protocol_assertions.svh"
 
 module tb_ucie_tx_retry_props;
 
@@ -48,18 +49,36 @@ module tb_ucie_tx_retry_props;
 
     always #5 clk = ~clk;
 
-    property p_retry_replays_last_flit;
-        @(posedge clk) disable iff (!rst_n) debug_resend_fire |-> (debug_send_flit == dut.last_flit_q);
-    endproperty
-
-    assert property (p_retry_replays_last_flit);
+    `CHIPLET_ASSERT_RETRY_REPLAYS_LAST(
+        p_retry_replays_last_flit,
+        clk,
+        rst_n,
+        debug_resend_fire,
+        debug_send_flit,
+        dut.last_flit_q
+    )
+    `CHIPLET_ASSERT_STABLE_WHILE_BACKPRESSURED(
+        p_flit_stable_under_backpressure,
+        clk,
+        rst_n,
+        flit_valid,
+        flit_ready || dut.sending_q,
+        flit_in
+    )
+    `CHIPLET_ASSERT_RETRY_BLOCKS_NEW_RETIRE(
+        p_retry_blocks_new_flit_before_replay,
+        clk,
+        rst_n,
+        resend_request && !debug_resend_fire,
+        debug_send_fire && (debug_send_flit != dut.last_flit_q)
+    )
 
     initial begin
         clk = 1'b0;
         rst_n = 1'b0;
         flit_in = 16'hbabe;
         flit_valid = 1'b0;
-        link_ready = 1'b1;
+        link_ready = 1'b0;
         resend_request = 1'b0;
         available_credits = 16'd8;
         have_first_q = 1'b0;
@@ -68,6 +87,8 @@ module tb_ucie_tx_retry_props;
         rst_n = 1'b1;
 
         flit_valid = 1'b1;
+        repeat (3) @(posedge clk);
+        link_ready = 1'b1;
         wait (debug_send_fire);
         first_flit_q = debug_send_flit;
         have_first_q = 1'b1;

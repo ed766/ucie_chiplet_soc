@@ -3,7 +3,12 @@
 module soc_chiplet_top #(
     parameter int DATA_WIDTH = 64,
     parameter int FLIT_WIDTH = 264,
-    parameter int LANES = 16
+    parameter int LANES = 16,
+    parameter int DMA_SUBMIT_QUEUE_DEPTH = 4,
+    parameter int DMA_COMP_QUEUE_DEPTH = 4,
+    parameter int DMA_BANKS = 2,
+    parameter bit DMA_PARITY_ENABLE = 1'b1,
+    parameter int DMA_TIMEOUT_CYCLES = 1024
 ) (
     input  logic                   clk,
     input  logic                   rst_n,
@@ -46,11 +51,56 @@ module soc_chiplet_top #(
     logic             lane_die_b_rx_valid;
     logic             lane_die_b_lane_fault;
 
+    // UPF-visible internal power-control sidebands derived from power_state.
+    logic sw_pd_a_traffic;
+    logic sw_pd_a_dma;
+    logic sw_pd_a_link;
+    logic sw_pd_b_crypto;
+    logic sw_pd_b_link;
+    logic sw_pd_channel;
+    logic iso_pd_a_traffic_n;
+    logic iso_pd_a_dma_n;
+    logic iso_pd_a_link_n;
+    logic iso_pd_b_crypto_n;
+    logic iso_pd_b_link_n;
+    logic iso_pd_channel_n;
+    logic save_dma_sleep;
+    logic restore_dma_sleep;
+    logic save_dma_mem;
+    logic restore_dma_mem;
+
+    chiplet_power_ctrl u_pwr_ctrl (
+        .clk               (clk),
+        .rst_n             (rst_n),
+        .power_state       (power_state),
+        .sw_pd_a_traffic   (sw_pd_a_traffic),
+        .sw_pd_a_dma       (sw_pd_a_dma),
+        .sw_pd_a_link      (sw_pd_a_link),
+        .sw_pd_b_crypto    (sw_pd_b_crypto),
+        .sw_pd_b_link      (sw_pd_b_link),
+        .sw_pd_channel     (sw_pd_channel),
+        .iso_pd_a_traffic_n(iso_pd_a_traffic_n),
+        .iso_pd_a_dma_n    (iso_pd_a_dma_n),
+        .iso_pd_a_link_n   (iso_pd_a_link_n),
+        .iso_pd_b_crypto_n (iso_pd_b_crypto_n),
+        .iso_pd_b_link_n   (iso_pd_b_link_n),
+        .iso_pd_channel_n  (iso_pd_channel_n),
+        .save_dma_sleep    (save_dma_sleep),
+        .restore_dma_sleep (restore_dma_sleep),
+        .save_dma_mem      (save_dma_mem),
+        .restore_dma_mem   (restore_dma_mem)
+    );
+
     // Die A produces plaintext and checks returned ciphertext.
     soc_die_a_top #(
         .DATA_WIDTH(DATA_WIDTH),
         .FLIT_WIDTH(FLIT_WIDTH),
-        .LANES     (LANES)
+        .LANES     (LANES),
+        .DMA_SUBMIT_QUEUE_DEPTH(DMA_SUBMIT_QUEUE_DEPTH),
+        .DMA_COMP_QUEUE_DEPTH(DMA_COMP_QUEUE_DEPTH),
+        .DMA_BANKS(DMA_BANKS),
+        .DMA_PARITY_ENABLE(DMA_PARITY_ENABLE),
+        .DMA_TIMEOUT_CYCLES(DMA_TIMEOUT_CYCLES)
     ) u_die_a (
         .clk                 (clk),
         .rst_n               (rst_n),

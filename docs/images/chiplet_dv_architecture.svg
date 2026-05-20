@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="360" viewBox="0 0 1280 360" role="img" aria-labelledby="title desc">
+  <title id="title">UCIe chiplet DV architecture</title>
+  <desc id="desc">Die A RV32 and DMA send traffic through packetizer and UCIe-style link to Die B AES service, with return path monitored by scoreboards and coverage collectors.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#264653"/>
+    </marker>
+    <linearGradient id="dieA" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#e9f5f2"/>
+      <stop offset="1" stop-color="#cfe7df"/>
+    </linearGradient>
+    <linearGradient id="link" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#f6f1df"/>
+      <stop offset="1" stop-color="#eadcae"/>
+    </linearGradient>
+    <linearGradient id="dieB" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#edf0fb"/>
+      <stop offset="1" stop-color="#d1d8f0"/>
+    </linearGradient>
+    <linearGradient id="dv" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#f3f4f6"/>
+      <stop offset="1" stop-color="#dfe4ea"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="360" fill="#fbfcfd"/>
+  <text x="56" y="54" fill="#1f2933" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700">UCIe Chiplet Verification Architecture</text>
+  <text x="56" y="84" fill="#52616b" font-family="Arial, Helvetica, sans-serif" font-size="15">Directed/random stimulus, fault injection, scoreboards, coverage, low-power proxy checks, and UVM/non-UVM closure equivalence</text>
+
+  <g font-family="Arial, Helvetica, sans-serif">
+    <rect x="56" y="128" width="230" height="112" rx="8" fill="url(#dieA)" stroke="#2a9d8f" stroke-width="2"/>
+    <text x="82" y="162" fill="#12342f" font-size="20" font-weight="700">Die A</text>
+    <text x="82" y="190" fill="#1f403b" font-size="15">RV32 traffic source</text>
+    <text x="82" y="214" fill="#1f403b" font-size="15">Queued DMA + banked memory</text>
+
+    <rect x="326" y="128" width="180" height="112" rx="8" fill="url(#link)" stroke="#b08900" stroke-width="2"/>
+    <text x="352" y="162" fill="#493b00" font-size="20" font-weight="700">Packetizer</text>
+    <text x="352" y="190" fill="#594900" font-size="15">FLIT framing</text>
+    <text x="352" y="214" fill="#594900" font-size="15">credits + CRC</text>
+
+    <rect x="546" y="128" width="190" height="112" rx="8" fill="url(#link)" stroke="#b08900" stroke-width="2"/>
+    <text x="572" y="162" fill="#493b00" font-size="20" font-weight="700">UCIe-Style Link</text>
+    <text x="572" y="190" fill="#594900" font-size="15">retry + backpressure</text>
+    <text x="572" y="214" fill="#594900" font-size="15">latency/fault model</text>
+
+    <rect x="776" y="128" width="210" height="112" rx="8" fill="url(#dieB)" stroke="#5b6fc4" stroke-width="2"/>
+    <text x="802" y="162" fill="#28315c" font-size="20" font-weight="700">Die B</text>
+    <text x="802" y="190" fill="#303b6b" font-size="15">AES-128 service</text>
+    <text x="802" y="214" fill="#303b6b" font-size="15">ciphertext return path</text>
+
+    <rect x="1026" y="128" width="198" height="112" rx="8" fill="url(#dv)" stroke="#52616b" stroke-width="2"/>
+    <text x="1052" y="162" fill="#1f2933" font-size="20" font-weight="700">DV Closure</text>
+    <text x="1052" y="190" fill="#35424c" font-size="15">scoreboards + monitors</text>
+    <text x="1052" y="214" fill="#35424c" font-size="15">coverage + bug buckets</text>
+  </g>
+
+  <g fill="none" stroke="#264653" stroke-width="3" marker-end="url(#arrow)">
+    <path d="M286 184 H326"/>
+    <path d="M506 184 H546"/>
+    <path d="M736 184 H776"/>
+    <path d="M986 184 H1026"/>
+  </g>
+  <path d="M900 250 C860 306 460 306 380 250" fill="none" stroke="#5b6fc4" stroke-width="3" marker-end="url(#arrow)"/>
+  <text x="518" y="324" fill="#303b6b" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700">Return path checked against AES reference model and memory scoreboards</text>
+</svg>

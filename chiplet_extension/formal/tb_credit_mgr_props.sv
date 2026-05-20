@@ -1,4 +1,5 @@
 `timescale 1ns/1ps
+`include "chiplet_protocol_assertions.svh"
 
 module tb_credit_mgr_props;
 
@@ -27,11 +28,7 @@ module tb_credit_mgr_props;
 
     always #5 clk = ~clk;
 
-    property p_credit_bound;
-        @(posedge clk) rst_n |-> (credit_available <= 16);
-    endproperty
-
-    assert property (p_credit_bound);
+    `CHIPLET_ASSERT_CREDIT_BOUNDED(p_credit_bound, clk, rst_n, credit_available, 16)
 
     initial begin
         clk = 1'b0;

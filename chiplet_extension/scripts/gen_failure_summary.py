@@ -275,10 +275,18 @@ def main() -> int:
     if power_overall is not None:
         dashboard_lines.append(f"| States visited | {power_overall['states_visited']} |")
         dashboard_lines.append(f"| Transitions visited | {power_overall['transitions_visited']} |")
+        dashboard_lines.append(f"| PST domain combos visited | {power_overall.get('domain_combos_visited', '0/4')} |")
+        dashboard_lines.append(f"| Isolation bins visited | {power_overall.get('isolation_bins_visited', '0/4')} |")
+        dashboard_lines.append(f"| Retention bins visited | {power_overall.get('retention_bins_visited', '0/4')} |")
+        dashboard_lines.append(f"| Transition/activity bins visited | {power_overall.get('activity_cross_bins_visited', '0/5')} |")
         dashboard_lines.append(f"| Power tests meeting expectation | {power_overall['meets_expectation']}/{len(power_tests)} |")
     else:
         dashboard_lines.append("| States visited | 0/4 |")
         dashboard_lines.append("| Transitions visited | 0/6 |")
+        dashboard_lines.append("| PST domain combos visited | 0/4 |")
+        dashboard_lines.append("| Isolation bins visited | 0/4 |")
+        dashboard_lines.append("| Retention bins visited | 0/4 |")
+        dashboard_lines.append("| Transition/activity bins visited | 0/5 |")
         dashboard_lines.append("| Power tests meeting expectation | 0/0 |")
 
     dashboard_lines.extend(

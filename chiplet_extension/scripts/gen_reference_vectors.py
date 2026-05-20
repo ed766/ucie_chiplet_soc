@@ -9,8 +9,17 @@ from pathlib import Path
 
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
+from dma_golden_model import (
+    AES_KEY,
+    DMA_DESCRIPTOR_PLANS,
+    DmaDescriptor,
+    build_dma_golden,
+    build_dma_golden_from_descriptors,
+    write_debug_traces,
+    write_destination_image,
+)
 
-AES_KEY = bytes.fromhex("00112233445566778899aabbccddeeff")
+
 WRONG_KEY = bytes(16)
 WORDS_PER_BLOCK = 2
 DMA_SOURCE_PREFIX = 0x1000_0000_0000_0000
@@ -50,55 +59,30 @@ def legacy_reference_words(test_name: str, total_words: int) -> list[int]:
 
 
 def dma_image_for_test(test_name: str) -> dict[int, int]:
-    plans: dict[str, list[tuple[int, int, int]]] = {
-        "dma_queue_smoke": [(8, 32, 4)],
-        "dma_queue_back_to_back": [(8, 32, 4), (16, 40, 8)],
-        "dma_queue_full_reject": [(8, 64, 4), (12, 68, 4), (16, 72, 4), (20, 76, 4)],
-        "dma_completion_fifo_drain": [(96, 144, 4), (100, 148, 4), (104, 152, 4)],
-        "dma_irq_masking": [(24, 56, 4)],
-        "dma_odd_len_reject": [],
-        "dma_range_reject": [],
-        "dma_timeout_error": [],
-        "dma_retry_recover_queue": [(64, 96, 4), (80, 112, 4)],
-        "dma_power_sleep_resume_queue": [(72, 112, 8)],
-        "dma_comp_fifo_full_stall": [(120, 160, 4), (124, 164, 4), (128, 168, 4), (132, 172, 4), (136, 176, 4)],
-        "dma_irq_pending_then_enable": [(140, 196, 4)],
-        "dma_comp_pop_empty": [],
-        "dma_reset_mid_queue": [],
-        "dma_tag_reuse": [(20, 80, 4), (24, 84, 4)],
-        "dma_power_state_retention_matrix": [(32, 88, 4)],
-        "dma_crypto_only_submit_blocked": [],
-        "mem_bank_parallel_service": [(32, 96, 8)],
-        "mem_src_bank_conflict": [(40, 104, 8)],
-        "mem_dst_bank_conflict": [(48, 112, 8)],
-        "mem_read_while_dma": [(56, 120, 8)],
-        "mem_write_while_dma_reject": [(64, 128, 8)],
-        "mem_parity_src_detect": [],
-        "mem_parity_dst_maint_detect": [],
-        "mem_sleep_retained_bank": [],
-        "mem_sleep_nonretained_bank": [],
-        "mem_nonretained_readback_poison_clean": [],
-        "mem_invalid_clear_on_write": [],
-        "mem_deep_sleep_retention_matrix": [],
-        "mem_crypto_only_cfg_access": [],
-        "mem_bug_parity_skip": [],
-        "dma_bug_done_early": [(80, 128, 8)],
-    }
-    if test_name not in plans:
+    if test_name not in DMA_DESCRIPTOR_PLANS:
         raise KeyError(test_name)
+    return dict(build_dma_golden(test_name).destination_image)
 
-    image: dict[int, int] = {}
-    for src_base, dst_base, length in plans[test_name]:
-        block_words: list[int] = []
-        dst_index = dst_base
-        for offset in range(length):
-            block_words.append(dma_source_word(src_base + offset))
-            if len(block_words) == WORDS_PER_BLOCK:
-                for word in encrypt_block(AES_KEY, block_words):
-                    image[dst_index] = word
-                    dst_index += 1
-                block_words = []
-    return image
+
+def dynamic_dma_descriptors(args: argparse.Namespace) -> tuple[DmaDescriptor, ...] | None:
+    if args.dma_src_base < 0 or args.dma_dst_base < 0 or args.dma_len_words <= 0:
+        return None
+    queue_pressure = args.queue_pressure
+    if queue_pressure == "full_queue":
+        return tuple(
+            DmaDescriptor(
+                args.dma_src_base + idx * args.dma_len_words,
+                args.dma_dst_base + idx * args.dma_len_words,
+                args.dma_len_words,
+                0x5100 + idx,
+            )
+            for idx in range(4)
+        )
+    first = DmaDescriptor(args.dma_src_base, args.dma_dst_base, args.dma_len_words, args.dma_tag)
+    if queue_pressure == "pair" and args.dma2_src_base >= 0 and args.dma2_dst_base >= 0 and args.dma2_len_words > 0:
+        second = DmaDescriptor(args.dma2_src_base, args.dma2_dst_base, args.dma2_len_words, args.dma2_tag)
+        return (first, second)
+    return (first,)
 
 
 def write_rows(rows: list[tuple[int, int]], output_path: Path) -> None:
@@ -112,16 +96,46 @@ def write_rows(rows: list[tuple[int, int]], output_path: Path) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Generate expected ciphertext vectors for tb_soc_chiplets.")
-    parser.add_argument("--test", required=True, help="Named SoC test.")
-    parser.add_argument("--output", required=True, help="Destination CSV path.")
+    parser.add_argument("--test", default="", help="Named SoC test.")
+    parser.add_argument("--output", default="", help="Destination CSV path.")
     parser.add_argument("--words", type=int, default=512, help="Number of 64-bit expected words to emit.")
+    parser.add_argument("--trace-dir", default="", help="Optional directory for descriptor/plaintext/ciphertext/packet traces.")
+    parser.add_argument("--selftest", action="store_true", help="Run Python golden-model self-tests and exit.")
+    parser.add_argument("--dma-src-base", type=int, default=-1)
+    parser.add_argument("--dma-dst-base", type=int, default=-1)
+    parser.add_argument("--dma-len-words", type=int, default=-1)
+    parser.add_argument("--dma-tag", type=lambda value: int(value, 0), default=0x5000)
+    parser.add_argument("--dma2-src-base", type=int, default=-1)
+    parser.add_argument("--dma2-dst-base", type=int, default=-1)
+    parser.add_argument("--dma2-len-words", type=int, default=-1)
+    parser.add_argument("--dma2-tag", type=lambda value: int(value, 0), default=0x5001)
+    parser.add_argument("--queue-pressure", choices=("single", "pair", "full_queue"), default="single")
     args = parser.parse_args()
+
+    if args.selftest:
+        import dma_golden_model
+
+        dma_golden_model.selftest()
+        return 0
+
+    if not args.test or not args.output:
+        parser.error("--test and --output are required unless --selftest is used")
 
     output_path = Path(args.output)
 
-    if args.test.startswith(("dma_", "mem_")):
-        image = dma_image_for_test(args.test)
-        write_rows(sorted(image.items()), output_path)
+    dynamic_descriptors = dynamic_dma_descriptors(args)
+    if dynamic_descriptors is not None:
+        result = build_dma_golden_from_descriptors(dynamic_descriptors)
+        write_destination_image(result, output_path)
+        if args.trace_dir:
+            write_debug_traces(result, Path(args.trace_dir), output_path.stem)
+        return 0
+
+    if args.test in DMA_DESCRIPTOR_PLANS:
+        result = build_dma_golden(args.test)
+        write_destination_image(result, output_path)
+        if args.trace_dir:
+            write_debug_traces(result, Path(args.trace_dir), output_path.stem)
         return 0
 
     rows = list(enumerate(legacy_reference_words(args.test, args.words)))
