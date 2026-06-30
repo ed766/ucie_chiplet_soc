@@ -66,6 +66,9 @@ DEEP_SLEEP power-state table. The compatibility files `die_a.upf`,
 - legal versus illegal cross-die activity
 - transition behavior while link backpressure or DMA activity is present
 - recovery back into run mode
+- per-domain switch on/off sequencing
+- per-domain isolation assert/deassert sequencing
+- isolation-before-switch-off and restore-before-de-isolation ordering
 
 ### Functional coverage model
 
@@ -88,6 +91,11 @@ Coverage targets:
 - retention coverpoint: DMA sleep save/restore and DMA memory save/restore
 - activity coverpoint: no traffic, link traffic, DMA queued, DMA active,
   completion/IRQ pending
+- switch-domain coverpoint: on/off observations for each switchable domain
+- isolation-domain coverpoint: assert/deassert observations for each
+  switchable domain
+- sequencing coverpoint: isolation before switch-off, switch-on before
+  restore, restore before de-isolation, and single-cycle retention pulses
 - crosses: state x domain combo, transition x activity, isolation x activity
 
 This is functional proxy coverage. It is intentionally separate from
@@ -105,12 +113,18 @@ functional coverage.
 - `power_transition_with_link_backpressure`
 - `power_illegal_access_error_response`
 - `dma_power_sleep_resume_queue`
+- `power_traffic_cross_test`
+- `power_iso_before_switch_off`
+- `power_restore_before_deiso`
+- `power_domain_sequence_matrix`
+- `power_invalid_transition_clamped`
 - `dma_sleep_during_queued_work`
 - `dma_sleep_during_active_transfer`
 - `dma_power_state_retention_matrix`
 - `dma_crypto_only_submit_blocked`
 - `mem_sleep_retained_bank`
 - `mem_sleep_nonretained_bank`
+- `mem_sleep_dst_nonretained_bank`
 - `mem_nonretained_readback_poison_clean`
 - `mem_invalid_clear_on_write`
 - `mem_deep_sleep_retention_matrix`
@@ -135,18 +149,25 @@ The UPF structure can be checked with:
 
 This target statically checks UPF version, expected domains, power switches,
 output isolation, DMA retention strategies, PST values, and RTL hierarchy /
-control references. It is a repo-local intent sanity check, not a replacement
-for UPF-aware elaboration.
+control references. It also writes:
+
+- `chiplet_extension/reports/upf_intent_summary.md`
+
+This is a repo-local intent sanity check, not a replacement for UPF-aware
+elaboration.
 
 The current checked-in evidence shows:
 
-- `20 / 20` low-power proxy tests meeting expectation
+- `26 / 26` low-power proxy tests meeting expectation
 - all four modeled states visited
 - all six modeled transitions visited
 - all four valid PST domain-combo bins visited
 - all four isolation bins visited
 - all four DMA retention bins visited
 - all five selected transition/activity bins visited
+- all twelve per-domain switch on/off bins visited
+- all twelve per-domain isolation assert/deassert bins visited
+- all four sequencing bins visited with zero sequencing violations
 - queued-DMA sleep/resume completes with IRQ and golden-image compare
 - retained SLEEP behavior and cleared DEEP_SLEEP behavior are both exercised
 - `CRYPTO_ONLY` submission blocking is checked in the DMA-focused

@@ -28,7 +28,11 @@ module tb_power_ctrl_props;
     logic save_dma_mem;
     logic restore_dma_mem;
     logic restore_seen_q;
+    logic restore_any_seen_q;
+    logic sleep_seen_q;
     logic post_sleep_completion_event_q;
+    logic [5:0] sw_vec;
+    logic [5:0] iso_n_vec;
 
     chiplet_power_ctrl dut (
         .clk                 (clk),
@@ -57,27 +61,51 @@ module tb_power_ctrl_props;
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             restore_seen_q <= 1'b0;
+            restore_any_seen_q <= 1'b0;
+            sleep_seen_q <= 1'b0;
         end else if (power_state == PWR_SLEEP) begin
             restore_seen_q <= 1'b0;
+            restore_any_seen_q <= 1'b0;
+            sleep_seen_q <= 1'b1;
+        end else if (power_state == PWR_DEEP_SLEEP) begin
+            restore_any_seen_q <= 1'b0;
         end else if (restore_dma_sleep) begin
             restore_seen_q <= 1'b1;
+            restore_any_seen_q <= 1'b1;
+            sleep_seen_q <= 1'b0;
+        end else if (restore_dma_mem) begin
+            restore_any_seen_q <= 1'b1;
         end
     end
 
-    `CHIPLET_ASSERT_ISO_TRACKS_SWITCH(p_iso_tracks_a_traffic, clk, rst_n, iso_pd_a_traffic_n, sw_pd_a_traffic)
-    `CHIPLET_ASSERT_ISO_TRACKS_SWITCH(p_iso_tracks_a_dma, clk, rst_n, iso_pd_a_dma_n, sw_pd_a_dma)
-    `CHIPLET_ASSERT_ISO_TRACKS_SWITCH(p_iso_tracks_a_link, clk, rst_n, iso_pd_a_link_n, sw_pd_a_link)
-    `CHIPLET_ASSERT_ISO_TRACKS_SWITCH(p_iso_tracks_b_crypto, clk, rst_n, iso_pd_b_crypto_n, sw_pd_b_crypto)
-    `CHIPLET_ASSERT_ISO_TRACKS_SWITCH(p_iso_tracks_b_link, clk, rst_n, iso_pd_b_link_n, sw_pd_b_link)
-    `CHIPLET_ASSERT_ISO_TRACKS_SWITCH(p_iso_tracks_channel, clk, rst_n, iso_pd_channel_n, sw_pd_channel)
-    `CHIPLET_ASSERT_RESTORE_AFTER_SLEEP(
+    assign sw_vec = {
+        sw_pd_a_traffic,
+        sw_pd_a_dma,
+        sw_pd_a_link,
+        sw_pd_b_crypto,
+        sw_pd_b_link,
+        sw_pd_channel
+    };
+    assign iso_n_vec = {
+        iso_pd_a_traffic_n,
+        iso_pd_a_dma_n,
+        iso_pd_a_link_n,
+        iso_pd_b_crypto_n,
+        iso_pd_b_link_n,
+        iso_pd_channel_n
+    };
+
+    `CHIPLET_ASSERT_ISO_SAFE_FOR_SWITCH(p_iso_safe_a_traffic, clk, rst_n, iso_pd_a_traffic_n, sw_pd_a_traffic)
+    `CHIPLET_ASSERT_ISO_SAFE_FOR_SWITCH(p_iso_safe_a_dma, clk, rst_n, iso_pd_a_dma_n, sw_pd_a_dma)
+    `CHIPLET_ASSERT_ISO_SAFE_FOR_SWITCH(p_iso_safe_a_link, clk, rst_n, iso_pd_a_link_n, sw_pd_a_link)
+    `CHIPLET_ASSERT_ISO_SAFE_FOR_SWITCH(p_iso_safe_b_crypto, clk, rst_n, iso_pd_b_crypto_n, sw_pd_b_crypto)
+    `CHIPLET_ASSERT_ISO_SAFE_FOR_SWITCH(p_iso_safe_b_link, clk, rst_n, iso_pd_b_link_n, sw_pd_b_link)
+    `CHIPLET_ASSERT_ISO_SAFE_FOR_SWITCH(p_iso_safe_channel, clk, rst_n, iso_pd_channel_n, sw_pd_channel)
+    `CHIPLET_ASSERT_VALID_PST_COMBO(
         p_sleep_restore_only_after_sleep,
         clk,
         rst_n,
-        restore_dma_sleep,
-        power_state,
-        PWR_SLEEP,
-        PWR_RUN
+        (!restore_dma_sleep || (sleep_seen_q && (power_state == PWR_RUN)))
     )
     `CHIPLET_ASSERT_EVENT_AFTER_RESTORE(
         p_resume_completion_after_restore,
@@ -87,15 +115,34 @@ module tb_power_ctrl_props;
         restore_seen_q
     )
     `CHIPLET_ASSERT_VALID_PST_COMBO(
-        p_valid_pst_combo,
+        p_no_deisolated_off_domain,
         clk,
         rst_n,
-        (((power_state == PWR_RUN) &&
-          sw_pd_a_traffic && sw_pd_a_dma && sw_pd_a_link && sw_pd_b_crypto && sw_pd_b_link && sw_pd_channel) ||
-         ((power_state == PWR_CRYPTO_ONLY) &&
-          !sw_pd_a_traffic && sw_pd_a_dma && sw_pd_a_link && sw_pd_b_crypto && sw_pd_b_link && sw_pd_channel) ||
-         (((power_state == PWR_SLEEP) || (power_state == PWR_DEEP_SLEEP)) &&
-          !sw_pd_a_traffic && !sw_pd_a_dma && !sw_pd_a_link && !sw_pd_b_crypto && !sw_pd_b_link && !sw_pd_channel))
+        ((!iso_pd_a_traffic_n || sw_pd_a_traffic) &&
+         (!iso_pd_a_dma_n || sw_pd_a_dma) &&
+         (!iso_pd_a_link_n || sw_pd_a_link) &&
+         (!iso_pd_b_crypto_n || sw_pd_b_crypto) &&
+         (!iso_pd_b_link_n || sw_pd_b_link) &&
+         (!iso_pd_channel_n || sw_pd_channel))
+    )
+    `CHIPLET_ASSERT_VALID_PST_COMBO(
+        p_iso_before_switch_off,
+        clk,
+        rst_n,
+        (((($past(sw_vec) & ~sw_vec) & iso_n_vec) == 6'b000000))
+    )
+    `CHIPLET_ASSERT_VALID_PST_COMBO(
+        p_switch_on_before_restore,
+        clk,
+        rst_n,
+        (!(restore_dma_sleep || restore_dma_mem) || sw_pd_a_dma)
+    )
+    `CHIPLET_ASSERT_VALID_PST_COMBO(
+        p_restore_before_deiso,
+        clk,
+        rst_n,
+        (!(!$past(iso_pd_a_dma_n) && iso_pd_a_dma_n) ||
+         restore_any_seen_q || restore_dma_sleep || restore_dma_mem)
     )
 
     initial begin
@@ -116,13 +163,13 @@ module tb_power_ctrl_props;
 
         @(negedge clk);
         power_state = PWR_CRYPTO_ONLY;
-        @(posedge clk);
+        repeat (3) @(posedge clk);
         #1;
         assert (!sw_pd_a_traffic && sw_pd_a_dma && sw_pd_b_crypto);
 
         @(negedge clk);
         power_state = PWR_RUN;
-        @(posedge clk);
+        repeat (3) @(posedge clk);
         @(negedge clk);
         power_state = PWR_SLEEP;
         saw_save = 1'b0;

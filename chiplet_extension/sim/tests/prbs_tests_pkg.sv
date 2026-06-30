@@ -152,6 +152,15 @@ package prbs_tests_pkg;
                 cfg.link.backpressure_hold_cycles = 1;
                 cfg.link.gap_ceiling = 0;
             end
+            "prbs_link_degraded_timeout": begin
+                cfg.scenario_kind = "directed";
+                cfg.target_tx_count = 24;
+                cfg.link.enable_backpressure = 1'b0;
+                cfg.link.gap_ceiling = 0;
+                cfg.link.training_hold_start = 0;
+                cfg.link.training_hold_cycles = 700;
+                cfg.max_cycles = 20000;
+            end
             "bug_credit_off_by_one": begin
                 cfg.scenario_kind = "bug_validation";
                 cfg.bug_mode = "UCIE_BUG_CREDIT_OFF_BY_ONE";

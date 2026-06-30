@@ -136,6 +136,13 @@
     endproperty \
     assert property (NAME);
 
+`define CHIPLET_ASSERT_ISO_SAFE_FOR_SWITCH(NAME, CLK, RST_N, ISO_N, SWITCH_ON) \
+    property NAME; \
+        @(posedge CLK) disable iff (!(RST_N)) \
+            ((ISO_N) |-> (SWITCH_ON)); \
+    endproperty \
+    assert property (NAME);
+
 `define CHIPLET_ASSERT_RESTORE_AFTER_SLEEP(NAME, CLK, RST_N, RESTORE, POWER_STATE, SLEEP_STATE, RUN_STATE) \
     property NAME; \
         @(posedge CLK) disable iff (!(RST_N)) \

@@ -8,6 +8,7 @@ import csv
 import hashlib
 import os
 import random
+import shutil
 import subprocess
 import sys
 import time
@@ -88,6 +89,7 @@ TEST_SPECS: tuple[TestSpec, ...] = (
     TestSpec("prbs_latency_nominal", "tb_ucie_prbs"),
     TestSpec("prbs_latency_high", "tb_ucie_prbs", max_cycles=14000),
     TestSpec("prbs_rand_stress", "tb_ucie_prbs", randomized=True, max_cycles=30000),
+    TestSpec("prbs_link_degraded_timeout", "tb_ucie_prbs", default_enabled=False, max_cycles=20000, suites=("stress",)),
     TestSpec("prbs_retry_burst", "tb_ucie_prbs", default_enabled=False, suites=("stress",)),
     TestSpec("prbs_crc_storm", "tb_ucie_prbs", default_enabled=False, suites=("stress",)),
     TestSpec("prbs_fault_retrain", "tb_ucie_prbs", default_enabled=False, suites=("stress",)),
@@ -109,6 +111,10 @@ TEST_SPECS: tuple[TestSpec, ...] = (
     TestSpec("power_transition_with_link_backpressure", "tb_soc_chiplets", max_cycles=12000, suites=("power", "negative")),
     TestSpec("power_illegal_access_error_response", "tb_soc_chiplets", max_cycles=10000, ref_words=0, suites=("power", "negative")),
     TestSpec("power_traffic_cross_test", "tb_soc_chiplets", max_cycles=24000, ref_words=8, suites=("power",)),
+    TestSpec("power_iso_before_switch_off", "tb_soc_chiplets", max_cycles=9000, suites=("power",)),
+    TestSpec("power_restore_before_deiso", "tb_soc_chiplets", max_cycles=10000, suites=("power",)),
+    TestSpec("power_domain_sequence_matrix", "tb_soc_chiplets", max_cycles=14000, suites=("power",)),
+    TestSpec("power_invalid_transition_clamped", "tb_soc_chiplets", max_cycles=10000, suites=("power", "negative")),
     TestSpec("dma_queue_smoke", "tb_soc_chiplets", max_cycles=12000, ref_words=4),
     TestSpec("dma_queue_back_to_back", "tb_soc_chiplets", max_cycles=14000, ref_words=12),
     TestSpec("dma_queue_full_reject", "tb_soc_chiplets", max_cycles=18000, ref_words=16, suites=("stable", "negative")),
@@ -128,6 +134,7 @@ TEST_SPECS: tuple[TestSpec, ...] = (
     TestSpec("dma_tag_reuse", "tb_soc_chiplets", max_cycles=16000, ref_words=8),
     TestSpec("dma_power_state_retention_matrix", "tb_soc_chiplets", max_cycles=18000, ref_words=4, suites=("stable", "power")),
     TestSpec("dma_crypto_only_submit_blocked", "tb_soc_chiplets", max_cycles=10000, ref_words=0, suites=("stable", "power", "negative")),
+    TestSpec("dma_submit_reject_overflow", "tb_soc_chiplets", default_enabled=False, max_cycles=9000, ref_words=0, suites=("negative",)),
     TestSpec("mem_bank_parallel_service", "tb_soc_chiplets", max_cycles=16000, ref_words=8, suites=("stable", "memory")),
     TestSpec("mem_src_bank_conflict", "tb_soc_chiplets", max_cycles=16000, ref_words=8, suites=("stable", "memory")),
     TestSpec("mem_dst_bank_conflict", "tb_soc_chiplets", max_cycles=18000, ref_words=8, suites=("stable", "memory")),
@@ -135,10 +142,14 @@ TEST_SPECS: tuple[TestSpec, ...] = (
     TestSpec("mem_write_while_dma_reject", "tb_soc_chiplets", max_cycles=16000, ref_words=8, suites=("stable", "memory", "negative")),
     TestSpec("mem_op_start_busy_reject", "tb_soc_chiplets", default_enabled=False, max_cycles=12000, ref_words=0, suites=("negative",)),
     TestSpec("mem_inject_start_busy_reject", "tb_soc_chiplets", default_enabled=False, max_cycles=12000, ref_words=0, suites=("negative",)),
+    TestSpec("mem_inject_busy_overlap", "tb_soc_chiplets", default_enabled=False, max_cycles=12000, ref_words=0, suites=("negative",)),
+    TestSpec("mem_op_sleep_deep_abort", "tb_soc_chiplets", default_enabled=False, max_cycles=14000, ref_words=0, suites=("negative",)),
     TestSpec("mem_parity_src_detect", "tb_soc_chiplets", max_cycles=12000, ref_words=0, suites=("stable", "memory", "negative")),
+    TestSpec("mem_invalid_src_dma_error", "tb_soc_chiplets", max_cycles=12000, ref_words=0, suites=("stable", "memory", "negative")),
     TestSpec("mem_parity_dst_maint_detect", "tb_soc_chiplets", max_cycles=10000, ref_words=0, suites=("stable", "memory")),
     TestSpec("mem_sleep_retained_bank", "tb_soc_chiplets", max_cycles=12000, ref_words=0, suites=("stable", "power", "memory")),
     TestSpec("mem_sleep_nonretained_bank", "tb_soc_chiplets", max_cycles=12000, ref_words=0, suites=("stable", "power", "memory")),
+    TestSpec("mem_sleep_dst_nonretained_bank", "tb_soc_chiplets", max_cycles=12000, ref_words=0, suites=("stable", "power", "memory")),
     TestSpec("mem_nonretained_readback_poison_clean", "tb_soc_chiplets", max_cycles=12000, ref_words=0, suites=("stable", "power", "memory")),
     TestSpec("mem_invalid_clear_on_write", "tb_soc_chiplets", max_cycles=12000, ref_words=0, suites=("stable", "power", "memory")),
     TestSpec("mem_deep_sleep_retention_matrix", "tb_soc_chiplets", max_cycles=14000, ref_words=0, suites=("stable", "power", "memory")),
@@ -218,9 +229,15 @@ def normalize_params(params: dict[str, int | str] | tuple[tuple[str, int | str],
     return tuple(sorted((str(key), str(value)) for key, value in items))
 
 
-def compile_key(bench: str, defines: tuple[str, ...], params: tuple[tuple[str, str], ...] = ()) -> str:
+def compile_key(
+    bench: str,
+    defines: tuple[str, ...],
+    params: tuple[tuple[str, str], ...] = (),
+    code_coverage: bool = False,
+) -> str:
     fingerprint = hashlib.sha1()
     fingerprint.update("|".join((bench, *defines)).encode("utf-8"))
+    fingerprint.update(f"|coverage={int(code_coverage)}".encode("utf-8"))
     if params:
         fingerprint.update("|".join(f"{key}={value}" for key, value in params).encode("utf-8"))
     for source in [*rtl_sources(), *sim_sources()]:
@@ -238,34 +255,86 @@ def compile_binary(
     bench: str,
     defines: tuple[str, ...],
     params: dict[str, int | str] | tuple[tuple[str, int | str], ...] | None = None,
+    code_coverage: bool = False,
 ) -> tuple[Path, Path]:
     BUILD_ROOT.mkdir(parents=True, exist_ok=True)
     LOG_ROOT.mkdir(parents=True, exist_ok=True)
 
     normalized_params = normalize_params(params)
-    key = compile_key(bench, defines, normalized_params)
+    key = compile_key(bench, defines, normalized_params, code_coverage)
     build_dir = BUILD_ROOT / key
+    if code_coverage and build_dir.exists():
+        shutil.rmtree(build_dir)
     build_dir.mkdir(parents=True, exist_ok=True)
     binary = build_dir / bench_binary_name(bench)
     compile_log = LOG_ROOT / f"{key}.compile.log"
 
-    cmd = [
-        verilator,
-        "--binary",
-        "--sv",
-        "--timing",
-        "-Wall",
-        *VERILATOR_WARNINGS,
-        *[f"-D{define}" for define in defines],
-        *[f"-G{param}={value}" for param, value in normalized_params],
-        "--top-module",
-        bench,
-        f"-I{SIM_DIR}",
-        str(bench_tb_file(bench)),
-        *rtl_sources(),
-        "-Mdir",
-        str(build_dir),
-    ]
+    if code_coverage:
+        main_cpp = build_dir / f"{bench}_coverage_main.cpp"
+        main_cpp.write_text(
+            "\n".join(
+                [
+                    "#include <cstdlib>",
+                    "#include \"verilated.h\"",
+                    "#include \"verilated_cov.h\"",
+                    f"#include \"V{bench}.h\"",
+                    "",
+                    "int main(int argc, char** argv) {",
+                    "    VerilatedContext context;",
+                    "    context.commandArgs(argc, argv);",
+                    f"    V{bench} top(&context);",
+                    "    while (!context.gotFinish()) {",
+                    "        top.eval();",
+                    "        context.timeInc(1);",
+                    "    }",
+                    "    top.final();",
+                    "    const char* cov = std::getenv(\"VERILATOR_COVERAGE_FILENAME\");",
+                    "    VerilatedCov::write(cov ? cov : \"coverage.dat\");",
+                    "    return 0;",
+                    "}",
+                    "",
+                ]
+            )
+        )
+        cmd = [
+            verilator,
+            "--cc",
+            "--exe",
+            "--build",
+            "--sv",
+            "--timing",
+            "-Wall",
+            *VERILATOR_WARNINGS,
+            "--coverage-line",
+            *[f"-D{define}" for define in defines],
+            *[f"-G{param}={value}" for param, value in normalized_params],
+            "--top-module",
+            bench,
+            f"-I{SIM_DIR}",
+            str(bench_tb_file(bench)),
+            *rtl_sources(),
+            str(main_cpp),
+            "-Mdir",
+            str(build_dir),
+        ]
+    else:
+        cmd = [
+            verilator,
+            "--binary",
+            "--sv",
+            "--timing",
+            "-Wall",
+            *VERILATOR_WARNINGS,
+            *[f"-D{define}" for define in defines],
+            *[f"-G{param}={value}" for param, value in normalized_params],
+            "--top-module",
+            bench,
+            f"-I{SIM_DIR}",
+            str(bench_tb_file(bench)),
+            *rtl_sources(),
+            "-Mdir",
+            str(build_dir),
+        ]
 
     result = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
     compile_log.write_text(
@@ -333,6 +402,7 @@ def write_manifest(rows: list[dict[str, str]]) -> None:
     with MANIFEST_PATH.open("w", newline="") as handle:
         writer = csv.DictWriter(
             handle,
+            lineterminator="\n",
             fieldnames=[
                 "run_id",
                 "test",
@@ -448,7 +518,7 @@ def write_regression_history(summary_path: Path, coverage_path: Path, output_pat
     )
 
     with output_path.open("w", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer = csv.DictWriter(handle, fieldnames=fieldnames, lineterminator="\n")
         writer.writeheader()
         writer.writerows(existing_rows[-12:])
 
@@ -508,7 +578,7 @@ def run_suite(args: argparse.Namespace) -> int:
         runtime_arg_map = plusarg_map(run_plusargs)
         key = (run.bench, run.defines)
         if key not in binaries:
-            binaries[key] = compile_binary(args.verilator, run.bench, run.defines)
+            binaries[key] = compile_binary(args.verilator, run.bench, run.defines, code_coverage=args.code_coverage)
         binary, compile_log = binaries[key]
 
         cov_csv = REPORT_ROOT / f"{output_run_id}_coverage.csv"
@@ -561,7 +631,10 @@ def run_suite(args: argparse.Namespace) -> int:
 
         cmd = [str(binary), *plusargs]
         start = time.time()
-        result = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
+        env = os.environ.copy()
+        if args.code_coverage:
+            env["VERILATOR_COVERAGE_FILENAME"] = str(BUILD_ROOT / "artifacts" / f"{output_run_id}.coverage.dat")
+        result = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, env=env)
         elapsed = time.time() - start
         log_path.write_text(
             "## run_cmd\n"
@@ -685,6 +758,7 @@ def parse_args() -> argparse.Namespace:
         default=[],
         help="Additional runtime plusarg without leading '+'. May be repeated.",
     )
+    parser.add_argument("--code-coverage", action="store_true", help="Compile and run with Verilator code coverage enabled.")
     return parser.parse_args()
 
 

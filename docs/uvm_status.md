@@ -10,11 +10,27 @@ Verilator closure flow.
 - `chiplet_extension/sim/uvm/ucie_uvm_pkg.sv`
 - `chiplet_extension/sim/uvm/dma_uvm_pkg.sv`
 - `chiplet_extension/sim/uvm/power_uvm_pkg.sv`
+- `chiplet_extension/sim/uvm/axi_lite_ral_pkg.sv`
 - `chiplet_extension/sim/uvm/chiplet_uvm_pkg.sv`
 
 The packages define UCIe, DMA/CSR, power, and top-level environment
 components with UVM-style sequence items, drivers, monitors, scoreboards,
-coverage subscribers, and virtual-interface plumbing.
+coverage subscribers, virtual-interface plumbing, and an optional AXI-Lite
+RAL model for the DMA/power CSR map.
+
+## Component Shape
+
+```mermaid
+flowchart LR
+    Seq["UVM sequences"] --> Drv["Drivers"]
+    Ral["UVM RAL model"] --> Drv
+    Drv --> Vif["Virtual interfaces"]
+    Vif --> Dut["soc_chiplet_top"]
+    Dut --> Mon["Monitors"]
+    Mon --> Sb["Scoreboards"]
+    Mon --> Cov["Coverage subscribers"]
+    Mon --> Log["UVM reports"]
+```
 
 ## Supported Use
 
@@ -23,6 +39,17 @@ The primary supported command is:
 ```bash
 make -C chiplet_extension uvm-smoke
 ```
+
+The optional RAL smoke command is:
+
+```bash
+make -C chiplet_extension uvm-ral-smoke
+```
+
+That target drives the DMA/power CSR map through the AXI-Lite CSR bridge
+frontdoor when `VERILATOR_UVM` and `UVM_HOME` point to a UVM-capable setup.
+The existing directed `make -C chiplet_extension axi-lite-check` remains the
+local AXI protocol-quality gate.
 
 It requires a UVM-capable Verilator setup through `VERILATOR_UVM` and
 `UVM_HOME`. The local Debian Verilator `5.020` path is not treated as a full
@@ -45,6 +72,7 @@ The project should be described as:
 
 - default closure: non-UVM Verilator stable gate
 - optional methodology collateral: UVM architecture and smoke lane
+- optional register methodology collateral: UVM RAL AXI-Lite frontdoor smoke
 - environment-dependent comparison: UVM/non-UVM closure equivalence
 
 It should not be described as commercial-simulator UVM signoff.

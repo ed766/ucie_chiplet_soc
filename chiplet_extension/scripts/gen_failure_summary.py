@@ -137,6 +137,7 @@ def main() -> int:
     with failure_csv.open("w", newline="") as handle:
         writer = csv.DictWriter(
             handle,
+            lineterminator="\n",
             fieldnames=[
                 "bucket",
                 "count",

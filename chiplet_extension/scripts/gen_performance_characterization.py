@@ -38,6 +38,13 @@ def find_row(rows: list[dict[str, str]], **criteria: str) -> dict[str, str]:
     raise KeyError(f"missing row matching {criteria}")
 
 
+def find_optional_row(rows: list[dict[str, str]], **criteria: str) -> dict[str, str]:
+    try:
+        return find_row(rows, **criteria)
+    except KeyError:
+        return {}
+
+
 def find_first(rows: list[dict[str, str]], tests: tuple[str, ...]) -> dict[str, str]:
     for test in tests:
         for row in rows:
@@ -46,8 +53,32 @@ def find_first(rows: list[dict[str, str]], tests: tuple[str, ...]) -> dict[str, 
     raise KeyError(f"missing test row for any of {tests}")
 
 
+def find_dma_mem(rows: list[dict[str, str]], **criteria: str) -> dict[str, str]:
+    for row in rows:
+        if all(row.get(key) == value for key, value in criteria.items()):
+            return row
+    return {}
+
+
 def fmt_num(value: str) -> str:
     return value if value not in {"", "0.0000"} else ("0.0000" if value == "0.0000" else NA)
+
+
+def to_float(value: str) -> float | None:
+    try:
+        if value in {"", NA}:
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def delta_pct(new: str, old: str) -> str:
+    new_f = to_float(new)
+    old_f = to_float(old)
+    if new_f is None or old_f is None or old_f == 0.0:
+        return NA
+    return f"{((new_f - old_f) / old_f) * 100.0:+.1f}%"
 
 
 def link_row(scenario: str, source: dict[str, str], notes: str) -> dict[str, str]:
@@ -115,7 +146,128 @@ def build_rows(perf_rows: list[dict[str, str]], regress_rows: list[dict[str, str
     ]
 
 
-def render_markdown(rows: list[dict[str, str]], output: Path) -> None:
+def dma_mem_table_rows(dma_mem_rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    points = [
+        ("DMA nominal stream", find_dma_mem(dma_mem_rows, study_family="queue_depth_sweep", workload="dma_nominal_stream")),
+        ("Queue depth 1", find_dma_mem(dma_mem_rows, study_family="queue_depth_sweep", workload="dma_back_to_back", queue_depth="1")),
+        ("Queue depth 2", find_dma_mem(dma_mem_rows, study_family="queue_depth_sweep", workload="dma_back_to_back", queue_depth="2")),
+        ("Queue depth 4", find_dma_mem(dma_mem_rows, study_family="queue_depth_sweep", workload="dma_back_to_back", queue_depth="4")),
+        ("1-bank conflict heavy", find_dma_mem(dma_mem_rows, study_family="bank_mode_sweep", workload="mem_conflict_heavy", bank_mode="1")),
+        ("2-bank conflict heavy", find_dma_mem(dma_mem_rows, study_family="bank_mode_sweep", workload="mem_conflict_heavy", bank_mode="2")),
+        ("Invalid-memory recovery", find_dma_mem(dma_mem_rows, study_family="invalid_memory_recovery_sweep", workload="invalid_memory_recovery")),
+    ]
+    rows: list[dict[str, str]] = []
+    for label, point in points:
+        if not point:
+            rows.append(
+                {
+                    "Scenario": label,
+                    "Avg latency": NA,
+                    "Max latency": NA,
+                    "Throughput": NA,
+                    "Conflicts/wait": NA,
+                    "Recovery": NA,
+                    "Notes": "source row unavailable",
+                }
+            )
+            continue
+        conflicts = f"{point.get('source_conflict_count', NA)} src / {point.get('destination_conflict_count', NA)} dst / {point.get('maintenance_wait_cycles', NA)} wait"
+        recovery = (
+            f"{point.get('recovery_writes', NA)} writes, {point.get('recovery_cycles', NA)} cycles, "
+            f"{point.get('throughput_penalty_vs_baseline', NA)} penalty"
+            if point.get("workload") == "invalid_memory_recovery"
+            else NA
+        )
+        rows.append(
+            {
+                "Scenario": label,
+                "Avg latency": point.get("average_completion_latency_cycles", NA),
+                "Max latency": point.get("max_completion_latency_cycles", NA),
+                "Throughput": point.get("descriptor_throughput", NA),
+                "Conflicts/wait": conflicts,
+                "Recovery": recovery,
+                "Notes": point.get("notes", ""),
+            }
+        )
+    return rows
+
+
+def tradeoff_snapshot_rows(perf_rows: list[dict[str, str]], dma_mem_rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    delay0 = find_optional_row(perf_rows, sweep="latency_vs_channel_delay", label="delay_0")
+    delay20 = find_optional_row(perf_rows, sweep="latency_vs_channel_delay", label="delay_20")
+    crc16 = find_optional_row(perf_rows, sweep="retry_rate_vs_fault_density", label="crc_spacing_16")
+    q1 = find_dma_mem(dma_mem_rows, study_family="queue_depth_sweep", workload="dma_back_to_back", queue_depth="1")
+    q4 = find_dma_mem(dma_mem_rows, study_family="queue_depth_sweep", workload="dma_back_to_back", queue_depth="4")
+    b1 = find_dma_mem(dma_mem_rows, study_family="bank_mode_sweep", workload="mem_conflict_heavy", bank_mode="1")
+    b2 = find_dma_mem(dma_mem_rows, study_family="bank_mode_sweep", workload="mem_conflict_heavy", bank_mode="2")
+    recovery = find_dma_mem(dma_mem_rows, study_family="invalid_memory_recovery_sweep", workload="invalid_memory_recovery")
+
+    delay_delta = NA
+    delay0_avg = to_float(delay0.get("latency_avg_cycles", NA))
+    delay20_avg = to_float(delay20.get("latency_avg_cycles", NA))
+    if delay0_avg is not None and delay20_avg is not None:
+        delay_delta = f"{delay20_avg - delay0_avg:.0f} cycles"
+
+    q_delta = NA
+    q1_avg = to_float(q1.get("average_completion_latency_cycles", NA))
+    q4_avg = to_float(q4.get("average_completion_latency_cycles", NA))
+    if q1_avg is not None and q4_avg is not None:
+        q_delta = f"{q4_avg - q1_avg:.0f} cycles"
+
+    wait_delta = NA
+    b1_wait = to_float(b1.get("maintenance_wait_cycles", NA))
+    b2_wait = to_float(b2.get("maintenance_wait_cycles", NA))
+    if b1_wait is not None and b2_wait is not None:
+        wait_delta = f"{b1_wait - b2_wait:.0f} fewer wait cycles/events"
+
+    return [
+        {
+            "Study": "Channel delay",
+            "Low/base point": f"delay_0: {delay0.get('latency_avg_cycles', NA)} avg cycles",
+            "Stress point": f"delay_20: {delay20.get('latency_avg_cycles', NA)} avg cycles",
+            "Delta": delay_delta,
+            "Interpretation": "The latency shim is directly visible in end-to-end receive latency.",
+        },
+        {
+            "Study": "CRC retry overhead",
+            "Low/base point": f"no fault: {delay0.get('throughput_flits_per_cycle', NA)} flits/cycle",
+            "Stress point": f"CRC retry: {crc16.get('throughput_flits_per_cycle', NA)} flits/cycle, {crc16.get('retry_count', NA)} retries",
+            "Delta": delta_pct(crc16.get("throughput_flits_per_cycle", NA), delay0.get("throughput_flits_per_cycle", NA)),
+            "Interpretation": "Retry/recovery lowers effective throughput while preserving ordering.",
+        },
+        {
+            "Study": "DMA queue depth",
+            "Low/base point": f"depth 1: {q1.get('average_completion_latency_cycles', NA)} avg cycles",
+            "Stress point": f"depth 4: {q4.get('average_completion_latency_cycles', NA)} avg cycles",
+            "Delta": q_delta,
+            "Interpretation": "Back-to-back submission increases latency because execution remains strictly in-order.",
+        },
+        {
+            "Study": "Bank conflict pressure",
+            "Low/base point": f"2 banks: {b2.get('maintenance_wait_cycles', NA)} wait, {b2.get('source_conflict_count', NA)}/{b2.get('destination_conflict_count', NA)} src/dst conflicts",
+            "Stress point": f"1 bank: {b1.get('maintenance_wait_cycles', NA)} wait, {b1.get('source_conflict_count', NA)}/{b1.get('destination_conflict_count', NA)} src/dst conflicts",
+            "Delta": wait_delta,
+            "Interpretation": "Banking reduces maintenance conflict pressure under the heavy-contention workload.",
+        },
+        {
+            "Study": "Invalid-memory recovery",
+            "Low/base point": "valid banks: no recovery sequence required",
+            "Stress point": (
+                f"{recovery.get('recovery_writes', NA)} recovery writes, "
+                f"{recovery.get('recovery_cycles', NA)} cycles"
+            ),
+            "Delta": f"{recovery.get('throughput_penalty_vs_baseline', NA)} throughput penalty",
+            "Interpretation": "Post-wake invalid banks create a measurable software recovery cost.",
+        },
+    ]
+
+
+def render_markdown(
+    rows: list[dict[str, str]],
+    dma_rows: list[dict[str, str]],
+    perf_rows: list[dict[str, str]],
+    output: Path,
+) -> None:
     lines = [
         "# Performance Characterization",
         "",
@@ -132,12 +284,48 @@ def render_markdown(rows: list[dict[str, str]], output: Path) -> None:
             f"{row['Max latency']} | {row['Retry count']} | {row['Throughput']} | {row['Notes']} |"
         )
 
+    dma_table = dma_mem_table_rows(dma_rows)
+    lines.extend(
+        [
+            "",
+            "## DMA/Memory Architecture Points",
+            "",
+            "| Scenario | Avg latency | Max latency | Throughput | Conflicts/wait | Recovery | Notes |",
+            "| --- | ---: | ---: | ---: | --- | --- | --- |",
+        ]
+    )
+    for row in dma_table:
+        lines.append(
+            f"| {row['Scenario']} | {row['Avg latency']} | {row['Max latency']} | {row['Throughput']} | "
+            f"{row['Conflicts/wait']} | {row['Recovery']} | {row['Notes']} |"
+        )
+
+    lines.extend(
+        [
+            "",
+            "## Tradeoff Snapshot",
+            "",
+            "| Study | Low/base point | Stress point | Delta | Interpretation |",
+            "| --- | --- | --- | ---: | --- |",
+        ]
+    )
+    for row in tradeoff_snapshot_rows(perf_rows, dma_rows):
+        lines.append(
+            f"| {row['Study']} | {row['Low/base point']} | {row['Stress point']} | "
+            f"{row['Delta']} | {row['Interpretation']} |"
+        )
+
     no_fault = rows[0]
     backpressure = rows[1]
     crc_retry = rows[2]
     lane_fault = rows[3]
     sleep_resume = rows[4]
     crypto_only = rows[5]
+    queue1 = next((row for row in dma_table if row["Scenario"] == "Queue depth 1"), {})
+    queue4 = next((row for row in dma_table if row["Scenario"] == "Queue depth 4"), {})
+    bank1 = next((row for row in dma_table if row["Scenario"] == "1-bank conflict heavy"), {})
+    bank2 = next((row for row in dma_table if row["Scenario"] == "2-bank conflict heavy"), {})
+    invalid_recovery = next((row for row in dma_table if row["Scenario"] == "Invalid-memory recovery"), {})
     lines.extend(
         [
             "",
@@ -146,12 +334,16 @@ def render_markdown(rows: list[dict[str, str]], output: Path) -> None:
             f"- The no-fault baseline reports {no_fault['Avg latency']} cycles average latency and {no_fault['Throughput']} flits/cycle throughput in the PRBS characterization path.",
             f"- The selected backpressure point keeps average latency at {backpressure['Avg latency']} cycles while preserving a clean scoreboard result; the stress is visible in backpressure coverage rather than failures.",
             f"- CRC retry recovery records {crc_retry['Retry count']} retries at the selected point, showing retry overhead without packet-order corruption.",
+            f"- Back-to-back DMA queueing is visible in behavioral latency: queue depth 1 reports {queue1.get('Avg latency', NA)} average cycles, while queue depth 4 reports {queue4.get('Avg latency', NA)} average cycles because descriptors wait behind older accepted work.",
+            f"- The banked scratchpad study shows lower conflict/wait pressure in 2-bank heavy contention ({bank2.get('Conflicts/wait', NA)}) than the 1-bank structural variant ({bank1.get('Conflicts/wait', NA)}).",
+            f"- Invalid-memory recovery is measurable rather than just functional: the deterministic recovery row reports {invalid_recovery.get('Recovery', NA)}.",
             f"- Lane-fault recovery completes through `{lane_fault['Source test']}` with {lane_fault['Retry count']} retry event and no mismatch in the regression row.",
             f"- Sleep/resume and crypto-only rows are control-behavior characterizations: `{sleep_resume['Source test']}` proves queued DMA recovery, while `{crypto_only['Source test']}` proves mode-dependent submission blocking.",
             "",
             "## Source Artifacts",
             "",
             "- `chiplet_extension/reports/perf_characterization.csv`",
+            "- `chiplet_extension/reports/dma_mem_characterization.csv`",
             "- `chiplet_extension/reports/regress_summary.csv`",
             "- per-test `*_scoreboard.csv` files referenced by the regression summary",
         ]
@@ -164,13 +356,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Generate behavioral performance characterization markdown.")
     parser.add_argument("--perf-csv", default=str(REPORT_ROOT / "perf_characterization.csv"))
     parser.add_argument("--regress-csv", default=str(REPORT_ROOT / "regress_summary.csv"))
+    parser.add_argument("--dma-mem-csv", default=str(REPORT_ROOT / "dma_mem_characterization.csv"))
     parser.add_argument("--output", default=str(DOC_ROOT / "performance_characterization.md"))
     args = parser.parse_args()
 
     perf_rows = read_rows(Path(args.perf_csv))
     regress_rows = read_rows(Path(args.regress_csv))
+    dma_mem_rows = read_rows(Path(args.dma_mem_csv))
     rows = build_rows(perf_rows, regress_rows)
-    render_markdown(rows, Path(args.output))
+    render_markdown(rows, dma_mem_rows, perf_rows, Path(args.output))
     print(f"Wrote {args.output}")
     return 0
 

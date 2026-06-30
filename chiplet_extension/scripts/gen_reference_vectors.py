@@ -68,7 +68,8 @@ def dynamic_dma_descriptors(args: argparse.Namespace) -> tuple[DmaDescriptor, ..
     if args.dma_src_base < 0 or args.dma_dst_base < 0 or args.dma_len_words <= 0:
         return None
     queue_pressure = args.queue_pressure
-    if queue_pressure == "full_queue":
+    if queue_pressure in {"full_queue", "five"}:
+        count = 5 if queue_pressure == "five" else 4
         return tuple(
             DmaDescriptor(
                 args.dma_src_base + idx * args.dma_len_words,
@@ -76,7 +77,7 @@ def dynamic_dma_descriptors(args: argparse.Namespace) -> tuple[DmaDescriptor, ..
                 args.dma_len_words,
                 0x5100 + idx,
             )
-            for idx in range(4)
+            for idx in range(count)
         )
     first = DmaDescriptor(args.dma_src_base, args.dma_dst_base, args.dma_len_words, args.dma_tag)
     if queue_pressure == "pair" and args.dma2_src_base >= 0 and args.dma2_dst_base >= 0 and args.dma2_len_words > 0:
@@ -109,7 +110,7 @@ def main() -> int:
     parser.add_argument("--dma2-dst-base", type=int, default=-1)
     parser.add_argument("--dma2-len-words", type=int, default=-1)
     parser.add_argument("--dma2-tag", type=lambda value: int(value, 0), default=0x5001)
-    parser.add_argument("--queue-pressure", choices=("single", "pair", "full_queue"), default="single")
+    parser.add_argument("--queue-pressure", choices=("single", "pair", "full_queue", "five"), default="single")
     args = parser.parse_args()
 
     if args.selftest:

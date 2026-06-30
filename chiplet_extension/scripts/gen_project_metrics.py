@@ -62,6 +62,9 @@ def power_summary(rows: list[dict[str, str]]) -> tuple[str, str]:
             overall.get("isolation_bins_visited", ""),
             overall.get("retention_bins_visited", ""),
             overall.get("activity_cross_bins_visited", ""),
+            overall.get("switch_domain_bins_visited", ""),
+            overall.get("isolation_domain_bins_visited", ""),
+            overall.get("sequence_bins_visited", ""),
         ]
         if value
     )
@@ -78,8 +81,38 @@ def cross_summary(rows: list[dict[str, str]]) -> str:
 def random_stress_summary(rows: list[dict[str, str]]) -> str:
     if not rows:
         return "NA"
-    passed = sum(1 for row in rows if yes(row.get("meets_expectation", "")))
-    return metric_pair(passed, len(rows))
+    valid_rows = [row for row in rows if row.get("constraint_status", "valid") == "valid"]
+    invalid_rows = [row for row in rows if row.get("constraint_status") == "invalid"]
+    passed = sum(1 for row in valid_rows if yes(row.get("meets_expectation", "")))
+    valid_pair = metric_pair(passed, len(valid_rows))
+    if invalid_rows:
+        return f"{valid_pair} valid; {len(invalid_rows)} schema-rejected"
+    return valid_pair
+
+
+def key_value_file(path: Path) -> dict[str, str]:
+    if not path.exists():
+        return {}
+    values: dict[str, str] = {}
+    for line in path.read_text(errors="ignore").splitlines():
+        if "=" in line:
+            key, value = line.split("=", 1)
+            values[key.strip()] = value.strip()
+    return values
+
+
+def axi_lite_summary(rows: list[dict[str, str]]) -> str:
+    if not rows:
+        return "NA"
+    hit = sum(1 for row in rows if row.get("hit") == "1")
+    return metric_pair(hit, len(rows))
+
+
+def optional_bench_summary(rows: list[dict[str, str]], bench: str) -> str:
+    row = next((item for item in rows if item.get("bench") == bench), None)
+    if not row:
+        return "NA"
+    return row.get("status", "NA")
 
 
 def generate(csv_out: Path, md_out: Path) -> None:
@@ -91,6 +124,13 @@ def generate(csv_out: Path, md_out: Path) -> None:
     random_stress = read_csv(REPORTS / "random_stress_regress_summary.csv")
     formal = read_csv(REPORTS / "formal_summary.csv")
     negative = read_csv(REPORTS / "negative_test_summary.csv")
+    optional_benches = read_csv(REPORTS / "optional_bench_summary.csv")
+    axi_lite = read_csv(REPORTS / "axi_lite_coverage_summary.csv")
+    firmware = read_csv(REPORTS / "firmware_soc_summary.csv")
+    firmware_coverage = read_csv(REPORTS / "firmware_coverage_summary.csv")
+    firmware_cross = read_csv(REPORTS / "firmware_cross_coverage_summary.csv")
+    firmware_code_cov = key_value_file(REPORTS / "firmware_code_coverage_summary.txt")
+    code_cov = key_value_file(REPORTS / "code_coverage_summary.txt")
 
     stable_pass = sum(1 for row in regress if yes(row.get("meets_expectation", "")))
     nominal_rows = [row for row in regress if row.get("expected_status") == "PASS"]
@@ -112,6 +152,13 @@ def generate(csv_out: Path, md_out: Path) -> None:
     true_cross_pair = cross_summary(true_cross)
     random_pair = random_stress_summary(random_stress)
     assertions = assertion_count(DOCS / "assertion_inventory.md")
+    axi_pair = axi_lite_summary(axi_lite)
+    axi_status = optional_bench_summary(optional_benches, "axi_lite")
+    optional_cov = code_cov.get("optional_collateral_rtl_line_coverage_pct", "NA")
+    firmware_pass = sum(1 for row in firmware if row.get("status") == "PASS")
+    firmware_cov_hit = sum(1 for row in firmware_coverage if row.get("hit") == "1")
+    firmware_cross_hit = sum(1 for row in firmware_cross if row.get("hit") == "1")
+    firmware_code_pct = firmware_code_cov.get("focus_line_coverage_pct", "NA")
 
     metrics = [
         ("stable_runs", metric_pair(stable_pass, len(regress)), "Default stable/closure regression rows meeting expectation."),
@@ -128,6 +175,13 @@ def generate(csv_out: Path, md_out: Path) -> None:
         ("negative_tests", metric_pair(negative_pass, len(negative)), "Illegal-operation tests with explicit expected response."),
         ("optional_random_stress_subset", random_pair, "Optional seeded-random execution subset; not part of default closure."),
         ("assertion_inventory", assertions, "Inventoried protocol/control invariants."),
+        ("axi_lite_protocol_coverage", axi_pair, "Optional AXI-Lite CSR wrapper directed protocol coverage."),
+        ("axi_lite_optional_bench", axi_status, "AXI-Lite optional bench status."),
+        ("firmware_soc_scenarios", metric_pair(firmware_pass, len(firmware)), "ROM-backed RV32 programs controlling DMA through APB MMIO."),
+        ("firmware_mmio_coverage", metric_pair(firmware_cov_hit, len(firmware_coverage)), "Firmware/MMIO protocol and scenario coverage points."),
+        ("firmware_outcome_crosses", metric_pair(firmware_cross_hit, len(firmware_cross)), "Firmware outcome, power-state, and wait-state interaction crosses."),
+        ("firmware_focused_code_coverage", f"{firmware_code_pct}%" if firmware_code_pct != "NA" else "NA", "Focused Verilator line coverage for RV32/APB/ROM integration RTL."),
+        ("optional_collateral_code_coverage", f"{optional_cov}%" if optional_cov != "NA" else "NA", "Verilator line coverage for optional AXI/CDC collateral RTL."),
     ]
 
     csv_out.parent.mkdir(parents=True, exist_ok=True)
@@ -151,7 +205,7 @@ def generate(csv_out: Path, md_out: Path) -> None:
             "",
             "## Claim Boundary",
             "",
-            "- `stable_runs`, `functional_coverage`, `low_power_proxy_targets`, `bounded_property_checks`, and `expected_bug_failures` are the core evidence set.",
+            "- `stable_runs`, `functional_coverage`, `low_power_proxy_targets`, `bounded_property_checks`, `firmware_soc_scenarios`, and `expected_bug_failures` are the core evidence set.",
             "- `optional_random_stress_subset`, UVM artifacts, and characterization reports are useful supporting evidence, but they are not the default closure gate.",
             "- Raw per-test CSVs are generated artifacts; the checked-in project should keep summaries and curated documentation instead.",
             "",

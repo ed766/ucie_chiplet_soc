@@ -34,7 +34,7 @@ module soc_top (
   logic [31:0] pd1_wb_data_unused;
   logic        pd1_mem_valid_unused, pd1_mem_write_unused;
   logic [31:0] pd1_mem_addr_unused, pd1_mem_wdata_unused, pd1_mem_rdata_unused;
-  logic        pd1_branch_taken_unused, pd1_illegal_unused;
+  logic        pd1_branch_taken_unused, pd1_illegal_unused, pd1_bus_error_unused;
   logic        retire_iso_unused;
   logic        unused_top_comb;
   // Raw (pre-isolation) signals from PD2
@@ -113,6 +113,7 @@ module soc_top (
     .mem_rdata(pd1_mem_rdata_unused),
     .branch_taken(pd1_branch_taken_unused),
     .illegal_instr(pd1_illegal_unused),
+    .bus_error(pd1_bus_error_unused),
     .retire (pd1_retire),
     .halted (pd1_halted_unused)
   );
@@ -149,7 +150,7 @@ module soc_top (
                              pd1_wb_valid_unused, pd1_wb_rd_unused, pd1_wb_data_unused,
                              pd1_mem_valid_unused, pd1_mem_write_unused,
                              pd1_mem_addr_unused, pd1_mem_wdata_unused, pd1_mem_rdata_unused,
-                             pd1_branch_taken_unused, pd1_illegal_unused};
+                             pd1_branch_taken_unused, pd1_illegal_unused, pd1_bus_error_unused};
 
   always_comb begin
     if (unused_top_comb) begin end

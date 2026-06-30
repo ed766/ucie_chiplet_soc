@@ -16,6 +16,7 @@ module tb_rv32_core;
   logic [31:0] prdata;
   logic        pready;
   logic        pslverr;
+  logic        bus_error;
 
   logic            mon_valid;
   rv32_trace_txn_t mon_txn;
@@ -130,6 +131,7 @@ module tb_rv32_core;
     .mem_rdata   (rvif.mem_rdata),
     .branch_taken(rvif.branch_taken),
     .illegal_instr(rvif.illegal_instr),
+    .bus_error   (bus_error),
     .retire      (rvif.retire),
     .halted      (rvif.halted)
   );

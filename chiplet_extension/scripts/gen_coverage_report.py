@@ -151,6 +151,7 @@ def main() -> int:
     with output_path.open("w", newline="") as handle:
         writer = csv.DictWriter(
             handle,
+            lineterminator="\n",
             fieldnames=[
                 "metric",
                 "category",

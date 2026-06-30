@@ -4,9 +4,9 @@
 
 | Metric | Value |
 | --- | ---: |
-| Total runs | 64 |
-| Runs meeting expectation | 64 |
-| Nominal pass rate | 59/59 |
+| Total runs | 70 |
+| Runs meeting expectation | 70 |
+| Nominal pass rate | 65/65 |
 | Randomized runs meeting expectation | 1/1 |
 | Unexpected failures | 0 |
 | Expected bug-validation failures | 5 |
@@ -62,7 +62,7 @@
 
 | Metric | Value |
 | --- | ---: |
-| Memory nominal runs meeting expectation | 13/13 |
+| Memory nominal runs meeting expectation | 15/15 |
 | Memory bug-validation runs meeting expectation | 1/1 |
 
 ## Power-State Proxy Verification
@@ -75,7 +75,7 @@
 | Isolation bins visited | 4/4 |
 | Retention bins visited | 4/4 |
 | Transition/activity bins visited | 5/5 |
-| Power tests meeting expectation | 20/20 |
+| Power tests meeting expectation | 26/26 |
 
 | Test | Mode | Status | Illegal activity | Resume violations | States |
 | --- | --- | --- | ---: | ---: | --- |
@@ -88,13 +88,19 @@
 | `power_transition_with_link_backpressure` | `sleep` | PASS | 0 | 0 | run, sleep |
 | `power_illegal_access_error_response` | `none` | PASS | 0 | 0 | run, crypto_only |
 | `power_traffic_cross_test` | `none` | PASS | 0 | 0 | run, crypto_only, sleep |
+| `power_iso_before_switch_off` | `sleep` | PASS | 0 | 0 | run, sleep |
+| `power_restore_before_deiso` | `sleep` | PASS | 0 | 0 | run, sleep |
+| `power_domain_sequence_matrix` | `deep_sleep` | PASS | 0 | 0 | run, crypto_only, sleep, deep_sleep |
+| `power_invalid_transition_clamped` | `run` | PASS | 0 | 0 | run, crypto_only, sleep, deep_sleep |
 | `dma_power_sleep_resume_queue` | `sleep` | PASS | 0 | 0 | run, sleep |
 | `dma_sleep_during_queued_work` | `none` | PASS | 0 | 0 | run, sleep |
 | `dma_sleep_during_active_transfer` | `none` | PASS | 0 | 0 | run, sleep |
 | `dma_power_state_retention_matrix` | `none` | PASS | 0 | 0 | run, sleep, deep_sleep |
 | `dma_crypto_only_submit_blocked` | `none` | PASS | 0 | 0 | run, crypto_only |
+| `mem_invalid_src_dma_error` | `none` | PASS | 0 | 0 | run, sleep |
 | `mem_sleep_retained_bank` | `none` | PASS | 0 | 0 | run, sleep |
 | `mem_sleep_nonretained_bank` | `none` | PASS | 0 | 0 | run, sleep |
+| `mem_sleep_dst_nonretained_bank` | `none` | PASS | 0 | 0 | run, sleep |
 | `mem_nonretained_readback_poison_clean` | `none` | PASS | 0 | 0 | run, sleep |
 | `mem_invalid_clear_on_write` | `none` | PASS | 0 | 0 | run, sleep |
 | `mem_deep_sleep_retention_matrix` | `none` | PASS | 0 | 0 | run, deep_sleep |

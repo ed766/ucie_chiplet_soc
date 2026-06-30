@@ -1,64 +1,168 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="360" viewBox="0 0 1280 360" role="img" aria-labelledby="title desc">
-  <title id="title">UCIe chiplet DV architecture</title>
-  <desc id="desc">Die A RV32 and DMA send traffic through packetizer and UCIe-style link to Die B AES service, with return path monitored by scoreboards and coverage collectors.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="760" viewBox="0 0 1440 760" role="img" aria-labelledby="title desc">
+  <title id="title">Firmware-driven UCIe chiplet SoC verification architecture</title>
+  <desc id="desc">A layered architecture showing RV32 firmware and optional AXI-Lite control, the Die A queued DMA and banked memories, the UCIe-style link to Die B AES, UPF power intent, and verification evidence.</desc>
   <defs>
-    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
-      <path d="M2,2 L10,6 L2,10 Z" fill="#264653"/>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+      <path d="M0 0 L10 5 L0 10 Z" fill="#264653"/>
     </marker>
-    <linearGradient id="dieA" x1="0" x2="1" y1="0" y2="1">
-      <stop offset="0" stop-color="#e9f5f2"/>
-      <stop offset="1" stop-color="#cfe7df"/>
+    <marker id="arrowBlue" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+      <path d="M0 0 L10 5 L0 10 Z" fill="#3a67a3"/>
+    </marker>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f8fbfa"/>
+      <stop offset="1" stop-color="#eef3f6"/>
     </linearGradient>
-    <linearGradient id="link" x1="0" x2="1" y1="0" y2="1">
-      <stop offset="0" stop-color="#f6f1df"/>
-      <stop offset="1" stop-color="#eadcae"/>
-    </linearGradient>
-    <linearGradient id="dieB" x1="0" x2="1" y1="0" y2="1">
-      <stop offset="0" stop-color="#edf0fb"/>
-      <stop offset="1" stop-color="#d1d8f0"/>
-    </linearGradient>
-    <linearGradient id="dv" x1="0" x2="1" y1="0" y2="1">
-      <stop offset="0" stop-color="#f3f4f6"/>
-      <stop offset="1" stop-color="#dfe4ea"/>
-    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#15272d" flood-opacity="0.14"/>
+    </filter>
+    <style>
+      .title { font: 700 30px 'DejaVu Sans', sans-serif; fill: #172a31; }
+      .subtitle { font: 400 15px 'DejaVu Sans', sans-serif; fill: #52656d; }
+      .lane { font: 700 13px 'DejaVu Sans', sans-serif; letter-spacing: 1.4px; }
+      .heading { font: 700 19px 'DejaVu Sans', sans-serif; }
+      .body { font: 400 13px 'DejaVu Sans', sans-serif; }
+      .small { font: 400 12px 'DejaVu Sans', sans-serif; }
+      .metric { font: 700 20px 'DejaVu Sans', sans-serif; fill: #17343c; }
+      .metricLabel { font: 400 11px 'DejaVu Sans', sans-serif; fill: #52656d; }
+      .control { fill: #e7f3ef; stroke: #2a9d8f; }
+      .data { fill: #fff4d8; stroke: #c68b16; }
+      .service { fill: #e9edfb; stroke: #5a6fc2; }
+      .power { fill: #f8e8dc; stroke: #d46b3c; }
+      .evidence { fill: #e9eef1; stroke: #60737c; }
+      .box { stroke-width: 2; rx: 10; filter: url(#shadow); }
+    </style>
   </defs>
-  <rect width="1280" height="360" fill="#fbfcfd"/>
-  <text x="56" y="54" fill="#1f2933" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700">UCIe Chiplet Verification Architecture</text>
-  <text x="56" y="84" fill="#52616b" font-family="Arial, Helvetica, sans-serif" font-size="15">Directed/random stimulus, fault injection, scoreboards, coverage, low-power proxy checks, and UVM/non-UVM closure equivalence</text>
 
-  <g font-family="Arial, Helvetica, sans-serif">
-    <rect x="56" y="128" width="230" height="112" rx="8" fill="url(#dieA)" stroke="#2a9d8f" stroke-width="2"/>
-    <text x="82" y="162" fill="#12342f" font-size="20" font-weight="700">Die A</text>
-    <text x="82" y="190" fill="#1f403b" font-size="15">RV32 traffic source</text>
-    <text x="82" y="214" fill="#1f403b" font-size="15">Queued DMA + banked memory</text>
+  <rect width="1440" height="760" fill="url(#bg)"/>
+  <text x="56" y="54" class="title">Firmware-Driven UCIe Chiplet SoC Verification</text>
+  <text x="56" y="82" class="subtitle">Control, payload, low-power intent, and verification evidence are separated so each path is independently testable.</text>
 
-    <rect x="326" y="128" width="180" height="112" rx="8" fill="url(#link)" stroke="#b08900" stroke-width="2"/>
-    <text x="352" y="162" fill="#493b00" font-size="20" font-weight="700">Packetizer</text>
-    <text x="352" y="190" fill="#594900" font-size="15">FLIT framing</text>
-    <text x="352" y="214" fill="#594900" font-size="15">credits + CRC</text>
+  <text x="56" y="121" class="lane" fill="#217c70">CONTROL PLANE</text>
+  <line x1="178" y1="116" x2="1384" y2="116" stroke="#a9cbc4" stroke-width="1"/>
 
-    <rect x="546" y="128" width="190" height="112" rx="8" fill="url(#link)" stroke="#b08900" stroke-width="2"/>
-    <text x="572" y="162" fill="#493b00" font-size="20" font-weight="700">UCIe-Style Link</text>
-    <text x="572" y="190" fill="#594900" font-size="15">retry + backpressure</text>
-    <text x="572" y="214" fill="#594900" font-size="15">latency/fault model</text>
+  <g>
+    <rect x="56" y="140" width="220" height="104" class="box control"/>
+    <text x="78" y="169" class="heading" fill="#174c45">ROM-Backed RV32</text>
+    <text x="78" y="193" class="body" fill="#285c55">12 firmware scenarios</text>
+    <text x="78" y="214" class="body" fill="#285c55">LW / SW / polling / IRQ</text>
+    <text x="78" y="235" class="small" fill="#416e68">No testbench CSR programming</text>
 
-    <rect x="776" y="128" width="210" height="112" rx="8" fill="url(#dieB)" stroke="#5b6fc4" stroke-width="2"/>
-    <text x="802" y="162" fill="#28315c" font-size="20" font-weight="700">Die B</text>
-    <text x="802" y="190" fill="#303b6b" font-size="15">AES-128 service</text>
-    <text x="802" y="214" fill="#303b6b" font-size="15">ciphertext return path</text>
+    <rect x="326" y="140" width="180" height="104" class="box control"/>
+    <text x="350" y="169" class="heading" fill="#174c45">APB MMIO</text>
+    <text x="350" y="193" class="body" fill="#285c55">0x100-0x184 window</text>
+    <text x="350" y="214" class="body" fill="#285c55">waits + error response</text>
+    <text x="350" y="235" class="small" fill="#416e68">retirement waits for PREADY</text>
 
-    <rect x="1026" y="128" width="198" height="112" rx="8" fill="url(#dv)" stroke="#52616b" stroke-width="2"/>
-    <text x="1052" y="162" fill="#1f2933" font-size="20" font-weight="700">DV Closure</text>
-    <text x="1052" y="190" fill="#35424c" font-size="15">scoreboards + monitors</text>
-    <text x="1052" y="214" fill="#35424c" font-size="15">coverage + bug buckets</text>
+    <rect x="556" y="140" width="200" height="104" class="box control"/>
+    <text x="580" y="169" class="heading" fill="#174c45">DMA / Power CSRs</text>
+    <text x="580" y="193" class="body" fill="#285c55">descriptor staging</text>
+    <text x="580" y="214" class="body" fill="#285c55">doorbell + completion</text>
+    <text x="580" y="235" class="small" fill="#416e68">IRQ, retention, maintenance</text>
+
+    <rect x="806" y="140" width="238" height="104" class="box evidence" stroke-dasharray="7 5"/>
+    <text x="830" y="169" class="heading" fill="#394c55">Optional AXI-Lite</text>
+    <text x="830" y="193" class="body" fill="#4e626b">CSR integration collateral</text>
+    <text x="830" y="214" class="body" fill="#4e626b">18 / 18 protocol points</text>
+    <text x="830" y="235" class="small" fill="#667a83">Not the chiplet payload path</text>
   </g>
 
-  <g fill="none" stroke="#264653" stroke-width="3" marker-end="url(#arrow)">
-    <path d="M286 184 H326"/>
-    <path d="M506 184 H546"/>
-    <path d="M736 184 H776"/>
-    <path d="M986 184 H1026"/>
+  <g fill="none" stroke="#2a9d8f" stroke-width="3" marker-end="url(#arrow)">
+    <path d="M276 192 H326"/>
+    <path d="M506 192 H556"/>
   </g>
-  <path d="M900 250 C860 306 460 306 380 250" fill="none" stroke="#5b6fc4" stroke-width="3" marker-end="url(#arrow)"/>
-  <text x="518" y="324" fill="#303b6b" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700">Return path checked against AES reference model and memory scoreboards</text>
+  <path d="M806 192 H756" fill="none" stroke="#60737c" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+
+  <text x="56" y="291" class="lane" fill="#a06b0a">PAYLOAD DATA PLANE</text>
+  <line x1="218" y1="286" x2="1384" y2="286" stroke="#ddc58f" stroke-width="1"/>
+
+  <g>
+    <rect x="56" y="310" width="470" height="205" class="box data"/>
+    <text x="80" y="342" class="heading" fill="#6d4b08">Die A - Compute and DMA</text>
+
+    <rect x="80" y="365" width="130" height="114" rx="7" fill="#fffaf0" stroke="#d4a649"/>
+    <text x="96" y="389" class="body" font-weight="700" fill="#6d4b08">Source SRAM</text>
+    <text x="96" y="412" class="small" fill="#765d2d">256 x 64-bit</text>
+    <text x="96" y="432" class="small" fill="#765d2d">2 banks + parity</text>
+    <text x="96" y="452" class="small" fill="#765d2d">retained / invalid</text>
+
+    <rect x="226" y="365" width="130" height="114" rx="7" fill="#fffaf0" stroke="#d4a649"/>
+    <text x="242" y="389" class="body" font-weight="700" fill="#6d4b08">Queued DMA</text>
+    <text x="242" y="412" class="small" fill="#765d2d">4 submit entries</text>
+    <text x="242" y="432" class="small" fill="#765d2d">1 active descriptor</text>
+    <text x="242" y="452" class="small" fill="#765d2d">timeout + error</text>
+
+    <rect x="372" y="365" width="130" height="114" rx="7" fill="#fffaf0" stroke="#d4a649"/>
+    <text x="388" y="389" class="body" font-weight="700" fill="#6d4b08">Destination</text>
+    <text x="388" y="412" class="small" fill="#765d2d">2 banks + parity</text>
+    <text x="388" y="432" class="small" fill="#765d2d">4 completion entries</text>
+    <text x="388" y="452" class="small" fill="#765d2d">level IRQ</text>
+
+    <rect x="576" y="310" width="235" height="205" class="box data"/>
+    <text x="600" y="342" class="heading" fill="#6d4b08">Die A Adapter</text>
+    <text x="600" y="374" class="body" fill="#765d2d">256-bit FLIT packetizer</text>
+    <text x="600" y="398" class="body" fill="#765d2d">credits + CRC-8</text>
+    <text x="600" y="422" class="body" fill="#765d2d">retry identity tracking</text>
+    <text x="600" y="446" class="body" fill="#765d2d">ordering + backpressure</text>
+    <text x="600" y="478" class="small" fill="#8a703e">Return data retires to DMA</text>
+
+    <rect x="861" y="310" width="230" height="205" class="box evidence"/>
+    <text x="885" y="342" class="heading" fill="#394c55">UCIe-Style Link</text>
+    <text x="885" y="374" class="body" fill="#4e626b">behavioral PHY + channel</text>
+    <text x="885" y="398" class="body" fill="#4e626b">latency + jitter</text>
+    <text x="885" y="422" class="body" fill="#4e626b">CRC + lane faults</text>
+    <text x="885" y="446" class="body" fill="#4e626b">retry + retraining</text>
+    <text x="885" y="478" class="small" fill="#667a83">Bidirectional service traffic</text>
+
+    <rect x="1141" y="310" width="243" height="205" class="box service"/>
+    <text x="1165" y="342" class="heading" fill="#34427e">Die B - AES Service</text>
+    <text x="1165" y="374" class="body" fill="#46558d">FLIT depacketization</text>
+    <text x="1165" y="398" class="body" fill="#46558d">2 x 64-bit aggregation</text>
+    <text x="1165" y="422" class="body" fill="#46558d">iterative AES-128</text>
+    <text x="1165" y="446" class="body" fill="#46558d">ordered ciphertext return</text>
+    <text x="1165" y="478" class="small" fill="#6370a0">Checked by independent model</text>
+  </g>
+
+  <g fill="none" stroke="#3a67a3" stroke-width="4">
+    <path d="M526 403 H576" marker-end="url(#arrowBlue)"/>
+    <path d="M811 403 H861" marker-end="url(#arrowBlue)"/>
+    <path d="M1091 403 H1141" marker-end="url(#arrowBlue)"/>
+    <path d="M1260 515 C1210 552 736 552 690 515" marker-end="url(#arrowBlue)"/>
+  </g>
+  <text x="886" y="546" class="small" fill="#3a67a3">ciphertext return path</text>
+
+  <text x="56" y="588" class="lane" fill="#b5532c">POWER INTENT AND VERIFICATION EVIDENCE</text>
+  <line x1="372" y1="583" x2="1384" y2="583" stroke="#e4b9a7" stroke-width="1"/>
+
+  <g>
+    <rect x="56" y="606" width="348" height="112" class="box power"/>
+    <text x="80" y="636" class="heading" fill="#843b20">Tool-Neutral UPF 4.0</text>
+    <text x="80" y="662" class="body" fill="#914b30">7 domains + switches + clamp isolation</text>
+    <text x="80" y="684" class="body" fill="#914b30">DMA context/memory retention + PST</text>
+    <text x="80" y="706" class="small" fill="#a2644d">RUN / CRYPTO_ONLY / SLEEP / DEEP_SLEEP</text>
+
+    <rect x="438" y="606" width="408" height="112" class="box evidence"/>
+    <text x="462" y="636" class="heading" fill="#394c55">Independent Verification</text>
+    <text x="462" y="662" class="body" fill="#4e626b">SV drivers, monitors, scoreboards, SVA</text>
+    <text x="462" y="684" class="body" fill="#4e626b">Python AES/DMA model + C CRC model</text>
+    <text x="462" y="706" class="small" fill="#667a83">Directed, negative, bug-injection, seeded-random</text>
+
+    <rect x="880" y="606" width="504" height="112" class="box control"/>
+    <text x="904" y="636" class="heading" fill="#174c45">Checked-In Evidence</text>
+    <text x="904" y="672" class="metric">70/70</text>
+    <text x="904" y="692" class="metricLabel">stable runs</text>
+    <text x="1000" y="672" class="metric">60/60</text>
+    <text x="1000" y="692" class="metricLabel">functional bins</text>
+    <text x="1096" y="672" class="metric">26/26</text>
+    <text x="1096" y="692" class="metricLabel">power targets</text>
+    <text x="1192" y="672" class="metric">12/12</text>
+    <text x="1192" y="692" class="metricLabel">firmware</text>
+    <text x="1284" y="672" class="metric">52</text>
+    <text x="1284" y="692" class="metricLabel">invariants</text>
+  </g>
+
+  <g fill="none" stroke="#d46b3c" stroke-width="2" stroke-dasharray="6 5">
+    <path d="M230 606 C230 564 255 545 291 515" marker-end="url(#arrow)"/>
+    <path d="M326 606 C430 558 895 550 974 515" marker-end="url(#arrow)"/>
+    <path d="M382 606 C610 548 1192 546 1260 515" marker-end="url(#arrow)"/>
+  </g>
 </svg>

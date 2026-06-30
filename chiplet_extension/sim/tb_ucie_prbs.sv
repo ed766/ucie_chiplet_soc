@@ -53,6 +53,7 @@ module tb_ucie_prbs;
     int unsigned channel_delay_cycles_cfg;
     logic allow_crc_error_cfg;
     logic randomized_cfg;
+    logic allow_training_timeout_cfg;
     logic enable_midflight_reset_cfg;
     logic enable_credit_starve_cfg;
     logic enable_retry_burst_cfg;
@@ -116,6 +117,7 @@ module tb_ucie_prbs;
         channel_delay_cycles_cfg = cfg.link.channel_delay_cycles;
         allow_crc_error_cfg = cfg.allow_crc_error;
         randomized_cfg = cfg.randomized;
+        allow_training_timeout_cfg = (test_name == "prbs_link_degraded_timeout");
         enable_midflight_reset_cfg = cfg.link.enable_midflight_reset;
         enable_credit_starve_cfg = cfg.link.enable_credit_starve;
         enable_retry_burst_cfg = cfg.link.enable_retry_burst;
@@ -765,7 +767,7 @@ module tb_ucie_prbs;
         .rst_n          (rst_n),
         .link_up        (link_up),
         .link_ready     (link_ready),
-        .start_training (1'b1),
+        .start_training (!allow_training_timeout_cfg),
         .fault_detected (lane_adapter_lane_fault),
         .tx_fire        (flit_tx_valid && flit_tx_ready),
         .traffic_present(flit_tx_valid)

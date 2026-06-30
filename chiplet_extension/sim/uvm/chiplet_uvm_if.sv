@@ -48,6 +48,133 @@ interface chiplet_csr_if(input logic clk);
     endtask
 endinterface : chiplet_csr_if
 
+interface axi_lite_uvm_if(input logic clk);
+    logic        rst_n;
+    logic [31:0] awaddr;
+    logic        awvalid;
+    logic        awready;
+    logic [31:0] wdata;
+    logic [3:0]  wstrb;
+    logic        wvalid;
+    logic        wready;
+    logic [1:0]  bresp;
+    logic        bvalid;
+    logic        bready;
+    logic [31:0] araddr;
+    logic        arvalid;
+    logic        arready;
+    logic [31:0] rdata;
+    logic [1:0]  rresp;
+    logic        rvalid;
+    logic        rready;
+
+    task automatic init();
+        awaddr = '0;
+        awvalid = 1'b0;
+        wdata = '0;
+        wstrb = 4'hf;
+        wvalid = 1'b0;
+        bready = 1'b0;
+        araddr = '0;
+        arvalid = 1'b0;
+        rready = 1'b0;
+    endtask
+
+    task automatic write32(input logic [31:0] addr,
+                           input logic [31:0] data,
+                           output logic [1:0] resp);
+        int unsigned waited;
+        bit aw_w_sampled;
+        @(negedge clk);
+        awaddr = addr;
+        awvalid = 1'b1;
+        wdata = data;
+        wstrb = 4'hf;
+        wvalid = 1'b1;
+        bready = 1'b0;
+        waited = 0;
+        do begin
+            aw_w_sampled = awvalid && awready && wvalid && wready;
+            @(posedge clk);
+            #1;
+            waited++;
+            if (waited >= 1024) begin
+                $error("AXI_UVM_IF timed out waiting for AW/W ready at addr=0x%08x", addr);
+                resp = 2'b10;
+                awvalid = 1'b0;
+                wvalid = 1'b0;
+                bready = 1'b0;
+                return;
+            end
+        end while (!aw_w_sampled);
+        awvalid = 1'b0;
+        wvalid = 1'b0;
+        waited = 0;
+        do begin
+            @(negedge clk);
+            #1;
+            waited++;
+            if (waited >= 1024) begin
+                $error("AXI_UVM_IF timed out waiting for B response at addr=0x%08x", addr);
+                resp = 2'b10;
+                bready = 1'b0;
+                return;
+            end
+        end while (!bvalid);
+        resp = bresp;
+        bready = 1'b1;
+        @(posedge clk);
+        #1;
+        bready = 1'b0;
+    endtask
+
+    task automatic read32(input logic [31:0] addr,
+                          output logic [31:0] data,
+                          output logic [1:0] resp);
+        int unsigned waited;
+        bit ar_sampled;
+        @(negedge clk);
+        araddr = addr;
+        arvalid = 1'b1;
+        rready = 1'b0;
+        waited = 0;
+        do begin
+            ar_sampled = arvalid && arready;
+            @(posedge clk);
+            #1;
+            waited++;
+            if (waited >= 1024) begin
+                $error("AXI_UVM_IF timed out waiting for AR ready at addr=0x%08x", addr);
+                data = '0;
+                resp = 2'b10;
+                arvalid = 1'b0;
+                rready = 1'b0;
+                return;
+            end
+        end while (!ar_sampled);
+        arvalid = 1'b0;
+        waited = 0;
+        do begin
+            @(negedge clk);
+            #1;
+            waited++;
+            if (waited >= 1024) begin
+                $error("AXI_UVM_IF timed out waiting for R response at addr=0x%08x", addr);
+                data = '0;
+                resp = 2'b10;
+                rready = 1'b0;
+                return;
+            end
+        end while (!rvalid);
+        data = rdata;
+        resp = rresp;
+        rready = 1'b1;
+        @(posedge clk);
+        #1;
+        rready = 1'b0;
+    endtask
+endinterface : axi_lite_uvm_if
+
 interface chiplet_power_if(input logic clk);
     logic       rst_n;
     logic [1:0] power_state;

@@ -1,0 +1,8 @@
+cross,hit,tests
+cross_run_success,1,"apb_reset_mid_wait,completion_fifo_stall,dma_back_to_back,dma_smoke,irq_pending_then_enable,sleep_resume"
+cross_run_timeout,1,timeout_error
+cross_run_parity,1,parity_source_error
+cross_crypto_reject,1,crypto_only_reject
+cross_sleep_resume,1,sleep_resume
+cross_deep_invalid,1,deep_sleep_invalid_source
+cross_wait_no_retire,1,"apb_reset_mid_wait,apb_wait_error,deep_sleep_invalid_source,sleep_resume"

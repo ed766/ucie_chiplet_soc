@@ -90,6 +90,7 @@ def compile_uvm_binary(verilator: str, uvm_pkg: Path) -> Path:
         str(UVM_DIR / "ucie_uvm_pkg.sv"),
         str(UVM_DIR / "dma_uvm_pkg.sv"),
         str(UVM_DIR / "power_uvm_pkg.sv"),
+        str(UVM_DIR / "axi_lite_ral_pkg.sv"),
         str(UVM_DIR / "chiplet_uvm_pkg.sv"),
         str(SIM_DIR / "dv" / "ucie_cov_pkg.sv"),
         str(SIM_DIR / "dv" / "stats_pkg.sv"),
@@ -178,6 +179,8 @@ def run_test(binary: Path, test: str, artifact_prefix: str = "") -> dict[str, st
     cov_stem = f"{artifact_prefix}_{test}" if artifact_prefix else test
     cov_path = REPORT_ROOT / f"{cov_stem}_uvm_coverage.csv"
     cmd = [str(binary), f"+UVM_TESTNAME={test}", "+UVM_VERBOSITY=UVM_LOW"]
+    if test == "uvm_axi_lite_ral_smoke_test":
+        cmd.append("+UVM_RAL_MODE")
     if ref_path:
         cmd.append(f"+REF_CSV={ref_path}")
     cmd.append(f"+UVM_COV_OUT={cov_path}")

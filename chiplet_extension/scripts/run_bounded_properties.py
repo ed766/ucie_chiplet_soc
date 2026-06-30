@@ -184,6 +184,7 @@ def main() -> int:
     with REPORT_PATH.open("w", newline="") as handle:
         writer = csv.DictWriter(
             handle,
+            lineterminator="\n",
             fieldnames=[
                 "name",
                 "top",

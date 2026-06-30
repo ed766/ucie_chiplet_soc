@@ -24,6 +24,7 @@ closure, not replacing the stable gate:
 - tool-neutral UPF 4.0 intent documentation, not commercial low-power signoff
 - bounded Verilator property collateral
 - CSR-programmable DMA offload verification with golden-image compare
+- firmware-driven RV32/APB MMIO verification through `make -C chiplet_extension firmware-soc-check`
 
 ## Benches
 
@@ -43,6 +44,14 @@ closure, not replacing the stable gate:
     scratchpads, submit/completion queues, and IRQ-driven completion checking
   - negative DMA programming, queue-full reject, blocked submission, range,
     odd-length, and timeout checks
+
+### Firmware-driven integration bench
+
+- `chiplet_extension/sim/tb_firmware_soc.sv`
+  - executes twelve ROM-backed RV32 programs through `soc_chiplet_rv32_top`
+  - drives the existing DMA CSR map through APB MMIO rather than testbench CSR tasks
+  - correlates CPU commit, APB transfer, descriptor acceptance, completion, IRQ, and destination-memory evidence
+  - checks APB wait/reset/error handling, IRQ masking, queue/full-retire behavior, timeout/parity/invalid-memory errors, CRYPTO_ONLY rejection, and sleep/deep-sleep recovery
 
 ### Proxy power benching
 
@@ -229,6 +238,11 @@ flow. Relevant coverpoints include:
 - retention event: DMA sleep save/restore and DMA memory save/restore
 - activity class: no traffic, link traffic, DMA queued, DMA active,
   completion/IRQ pending
+- per-domain switch behavior: on/off observations for each switchable domain
+- per-domain isolation behavior: assert/deassert observations for each
+  switchable domain
+- sequencing behavior: isolation before switch-off, switch-on before restore,
+  restore before de-isolation, and retention pulse width
 
 Cross coverage focuses on the meaningful UPF interactions rather than
 exhaustive domain permutations:
@@ -240,8 +254,9 @@ exhaustive domain permutations:
 `power_state_summary.csv` is the closure artifact for this proxy coverage. It
 must show all four PST states, all six legal transitions, all four valid
 domain-combo bins, all isolation bins, DMA retention save/restore bins, and the
-selected transition/activity bins. `upf-check` does not contribute to these
-functional coverage bins; it only validates static UPF structure.
+selected transition/activity bins. It also reports per-domain switch,
+per-domain isolation, and sequencing coverage. `upf-check` does not contribute
+to these functional coverage bins; it only validates static UPF structure.
 
 ### Result-line contract
 
@@ -451,6 +466,8 @@ Required validation commands:
 - `make -C chiplet_extension closure-equivalence`
 - `make -C chiplet_extension power-regress`
 - `make -C chiplet_extension upf-check`
+- `make -C chiplet_extension firmware-soc-check`
+- `make -C chiplet_extension firmware-code-coverage`
 
 Optional full-UVM validation commands:
 
@@ -479,10 +496,17 @@ Generated outputs:
 - `chiplet_extension/reports/cross_coverage_summary.csv`
 - `chiplet_extension/reports/formal_summary.csv`
 - `chiplet_extension/reports/perf_characterization.csv`
+- `chiplet_extension/reports/firmware_soc_summary.csv`
+- `chiplet_extension/reports/firmware_coverage_summary.csv`
+- `chiplet_extension/reports/firmware_cross_coverage_summary.csv`
+- `chiplet_extension/reports/firmware_code_coverage_summary.md`
 - `docs/bug_diary.md`
 - `docs/bug_validation_cases.md`
 - `docs/debug_case_study_dma_retry.md`
 - `docs/images/dma_retry_waveform.png`
+- `docs/firmware_soc_verification.md`
+- `docs/debug_case_study_firmware_dma.md`
+- `docs/images/firmware_dma_waveform.png`
 - `docs/protocol_characterization.md`
 
 Optional seeded-random collateral:
@@ -536,19 +560,22 @@ Evidence split:
 
 Current local milestone:
 
-- stable regression currently runs `64 / 64` tests meeting expectation
-- nominal stable tests pass at `59 / 59`
+- stable regression currently runs `70 / 70` tests meeting expectation
+- nominal stable tests pass at `65 / 65`
 - the stable regression and randomized sweeps are Verilator-based
 - optional seeded-random stress is supporting evidence and its current status is generated in `docs/project_metrics.md`
 - cross-coverage evidence groups are observed at `8 / 8`
-- assertion inventory documents `31` protocol/control invariants
+- assertion inventory documents `52` protocol/control invariants, including independent APB submission correlation, firmware-to-DMA ordering, and completion-stall stability checks
+- firmware-driven integration passes `12 / 12` programs with `30 / 30` required points and `7 / 7` outcome/power crosses
 - expected bug-validation failures are observed at `5 / 5`
-- low-power proxy tests meet expectation at `20 / 20`
+- low-power proxy rows meet expectation at `26 / 26`
 - low-power functional coverage shows PST states `4 / 4`, legal transitions
   `6 / 6`, PST domain combinations `4 / 4`, isolation bins `4 / 4`,
-  retention bins `4 / 4`, and transition/activity bins `5 / 5`
+  retention bins `4 / 4`, transition/activity bins `5 / 5`,
+  switch-domain bins `12 / 12`, isolation-domain bins `12 / 12`, and
+  sequencing bins `4 / 4`
 - DMA nominal tests meet expectation at `19 / 19`
-- memory nominal tests meet expectation at `13 / 13`
+- memory nominal tests meet expectation at `15 / 15`
 - DMA bug-validation meets expectation at `1 / 1`
 - static UPF intent validation passes with `make -C chiplet_extension upf-check`
 - bounded Verilator property collateral is checked in and runnable

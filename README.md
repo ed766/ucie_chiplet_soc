@@ -1,11 +1,11 @@
 # UCIe Chiplet SoC Project
 
-This repository stages a two-die extension of the original three-domain RISC-V SoC. The original project lives under `base_soc/` and remains available as supporting earlier work. The flagship project lives under `chiplet_extension/`, where the behavioral UCIe-style link, a CSR-programmable cross-die DMA crypto offload path, a banked local memory subsystem with parity and retention semantics, AES-backed services, and a coverage-driven Verilator DV flow now carry the strongest verification evidence in the repo.
+This repository stages a two-die extension of the original three-domain RISC-V SoC. The original project lives under `base_soc/` and remains available as supporting earlier work. In the flagship `chiplet_extension/`, a ROM-backed RV32 program controls the queued DMA through APB MMIO, payloads cross a behavioral UCIe-style link for AES service, and a coverage-driven Verilator flow checks the integrated subsystem.
 
 ## Verification Snapshot
 
 The current resume-facing metrics are generated from canonical report CSVs in
-[`docs/project_metrics.md`](/home/esgha/ucie_chiplet_soc/docs/project_metrics.md).
+[`docs/project_metrics.md`](docs/project_metrics.md).
 The core evidence set is stable regression closure, functional coverage,
 low-power proxy coverage, bounded assertion checks, and expected bug-validation
 failures. Optional UVM, seeded-random stress, and characterization lanes are
@@ -13,20 +13,82 @@ supporting evidence rather than the default closure gate.
 
 Current core snapshot:
 
-- Stable runs meeting expectation: `64 / 64`
+- Stable runs meeting expectation: `70 / 70`
 - Stable functional coverage: `60 / 60` bins
-- Low-power proxy tests meeting expectation: `20 / 20`
+- Low-power proxy tests meeting expectation: `26 / 26`
 - Expected bug-validation failures: `5 / 5`
-- Assertion inventory: `31` protocol/control invariants
+- Assertion inventory: `52` protocol/control invariants
+- True interaction cross coverage: `10 / 10` non-gating groups
+- AXI-Lite CSR wrapper coverage: `18 / 18` directed protocol points, `6` assertions, `0` assertion failures
+- Firmware-driven RV32 integration: `12 / 12` programs, `30 / 30` MMIO/outcome points, and `7 / 7` required crosses
+- Focused RV32/APB/ROM integration line coverage: `86.62%` Verilator proxy
+- Optional seeded-random stress subset: `30 / 30` valid rows, plus `10` schema-rejected generated rows
 - LibreLane ASIC flow: complete end-to-end, with DRC/LVS passing and residual antenna/max slew/max cap warnings still documented
+
+AXI-Lite is optional CSR/control-plane integration collateral around the DMA
+and power-management register interface. The main chiplet data path remains
+the behavioral UCIe-style link, not AXI.
+
+### Reviewer Path
+
+For a quick DV review, run or inspect these in order:
+
+```bash
+make -C chiplet_extension project-check
+make -C chiplet_extension upf-check
+make -C chiplet_extension frontend-quality
+make -C chiplet_extension code-coverage
+make -C chiplet_extension axi-lite-check
+make -C chiplet_extension firmware-soc-check
+make -C chiplet_extension firmware-code-coverage
+```
+
+Then open:
+
+- [`docs/project_metrics.md`](docs/project_metrics.md) for current counts.
+- [`docs/verification_traceability_matrix.md`](docs/verification_traceability_matrix.md) for feature-to-evidence mapping.
+- [`docs/bug_diary.md`](docs/bug_diary.md) for injected-fault/debug stories.
+- [`docs/true_cross_coverage_summary.md`](docs/true_cross_coverage_summary.md) for non-gating interaction coverage.
+- [`docs/axi_lite_coverage_summary.md`](docs/axi_lite_coverage_summary.md) for optional AXI-Lite CSR wrapper protocol coverage.
+- [`chiplet_extension/reports/upf_intent_summary.md`](chiplet_extension/reports/upf_intent_summary.md) for static UPF intent validation.
+- [`docs/open_source_flow_summary.md`](docs/open_source_flow_summary.md) for open-source lint, quality, coverage, UPF, CDC/RDC, and C-model evidence.
+- [`docs/clock_reset_cdc_plan.md`](docs/clock_reset_cdc_plan.md) for clock/reset-domain and CDC/RDC strategy.
+- [`docs/firmware_soc_verification.md`](docs/firmware_soc_verification.md) for RV32 software-driven DMA evidence.
+
+### Hiring-Manager Quick Path
+
+If reviewing this as a DV/resume project, inspect these first:
+
+- [`docs/project_metrics.md`](docs/project_metrics.md) for the current evidence snapshot.
+- [`docs/verification_traceability_matrix.md`](docs/verification_traceability_matrix.md) for requirement-to-test/checker/coverage mapping.
+- [`docs/coverage_closure_case_study.md`](docs/coverage_closure_case_study.md) for how the `60 / 60` functional target was closed.
+- [`docs/firmware_soc_verification.md`](docs/firmware_soc_verification.md) for firmware-driven APB/MMIO integration.
+- [`docs/debug_case_study_firmware_dma.md`](docs/debug_case_study_firmware_dma.md) for the RV32/APB/DMA waveform walkthrough.
+- [`docs/bug_diary.md`](docs/bug_diary.md) for injected-fault debugging examples.
+- [`docs/axi_lite_coverage_summary.md`](docs/axi_lite_coverage_summary.md) for optional CSR-bus protocol coverage.
+- [`chiplet_extension/reports/upf_intent_summary.md`](chiplet_extension/reports/upf_intent_summary.md) and [`docs/power_verification_plan.md`](docs/power_verification_plan.md) for UPF and low-power verification scope.
 
 ```mermaid
 flowchart LR
-    A["Die A (RV32 + DMA offload + packetizer)"] --> B["Behavioral UCIe-style link"]
-    B --> C["Die B (AES-128 service chiplet)"]
-    C --> B
-    B --> D["Passive monitors + scoreboards"]
-    D --> E["Coverage, DMA, power, bug, and closure reports"]
+    subgraph CTRL["Software-visible control plane"]
+        ROM["ROM-backed RV32 firmware"] -->|"APB MMIO"| CSR["DMA and power CSRs"]
+        AXI["Optional AXI-Lite wrapper"] -.->|"integration collateral"| CSR
+    end
+    subgraph A["Die A compute chiplet"]
+        CSR --> DMA["4-entry queued DMA"]
+        SRC[("2-bank source memory\nparity + retention")] --> DMA
+        DMA --> PKT["Packetizer / credits / CRC / retry"]
+        PKT --> DST[("2-bank destination memory\ncompletion FIFO + IRQ")]
+    end
+    PKT <-->|"256-bit FLITs"| LINK["Behavioral UCIe-style PHY/channel\nlatency + jitter + faults"]
+    LINK <--> AES["Die B AES-128 service"]
+    PWR["UPF 4.0 intent\nswitches + isolation + retention + PST"] -.-> A
+    PWR -.-> LINK
+    PWR -.-> AES
+    MON["Monitors + scoreboards + SVA\nPython/C references + coverage"] -.-> DMA
+    MON -.-> LINK
+    MON -.-> AES
+    MON --> RPT["Closure, power, firmware, bug,\ncoverage, and characterization reports"]
 ```
 
 ![UCIe chiplet verification architecture](docs/images/chiplet_dv_architecture.svg)
@@ -52,6 +114,7 @@ ucie_chiplet_soc/
 ## Architecture at a Glance
 
 - **Die A (Compute chiplet)**
+  - `soc_chiplet_rv32_top.sv` integrates the lightweight RV32 core as an APB master over the existing DMA CSR map; twelve ROM-backed programs exercise queueing, IRQs, timeout/parity/retention errors, APB reset/waits, and sleep/deep-sleep behavior without testbench CSR writes.
   - Generates 64‑bit plaintext words via `die_a_system.sv`.
   - Packetizes data into 256‑bit FLITs (`flit_packetizer.sv`), tracks credits, and drives the UCIe adapter (`ucie_tx.sv` / `ucie_rx.sv`).
   - Includes a CSR-programmable queued DMA offload controller with `256 x 64-bit` source/destination local memories, a 4-entry submit queue, a 4-entry completion FIFO, interrupt-driven completion, timeout/error handling, and monitor-only DMA status outputs.
@@ -68,7 +131,7 @@ ucie_chiplet_soc/
   - `soc_chiplet_top.sv` ties the dice together with direct signal wiring and exposes monitors for plaintext and ciphertext streams. (The `ucie_lane_if.sv` interface definition is available if you choose to reintroduce it.)
 
 - **Power Intent**
-  - `chiplet_extension/upf/chiplet_full.upf` defines tool-neutral UPF 4.0 intent for the dual-die system, including always-on glue, switchable traffic/DMA/link/crypto/channel domains, switches, output isolation, DMA retention, and the chiplet power-state table. The legacy `die_a.upf`, `die_b.upf`, and `pst_chiplet.upf` files source the canonical intent as compatibility entrypoints.
+  - `chiplet_extension/upf/chiplet_full.upf` defines tool-neutral UPF 4.0 intent for the dual-die system, including an always-on power controller, switchable traffic/DMA/link/crypto/channel domains, switches, output isolation, DMA retention, and the chiplet power-state table. The legacy `die_a.upf`, `die_b.upf`, and `pst_chiplet.upf` files source the canonical intent as compatibility entrypoints.
 
 ## Power Intent (UPF) in This Project
 
@@ -84,6 +147,7 @@ The repository uses UPF to capture power intent separately from RTL so the desig
   - Partitions the chiplet top into `AON_CHIPLET`, Die A traffic/DMA/link domains, Die B crypto/link domains, and the behavioral channel domain.
   - Declares switched supplies, power switches, clamp-to-0 output isolation, DMA sleep-context retention, DMA memory-bank retention capability, and the RUN / CRYPTO_ONLY / SLEEP / DEEP_SLEEP PST.
   - Binds these strategies to internal RTL sideband controls generated from the existing `power_state[1:0]` input.
+  - Sequences isolation before switch-off and restore before de-isolation, with Verilator proxy coverage for switch-domain, isolation-domain, retention, and sequencing bins.
 
 - **Signoff gap**: the chiplet UPF is complete declarative intent, but it has not been validated with a commercial UPF-aware simulator, synthesis, or implementation flow. Minor tool-dialect cleanup may still be needed for a specific signoff tool.
 
@@ -109,9 +173,19 @@ make power-regress    # standalone power-proxy suite
 make formal-check     # bounded Verilator property appendix
 make assertion-inventory # generate assertion inventory documentation
 make upf-check        # static tool-neutral UPF intent sanity check
+make frontend-quality # Verilator lint + optional Yosys/OpenSTA + CDC/RDC summary
+make code-coverage    # Verilator code-coverage lane, separate from functional coverage
+make axi-lite-check   # AXI-Lite CSR wrapper directed test
+make cdc-rdc-check    # directed synchronizer/reset clock-ratio test
+make c-reference-check # standalone C FLIT CRC reference-model self-test
+make firmware-soc-smoke # two fast ROM-backed RV32/APB scenarios
+make firmware-soc-check # twelve ROM-backed RV32/APB/DMA scenarios
+make firmware-code-coverage # focused RV32/APB/ROM integration coverage
+make firmware-waveform # regenerate the firmware-driven DMA trace PNG
 make dma-retry-waveform # regenerate deterministic DMA retry debug PNG
 make uvm-check-env    # optional full-UVM lane preflight
 make uvm-smoke        # optional full-UVM smoke test
+make uvm-ral-smoke    # optional UVM RAL AXI-Lite CSR frontdoor smoke
 make uvm-closure      # optional UVM closure lane
 make uvm-regress      # alias for UVM closure
 make stress           # exploratory retry/fault stress suite
@@ -141,22 +215,32 @@ regression regenerates:
 - `chiplet_extension/reports/power_state_summary.csv`
 - `chiplet_extension/reports/coverage_closure_matrix.md`
 - `chiplet_extension/reports/cross_coverage_summary.csv`
+- `chiplet_extension/reports/true_cross_coverage_summary.csv`
 - `chiplet_extension/reports/closure_equivalence.csv`
 - `chiplet_extension/reports/closure_equivalence.md`
 - `chiplet_extension/reports/formal_summary.csv`
 - `chiplet_extension/reports/perf_characterization.csv`
+- `chiplet_extension/reports/frontend_quality_summary.md`
+- `chiplet_extension/reports/code_coverage_summary.md`
+- `chiplet_extension/reports/c_reference_summary.csv`
 - `docs/protocol_characterization.md`
 - `docs/performance_characterization.md`
 - `docs/assertion_inventory.md`
+- `docs/coverage_closure_case_study.md`
 - `docs/random_stress_summary.md`
 - `docs/uvm_status.md`
+- `docs/true_cross_coverage_summary.md`
+- `docs/verification_traceability_matrix.md`
 - `docs/bug_validation_cases.md`
+- `docs/open_source_flow_summary.md`
+- `docs/clock_reset_cdc_plan.md`
 
 Additional optional collateral includes seeded-random manifests and bounded
 stress execution summaries under
 `chiplet_extension/reports/*_manifest.csv`, the assertion inventory in
 `docs/assertion_inventory.md`, the seeded-random stress summary in
-`docs/random_stress_summary.md`, the UVM status note in `docs/uvm_status.md`,
+`docs/random_stress_summary.md`, the coverage closure case study in
+`docs/coverage_closure_case_study.md`, the UVM status note in `docs/uvm_status.md`,
 the interview-facing bug diary in `docs/bug_diary.md`, and the waveform debug case study in
 `docs/debug_case_study_dma_retry.md`.
 
@@ -168,6 +252,15 @@ runs do not overwrite closure evidence. When the optional UVM environment is
 available, `make closure-equivalence` compares the UVM and non-UVM closure
 vectors for the same 60-bin functional target, power-proxy target, and
 expected bug-validation results.
+
+`make uvm-ral-smoke` is the optional UVM RAL path. It models the DMA/power CSR
+map and drives the AXI-Lite CSR bridge through a RAL frontdoor; it is
+methodology collateral and does not replace `make axi-lite-check`.
+
+The recommended reviewer entrypoint is `docs/verification_traceability_matrix.md`.
+It maps each major feature to its stimulus, checker/scoreboard, assertion,
+coverage metric, and report artifact so a reader does not have to infer the DV
+story from raw CSVs.
 
 ### Verification Plan Snapshot
 
@@ -193,11 +286,16 @@ expected bug-validation results.
 `chiplet_extension/reports/coverage_closure_matrix.md` contains the generated
 feature-grouped closure view, metric-to-test mapping, and cross-coverage
 evidence. Cross groups are quality evidence layered on top of the canonical
-`60 / 60` flat-bin closure target. The bug diary in `docs/bug_diary.md` and
+`60 / 60` flat-bin closure target. The narrative closure walkthrough is in
+`docs/coverage_closure_case_study.md`. The bug diary in `docs/bug_diary.md` and
 the exact regression diary in `docs/bug_validation_cases.md` record the five
 implemented expected-fail bug modes and the checker/bucket that catches each
 one. The waveform-driven retry debug case study is in
 `docs/debug_case_study_dma_retry.md`.
+
+`docs/true_cross_coverage_summary.md` reports interaction-level cross evidence
+separately from the canonical flat-bin closure model. Missing true crosses are
+marked as deferred rather than counted as closure failures.
 
 `docs/performance_characterization.md` summarizes behavioral latency,
 throughput, retry, sleep/resume, and crypto-only observations across named
@@ -225,13 +323,13 @@ scenario and coverage infrastructure. The checked-in non-Verilator path keeps a
 normal `run_test()`/phase/TLM structure, but commercial-simulator UVM regression
 has not been used as the signoff gate.
 
-Verified in this workspace on April 26, 2026: the stable Verilator regression
-completed with `64 / 64` runs meeting expectation, `59 / 59` nominal passes,
+Verified in this workspace on June 11, 2026: the stable Verilator regression
+completed with `70 / 70` runs meeting expectation, `65 / 65` nominal passes,
 `1 / 1` randomized passes, `5 / 5` expected bug-validation failures, `19 / 19`
-DMA nominal passes, `13 / 13` memory nominal passes, and `60 / 60` covered
-functional bins. The bounded property appendix completed with `8 / 8` nominal
-harnesses plus `1 / 1` expected failing bug demo. The low-power proxy suite was
-refreshed with `20 / 20` runs meeting expectation.
+DMA nominal passes, `15 / 15` memory nominal passes, and `60 / 60` covered
+functional bins. The bounded property appendix completed with `9 / 9`
+checks meeting expectation. The low-power proxy suite was
+refreshed with `26 / 26` rows meeting expectation.
 
 For the full chiplet DV methodology and current test list, see
 `chiplet_extension/README.md`.
@@ -280,10 +378,10 @@ Notes:
 
 - LibreLane runs complete end-to-end in this workspace with a relaxed clock target (e.g., 200 ns) and produce final layout outputs, so the flow is operational.
 - RTL has been refactored to remove obvious placeholders (XOR crypto, hard-coded CRC stubs) and to use a proper AES-128 core, but the flow is still functional/behavioral rather than sign-off-verified.
-- The stable Verilator regression currently completes with 64 / 64 runs meeting expectation, including 59 / 59 nominal passes, 1 / 1 randomized runs, 5 / 5 expected bug-validation failures, 19 / 19 DMA nominal passes, and 13 / 13 memory nominal passes.
+- The stable Verilator regression currently completes with 70 / 70 runs meeting expectation, including 65 / 65 nominal passes, 1 / 1 randomized runs, 5 / 5 expected bug-validation failures, 19 / 19 DMA nominal passes, and 15 / 15 memory nominal passes.
 - The DMA offload path now adds a software-visible queued control plane on Die A with staged CSR submission, a 4-entry submit queue, a 4-entry completion FIFO, level IRQ signaling, reject logging, timeout/error handling, and Python-backed destination-memory comparison.
 - The local memory subsystem behind the DMA is now banked, parity-protected, maintenance-accessible through explicit MEM_OP CSRs, and retention-aware across RUN / CRYPTO_ONLY / SLEEP / DEEP_SLEEP proxy modes.
-- The low-power proxy suite currently completes with 20 / 20 runs meeting expectation and exercises modeled RUN, CRYPTO_ONLY, SLEEP, and DEEP_SLEEP states plus legal transitions, valid PST domain combinations, isolation behavior, DMA retention pulses, transition/activity crosses, active-traffic power transitions, queued-DMA sleep/resume, and retention-matrix scenarios.
+- The low-power proxy suite currently completes with 26 / 26 rows meeting expectation and exercises modeled RUN, CRYPTO_ONLY, SLEEP, and DEEP_SLEEP states plus legal transitions, valid PST domain combinations, per-domain switch/isolation behavior, DMA retention pulses, sequencing bins, transition/activity crosses, active-traffic power transitions, queued-DMA sleep/resume, invalid-memory recovery, and retention-matrix scenarios.
 - The chiplet extension now includes tool-neutral UPF 4.0 power intent with domains, supplies, switches, isolation, DMA retention, and PST definitions, plus a repo-local `make upf-check` validator. This is not yet signoff-validated by a UPF-aware commercial tool.
 - An optional full-UVM lane is checked in under `chiplet_extension/sim/uvm` and is run through `make uvm-check-env`, `make uvm-smoke`, `make uvm-closure`, and `make uvm-regress` when `VERILATOR_UVM` and `UVM_HOME` point to a UVM-capable Verilator/UVM 2017 setup. It is intentionally separate from the stable Verilator gate, and its closure output can be checked for equivalence against the non-UVM lane.
 - The heavier retry/fault, SoC recovery, and characterization-style sweeps are preserved as named flows rather than being silently removed.

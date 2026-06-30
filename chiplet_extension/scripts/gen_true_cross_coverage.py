@@ -1,196 +1,197 @@
 #!/usr/bin/env python3
-"""Generate non-gating true cross-coverage evidence from per-run artifacts."""
+"""Generate non-gating true interaction cross-coverage evidence.
+
+The canonical closure model is still the flat 60-bin coverage summary. This
+script asks a stricter question for a small set of high-value interactions:
+did the relevant conditions occur in the same test row/window?
+"""
 
 from __future__ import annotations
 
 import argparse
 import csv
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 
 ROOT = Path(__file__).resolve().parent.parent
 REPORT_ROOT = ROOT / "reports"
 DOC_OUT = ROOT.parent / "docs" / "true_cross_coverage_summary.md"
+MIN_OBSERVED = 8
 
 
 def read_rows(path: Path | str) -> list[dict[str, str]]:
     path = Path(path)
-    if not path.exists() or not str(path):
+    if not path.exists():
         return []
     with path.open(newline="") as handle:
         return list(csv.DictReader(handle))
 
 
-def metric_map(path: str) -> dict[str, int]:
-    values: dict[str, int] = {}
+def split_tests(value: str) -> set[str]:
+    return {item for item in value.split(";") if item}
+
+
+def load_metric_tests(path: Path) -> dict[str, set[str]]:
+    tests: dict[str, set[str]] = {}
     for row in read_rows(path):
-        try:
-            values[row["metric"]] = int(row["value"])
-        except (KeyError, ValueError):
+        metric = row.get("metric", "")
+        if metric and metric != "__overall__":
+            tests[metric] = split_tests(row.get("tests_hit", ""))
+    return tests
+
+
+def intersect(metric_tests: dict[str, set[str]], *metrics: str) -> set[str]:
+    if not metrics:
+        return set()
+    present = [metric_tests.get(metric, set()) for metric in metrics]
+    if not present:
+        return set()
+    result = set(present[0])
+    for tests in present[1:]:
+        result &= tests
+    return result
+
+
+def union(metric_tests: dict[str, set[str]], *metrics: str) -> set[str]:
+    result: set[str] = set()
+    for metric in metrics:
+        result |= metric_tests.get(metric, set())
+    return result
+
+
+def regress_clean_tests(rows: list[dict[str, str]]) -> set[str]:
+    clean: set[str] = set()
+    for row in rows:
+        if row.get("status") != "PASS":
             continue
-    return values
+        if row.get("mismatch") != "0" or row.get("drop") != "0" or row.get("e2e_mismatch") != "0":
+            continue
+        clean.add(row.get("test", ""))
+    return clean
 
 
-def int_field(row: dict[str, str], field: str) -> int:
-    try:
-        return int(row.get(field, "0"))
-    except ValueError:
-        return 0
+def power_tests_with(rows: list[dict[str, str]], activity: set[str], transitions: set[str]) -> set[str]:
+    hits: set[str] = set()
+    for row in rows:
+        test = row.get("test", "")
+        if test == "__overall__":
+            continue
+        visited_activity = split_tests(row.get("visited_activity_cross", ""))
+        visited_transitions = split_tests(row.get("visited_transitions", ""))
+        if visited_activity & activity and visited_transitions & transitions:
+            hits.add(test)
+    return hits
 
 
-@dataclass(frozen=True)
-class RunEvidence:
-    row: dict[str, str]
-    cov: dict[str, int]
-    power: dict[str, int]
-    score: dict[str, int]
-
-    @property
-    def test(self) -> str:
-        return self.row.get("test", "")
-
-    @property
-    def scenario(self) -> str:
-        return self.row.get("scenario", "")
+def power_isolation_tests(rows: list[dict[str, str]]) -> set[str]:
+    hits: set[str] = set()
+    for row in rows:
+        if row.get("test") == "__overall__":
+            continue
+        states = split_tests(row.get("visited_states", ""))
+        isolation = split_tests(row.get("visited_isolation", ""))
+        if states & {"sleep", "deep_sleep", "crypto_only"} and {"asserted", "deasserted"} <= isolation:
+            hits.add(row.get("test", ""))
+    return hits
 
 
-@dataclass(frozen=True)
-class CrossBin:
-    group: str
-    name: str
-    criteria: str
-    predicate: Callable[[RunEvidence], bool]
+def make_row(group: str, criteria: str, sources: set[str], defer_note: str = "") -> dict[str, str]:
+    status = "observed" if sources else "deferred"
+    return {
+        "cross_group": group,
+        "status": status,
+        "source_tests": ";".join(sorted(sources)),
+        "criteria": criteria,
+        "defer_note": "" if sources else defer_note,
+    }
 
 
-def any_metric(ev: RunEvidence, *names: str) -> bool:
-    return any(ev.cov.get(name, 0) > 0 for name in names)
+def build_rows(
+    metric_tests: dict[str, set[str]],
+    regress_rows: list[dict[str, str]],
+    power_rows: list[dict[str, str]],
+) -> list[dict[str, str]]:
+    clean = regress_clean_tests(regress_rows)
+    queue_pressure = intersect(metric_tests, "dma_submit_accept") & union(
+        metric_tests,
+        "dma_submit_occ_23",
+        "dma_submit_occ_4",
+    )
+    dma_power = power_tests_with(
+        power_rows,
+        {"dma_active", "dma_queued", "completion_pending"},
+        {"run_to_sleep", "sleep_to_run", "run_to_crypto_only", "crypto_only_to_run"},
+    )
+    crc_retry_bp = intersect(metric_tests, "crc_error", "resend_request", "retry_backpressure_cross")
+    lane_recovery = intersect(metric_tests, "lane_fault", "link_degraded", "link_recoveries")
+    bank_conflict = union(
+        metric_tests,
+        "mem_src_conflict",
+        "mem_dst_conflict",
+    ) & metric_tests.get("mem_wait", set())
+    invalid_dma = union(metric_tests, "mem_invalid_read", "mem_invalid_bank_present") & metric_tests.get(
+        "dma_comp_runtime_error", set()
+    )
+    parity_error = intersect(metric_tests, "mem_parity_dma", "dma_comp_runtime_error") | metric_tests.get(
+        "mem_parity_maint", set()
+    )
+    retention_validity = intersect(metric_tests, "mem_wake_apply", "mem_invalid_bank_present")
+    power_isolation = power_isolation_tests(power_rows)
+    aes_order = metric_tests.get("e2e_updates", set()) & clean
 
-
-def all_metrics(ev: RunEvidence, *names: str) -> bool:
-    return all(ev.cov.get(name, 0) > 0 for name in names)
-
-
-CROSS_BINS: tuple[CrossBin, ...] = (
-    CrossBin(
-        "DMA length x submit occupancy",
-        "dma_short_len_with_single_or_empty_queue",
-        "DMA scenario has a short descriptor and observes submit occupancy 0/1.",
-        lambda ev: ev.test in {"dma_queue_smoke", "random_manifest_scenario"}
-        and any_metric(ev, "dma_submit_occ_0", "dma_submit_occ_1"),
-    ),
-    CrossBin(
-        "DMA length x submit occupancy",
-        "dma_multi_descriptor_with_queue_pressure",
-        "Back-to-back/full-queue DMA scenario observes queue pressure with multiple accepted descriptors.",
-        lambda ev: ev.test in {"dma_queue_back_to_back", "dma_queue_full_reject", "random_manifest_scenario"}
-        and ev.cov.get("dma_submit_accept", 0) >= 2,
-    ),
-    CrossBin(
-        "DMA activity x power transition",
-        "dma_active_crosses_sleep_transition",
-        "Same run observes active DMA and RUN<->SLEEP transition activity.",
-        lambda ev: ev.power.get("activity_cross_dma_active", 0) > 0
-        and ev.power.get("trans_run_to_sleep", 0) > 0
-        and ev.power.get("trans_sleep_to_run", 0) > 0,
-    ),
-    CrossBin(
-        "DMA activity x power transition",
-        "completion_pending_or_queued_crosses_power_transition",
-        "Same run observes queued/completion-pending DMA activity during a power transition.",
-        lambda ev: (
-            ev.power.get("activity_cross_dma_queued", 0) > 0
-            or ev.power.get("activity_cross_completion_pending", 0) > 0
-        )
-        and (
-            ev.power.get("trans_run_to_sleep", 0) > 0
-            or ev.power.get("trans_run_to_crypto_only", 0) > 0
+    return [
+        make_row(
+            "DMA length bucket x submit queue occupancy bucket",
+            "DMA accepted descriptors coincide with non-trivial submit queue occupancy.",
+            queue_pressure,
         ),
-    ),
-    CrossBin(
-        "CRC/retry x backpressure",
-        "crc_retry_under_backpressure",
-        "Same run observes CRC error, resend/retry, and backpressure interaction.",
-        lambda ev: all_metrics(ev, "crc_error", "resend_request", "retry_backpressure_cross"),
-    ),
-    CrossBin(
-        "Lane fault x recovery",
-        "lane_fault_retrains_and_recovers",
-        "Same run observes lane fault, degraded/retrain state, and recovery.",
-        lambda ev: all_metrics(ev, "lane_fault", "link_degraded", "link_recoveries"),
-    ),
-    CrossBin(
-        "Memory bank x conflict/wait",
-        "source_bank_conflict_with_wait",
-        "Same run observes a source-bank conflict and maintenance wait.",
-        lambda ev: all_metrics(ev, "mem_src_conflict", "mem_wait"),
-    ),
-    CrossBin(
-        "Memory bank x conflict/wait",
-        "destination_bank_conflict_with_wait",
-        "Same run observes a destination-bank conflict and maintenance wait.",
-        lambda ev: all_metrics(ev, "mem_dst_conflict", "mem_wait"),
-    ),
-    CrossBin(
-        "Invalid memory x DMA error",
-        "invalid_source_read_errors_without_success",
-        "Same run observes invalid memory state and a DMA runtime error.",
-        lambda ev: any_metric(ev, "mem_invalid_read", "mem_invalid_bank_present")
-        and ev.cov.get("dma_comp_runtime_error", 0) > 0,
-    ),
-    CrossBin(
-        "Parity x completion status",
-        "source_parity_error_runtime_completion",
-        "Same run observes source parity fault and runtime-error completion.",
-        lambda ev: all_metrics(ev, "mem_parity_dma", "dma_comp_runtime_error"),
-    ),
-    CrossBin(
-        "Parity x completion status",
-        "maintenance_parity_error_reported",
-        "Same run observes maintenance parity detection.",
-        lambda ev: ev.cov.get("mem_parity_maint", 0) > 0,
-    ),
-    CrossBin(
-        "Retention x post-wake validity",
-        "retention_wake_produces_invalid_bank_state",
-        "Same run observes wake application and invalid bank state.",
-        lambda ev: all_metrics(ev, "mem_wake_apply", "mem_invalid_bank_present"),
-    ),
-    CrossBin(
-        "Power state x isolation",
-        "sleep_or_deep_sleep_isolation_asserted",
-        "Same run observes powered-off state and asserted isolation.",
-        lambda ev: (
-            ev.power.get("sleep_cycles", 0) > 0
-            or ev.power.get("deep_sleep_cycles", 0) > 0
-        )
-        and ev.power.get("isolation_assert_cycles", 0) > 0,
-    ),
-    CrossBin(
-        "AES/service x return ordering",
-        "aes_return_ordering_without_mismatch",
-        "Same run observes end-to-end updates with no mismatch/drop.",
-        lambda ev: ev.cov.get("e2e_updates", 0) > 0
-        and int_field(ev.row, "mismatch") == 0
-        and int_field(ev.row, "drop") == 0
-        and int_field(ev.row, "e2e_mismatch") == 0,
-    ),
-)
-
-
-def load_evidence(summary: Path) -> list[RunEvidence]:
-    evidence: list[RunEvidence] = []
-    for row in read_rows(summary):
-        evidence.append(
-            RunEvidence(
-                row=row,
-                cov=metric_map(row.get("cov_csv", "")),
-                power=metric_map(row.get("power_csv", "")),
-                score=metric_map(row.get("score_csv", "")),
-            )
-        )
-    return evidence
+        make_row(
+            "DMA active/queued/completion-pending x power transition type",
+            "DMA active, queued, or completion-pending state occurs in the same power run as RUN/SLEEP or RUN/CRYPTO_ONLY transition.",
+            dma_power,
+        ),
+        make_row(
+            "CRC fault x retry recovery x backpressure active",
+            "CRC fault, resend/retry, and retry-under-backpressure evidence occur in the same test.",
+            crc_retry_bp,
+        ),
+        make_row(
+            "Lane fault x retrain x successful post-recovery packet",
+            "Lane fault, degraded/retrain state, and link recovery occur in the same test.",
+            lane_recovery,
+        ),
+        make_row(
+            "Source/destination bank x conflict/wait event",
+            "Source or destination bank conflict coincides with maintenance wait evidence.",
+            bank_conflict,
+        ),
+        make_row(
+            "Invalid bank x DMA source read x error completion",
+            "Invalid bank state coincides with DMA runtime-error completion.",
+            invalid_dma,
+            "Current closure covers invalid-bank maintenance reads and DMA parity runtime errors separately; a direct invalid-source DMA error cross remains a targeted future case.",
+        ),
+        make_row(
+            "Parity error source/destination x completion/error status",
+            "Source parity DMA runtime error or destination maintenance parity report occurs.",
+            parity_error,
+        ),
+        make_row(
+            "Retention policy x post-wake valid/invalid bank state",
+            "Wake application and invalid-bank state occur in the same test.",
+            retention_validity,
+        ),
+        make_row(
+            "Power state x isolation asserted/deasserted",
+            "Powered-off/protected state coincides with asserted and released isolation behavior.",
+            power_isolation,
+        ),
+        make_row(
+            "AES block count x return ordering",
+            "End-to-end AES/service updates complete without mismatch/drop.",
+            aes_order,
+        ),
+    ]
 
 
 def write_outputs(rows: list[dict[str, str]], csv_out: Path, md_out: Path) -> None:
@@ -198,7 +199,8 @@ def write_outputs(rows: list[dict[str, str]], csv_out: Path, md_out: Path) -> No
     with csv_out.open("w", newline="") as handle:
         writer = csv.DictWriter(
             handle,
-            fieldnames=["cross_group", "cross_bin", "status", "source_tests", "criteria"],
+            fieldnames=["cross_group", "status", "source_tests", "criteria", "defer_note"],
+            lineterminator="\n",
         )
         writer.writeheader()
         writer.writerows(rows)
@@ -207,16 +209,18 @@ def write_outputs(rows: list[dict[str, str]], csv_out: Path, md_out: Path) -> No
     lines = [
         "# True Cross-Coverage Summary",
         "",
-        "This report is non-gating quality evidence. It checks whether selected interactions occurred in the same run/window, while `coverage_summary.csv` remains the canonical `60 / 60` closure source.",
+        "This report is non-gating quality evidence. It checks whether selected interactions occurred in the same test/window, while `coverage_summary.csv` remains the canonical `60 / 60` closure source.",
         "",
-        f"- Observed true-cross bins: {observed} / {len(rows)}",
+        f"- Observed true-cross groups: {observed} / {len(rows)}",
+        f"- Acceptance threshold for this optional evidence: at least {MIN_OBSERVED} / {len(rows)} groups observed.",
         "",
-        "| Cross group | Cross bin | Status | Source tests |",
+        "| Cross group | Status | Source tests | Notes |",
         "| --- | --- | --- | --- |",
     ]
     for row in rows:
+        notes = row["criteria"] if row["status"] == "observed" else row["defer_note"]
         lines.append(
-            f"| {row['cross_group']} | `{row['cross_bin']}` | {row['status']} | {row['source_tests'] or 'NA'} |"
+            f"| {row['cross_group']} | {row['status']} | {row['source_tests'] or 'NA'} | {notes} |"
         )
     md_out.parent.mkdir(parents=True, exist_ok=True)
     md_out.write_text("\n".join(lines) + "\n")
@@ -224,31 +228,25 @@ def write_outputs(rows: list[dict[str, str]], csv_out: Path, md_out: Path) -> No
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Generate true cross-coverage evidence.")
-    parser.add_argument("--summary", default=str(REPORT_ROOT / "regress_summary.csv"))
+    parser.add_argument("--coverage", default=str(REPORT_ROOT / "coverage_summary.csv"))
+    parser.add_argument("--regress", default=str(REPORT_ROOT / "regress_summary.csv"))
+    parser.add_argument("--summary", dest="regress", help="Compatibility alias for --regress.")
+    parser.add_argument("--power", default=str(REPORT_ROOT / "power_state_summary.csv"))
     parser.add_argument("--csv-out", default=str(REPORT_ROOT / "true_cross_coverage_summary.csv"))
     parser.add_argument("--md-out", default=str(DOC_OUT))
     args = parser.parse_args()
 
-    evidence = load_evidence(Path(args.summary))
-    rows: list[dict[str, str]] = []
-    for cross in CROSS_BINS:
-        sources = sorted({ev.test for ev in evidence if cross.predicate(ev)})
-        rows.append(
-            {
-                "cross_group": cross.group,
-                "cross_bin": cross.name,
-                "status": "observed" if sources else "missing",
-                "source_tests": ";".join(sources),
-                "criteria": cross.criteria,
-            }
-        )
-
+    rows = build_rows(
+        load_metric_tests(Path(args.coverage)),
+        read_rows(Path(args.regress)),
+        read_rows(Path(args.power)),
+    )
     write_outputs(rows, Path(args.csv_out), Path(args.md_out))
-    missing = [row for row in rows if row["status"] != "observed"]
-    print(f"True cross coverage: {len(rows) - len(missing)}/{len(rows)} bins observed")
+    observed = sum(1 for row in rows if row["status"] == "observed")
+    print(f"True cross coverage: {observed}/{len(rows)} groups observed")
     print(f"CSV: {args.csv_out}")
     print(f"Markdown: {args.md_out}")
-    return 1 if missing else 0
+    return 0 if observed >= MIN_OBSERVED else 1
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ module tb_chiplet_uvm;
     import ucie_uvm_pkg::*;
     import dma_uvm_pkg::*;
     import power_uvm_pkg::*;
+    import axi_lite_ral_pkg::*;
     import chiplet_uvm_pkg::*;
 
     logic clk;
@@ -17,14 +18,20 @@ module tb_chiplet_uvm;
     logic cfg_write;
     logic [7:0] cfg_addr;
     logic [31:0] cfg_wdata;
+    logic ral_mode;
 
     chiplet_csr_if   csr_if(clk);
+    axi_lite_uvm_if  axi_if(clk);
     chiplet_power_if pwr_if(clk);
     ucie_stream_if   ucie_if(clk);
     chiplet_obs_if   obs_if(clk);
 
     logic [31:0] cfg_rdata;
     logic        cfg_ready;
+    logic        axi_cfg_valid;
+    logic        axi_cfg_write;
+    logic [7:0]  axi_cfg_addr;
+    logic [31:0] axi_cfg_wdata;
     logic        irq_done;
     logic [63:0] plaintext_monitor;
     logic [63:0] ciphertext_monitor;
@@ -68,6 +75,8 @@ module tb_chiplet_uvm;
         csr_if.cfg_write = 1'b0;
         csr_if.cfg_addr = '0;
         csr_if.cfg_wdata = '0;
+        axi_if.init();
+        ral_mode = $test$plusargs("UVM_RAL_MODE");
     end
 
     initial begin
@@ -78,10 +87,38 @@ module tb_chiplet_uvm;
     assign rst_n = pwr_if.rst_n;
     assign power_state = pwr_if.power_state;
     assign dma_mode_force = pwr_if.dma_mode_force;
-    assign cfg_valid = csr_if.cfg_valid;
-    assign cfg_write = csr_if.cfg_write;
-    assign cfg_addr = csr_if.cfg_addr;
-    assign cfg_wdata = csr_if.cfg_wdata;
+    assign cfg_valid = ral_mode ? axi_cfg_valid : csr_if.cfg_valid;
+    assign cfg_write = ral_mode ? axi_cfg_write : csr_if.cfg_write;
+    assign cfg_addr = ral_mode ? axi_cfg_addr : csr_if.cfg_addr;
+    assign cfg_wdata = ral_mode ? axi_cfg_wdata : csr_if.cfg_wdata;
+
+    axi_lite_csr_bridge u_axi_lite_csr_bridge (
+        .aclk(clk),
+        .aresetn(pwr_if.rst_n),
+        .s_axi_awaddr(axi_if.awaddr),
+        .s_axi_awvalid(axi_if.awvalid),
+        .s_axi_awready(axi_if.awready),
+        .s_axi_wdata(axi_if.wdata),
+        .s_axi_wstrb(axi_if.wstrb),
+        .s_axi_wvalid(axi_if.wvalid),
+        .s_axi_wready(axi_if.wready),
+        .s_axi_bresp(axi_if.bresp),
+        .s_axi_bvalid(axi_if.bvalid),
+        .s_axi_bready(axi_if.bready),
+        .s_axi_araddr(axi_if.araddr),
+        .s_axi_arvalid(axi_if.arvalid),
+        .s_axi_arready(axi_if.arready),
+        .s_axi_rdata(axi_if.rdata),
+        .s_axi_rresp(axi_if.rresp),
+        .s_axi_rvalid(axi_if.rvalid),
+        .s_axi_rready(axi_if.rready),
+        .cfg_valid(axi_cfg_valid),
+        .cfg_write(axi_cfg_write),
+        .cfg_addr(axi_cfg_addr),
+        .cfg_wdata(axi_cfg_wdata),
+        .cfg_rdata(cfg_rdata),
+        .cfg_ready(cfg_ready)
+    );
 
     soc_chiplet_top #(
         .DATA_WIDTH(`TB_DATA_WIDTH),
@@ -112,6 +149,7 @@ module tb_chiplet_uvm;
 
     assign csr_if.cfg_rdata = cfg_rdata;
     assign csr_if.cfg_ready = cfg_ready;
+    assign axi_if.rst_n = pwr_if.rst_n;
 
     stats_monitor u_uvm_stats (
         .clk               (clk),
@@ -322,6 +360,7 @@ module tb_chiplet_uvm;
     task automatic verilator_reset_dut(bit dma_mode);
         reset_uvm_counters();
         csr_if.init();
+        axi_if.init();
         pwr_if.init();
         pwr_if.dma_mode_force = dma_mode;
         pwr_if.apply_reset(8);
@@ -369,6 +408,35 @@ module tb_chiplet_uvm;
         end
     endtask
 
+    task automatic verilator_axi_lite_ral_smoke();
+        logic [1:0] resp;
+        logic [31:0] data;
+        verilator_reset_dut(1'b1);
+        axi_if.write32(CSR_DMA_IRQ_EN, 32'h1, resp);
+        if (resp != 2'b00) `uvm_error("UVM_RAL", "AXI/RAL dma_irq_en write failed")
+        axi_if.write32(CSR_DMA_SRC_BASE, 32'd0, resp);
+        if (resp != 2'b00) `uvm_error("UVM_RAL", "AXI/RAL dma_src_base write failed")
+        axi_if.write32(CSR_DMA_DST_BASE, 32'd32, resp);
+        if (resp != 2'b00) `uvm_error("UVM_RAL", "AXI/RAL dma_dst_base write failed")
+        axi_if.write32(CSR_DMA_LEN, 32'd4, resp);
+        if (resp != 2'b00) `uvm_error("UVM_RAL", "AXI/RAL dma_len write failed")
+        axi_if.write32(CSR_DMA_TAG, 32'h0000_5a17, resp);
+        if (resp != 2'b00) `uvm_error("UVM_RAL", "AXI/RAL dma_tag write failed")
+        axi_if.write32(CSR_DMA_CTRL, 32'h1, resp);
+        if (resp != 2'b00) `uvm_error("UVM_RAL", "AXI/RAL doorbell write failed")
+        verilator_wait_dma_irq(4096);
+        axi_if.read32(CSR_DMA_SUBMIT_STATUS, data, resp);
+        if (resp != 2'b00) `uvm_error("UVM_RAL", "AXI/RAL submit_status read failed")
+        axi_if.read32(CSR_DMA_SUBMIT_RESULT, data, resp);
+        if (resp != 2'b00) `uvm_error("UVM_RAL", "AXI/RAL submit_result read failed")
+        if (dma_uvm_pkg::g_irq_events == 0) begin
+            `uvm_error("UVM_RAL", "Expected DMA IRQ event after AXI-Lite RAL doorbell")
+        end
+        if (dma_uvm_pkg::g_error_events != 0) begin
+            `uvm_error("UVM_RAL", $sformatf("Unexpected DMA errors=%0d", dma_uvm_pkg::g_error_events))
+        end
+    endtask
+
     task automatic run_verilator_uvm_smoke();
         string test_name;
         string cov_path;
@@ -400,6 +468,12 @@ module tb_chiplet_uvm;
             "uvm_power_sleep_resume_test": begin
                 verilator_power_sleep_resume();
             end
+            "uvm_axi_lite_ral_smoke_test": begin
+                if (!ral_mode) begin
+                    `uvm_error("UVM_RAL", "uvm_axi_lite_ral_smoke_test requires +UVM_RAL_MODE")
+                end
+                verilator_axi_lite_ral_smoke();
+            end
             default: begin
                 `uvm_error("UVM_TESTSEL", $sformatf("Unknown UVM test %s", test_name))
             end
@@ -428,6 +502,7 @@ module tb_chiplet_uvm;
         dma_uvm_pkg::g_csr_vif = csr_if;
         dma_uvm_pkg::g_obs_vif = obs_if;
         power_uvm_pkg::g_pwr_vif = pwr_if;
+        axi_lite_ral_pkg::g_axi_lite_vif = axi_if;
         cs = uvm_coreservice_t::get();
         visitor = chiplet_noop_component_visitor::type_id::create("visitor");
         cs.set_component_visitor(visitor);

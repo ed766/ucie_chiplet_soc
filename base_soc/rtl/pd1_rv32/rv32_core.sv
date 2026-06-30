@@ -1,11 +1,14 @@
-module rv32_core (
+module rv32_core #(
+  parameter logic [31:0] MMIO_BASE = 32'h0000_0100,
+  parameter logic [31:0] MMIO_END  = 32'h0000_01ff
+) (
   input  logic        clk,
   input  logic        rst_n,
   // Lightweight instruction stream for verification
   input  logic        instr_valid,
   output logic        instr_ready,
   input  logic [31:0] instr,
-  // APB master is retained for SoC compatibility but left idle here
+  // Loads/stores in the MMIO window execute as APB transfers.
   output logic [31:0] paddr,
   output logic        psel,
   output logic        penable,
@@ -29,6 +32,7 @@ module rv32_core (
   output logic [31:0] mem_rdata,
   output logic        branch_taken,
   output logic        illegal_instr,
+  output logic        bus_error,
   output logic        retire,
   output logic        halted
 );
@@ -52,7 +56,11 @@ module rv32_core (
   logic        pending_valid_q;
   logic [31:0] pending_instr_q;
   logic [31:0] pending_pc_q;
-  logic        unused_inputs;
+  logic        mmio_pending_q;
+  logic [31:0] mmio_addr_q;
+  logic [31:0] mmio_wdata_q;
+  logic [4:0]  mmio_rd_q;
+  logic        mmio_write_q;
   integer      idx;
 
   function automatic logic [4:0] rs1_idx(input logic [31:0] instr_word);
@@ -129,13 +137,7 @@ module rv32_core (
     end
   endfunction
 
-  assign instr_ready = rst_n && !halted && !pending_valid_q;
-  assign unused_inputs = ^{prdata, pready, pslverr};
-
-  always_comb begin
-    if (unused_inputs) begin
-    end
-  end
+  assign instr_ready = rst_n && !halted && !pending_valid_q && !mmio_pending_q;
 
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
@@ -143,6 +145,11 @@ module rv32_core (
       pending_valid_q <= 1'b0;
       pending_instr_q <= 32'h0000_0013;
       pending_pc_q    <= '0;
+      mmio_pending_q  <= 1'b0;
+      mmio_addr_q     <= '0;
+      mmio_wdata_q    <= '0;
+      mmio_rd_q       <= '0;
+      mmio_write_q    <= 1'b0;
       commit_valid    <= 1'b0;
       commit_instr    <= 32'h0000_0013;
       commit_pc       <= '0;
@@ -157,6 +164,7 @@ module rv32_core (
       mem_rdata       <= '0;
       branch_taken    <= 1'b0;
       illegal_instr   <= 1'b0;
+      bus_error       <= 1'b0;
       retire          <= 1'b0;
       halted          <= 1'b0;
       psel            <= 1'b0;
@@ -182,6 +190,7 @@ module rv32_core (
       mem_rdata     <= '0;
       branch_taken  <= 1'b0;
       illegal_instr <= 1'b0;
+      bus_error     <= 1'b0;
       retire        <= 1'b0;
       psel          <= 1'b0;
       penable       <= 1'b0;
@@ -189,7 +198,43 @@ module rv32_core (
       paddr         <= '0;
       pwdata        <= '0;
 
-      if (pending_valid_q) begin
+      if (mmio_pending_q) begin
+        psel      <= 1'b1;
+        pwrite    <= mmio_write_q;
+        paddr     <= mmio_addr_q;
+        pwdata    <= mmio_wdata_q;
+
+        if (!penable) begin
+          penable <= 1'b1;
+        end else begin
+          penable <= 1'b1;
+          if (pready) begin
+            commit_valid   <= 1'b1;
+            commit_instr   <= pending_instr_q;
+            commit_pc      <= pending_pc_q;
+            commit_next_pc <= pending_pc_q + 32'd4;
+            retire         <= 1'b1;
+            mem_valid      <= 1'b1;
+            mem_write      <= mmio_write_q;
+            mem_addr       <= mmio_addr_q;
+            mem_wdata      <= mmio_wdata_q;
+            mem_rdata      <= prdata;
+            bus_error      <= pslverr;
+            if (!mmio_write_q && !pslverr && (mmio_rd_q != 5'd0)) begin
+              wb_valid          <= 1'b1;
+              wb_rd             <= mmio_rd_q;
+              wb_data           <= prdata;
+              regs_q[mmio_rd_q] <= prdata;
+            end
+            pc_q            <= pending_pc_q + 32'd4;
+            regs_q[0]       <= '0;
+            pending_valid_q <= 1'b0;
+            mmio_pending_q  <= 1'b0;
+            psel            <= 1'b0;
+            penable         <= 1'b0;
+          end
+        end
+      end else if (pending_valid_q) begin
         logic [31:0] rs1_val;
         logic [31:0] rs2_val;
         logic [31:0] result;
@@ -197,6 +242,7 @@ module rv32_core (
         logic [31:0] addr;
         int unsigned mem_idx;
         op_e op;
+        logic defer_retire;
 
         rs1_val = regs_q[rs1_idx(pending_instr_q)];
         rs2_val = regs_q[rs2_idx(pending_instr_q)];
@@ -205,11 +251,7 @@ module rv32_core (
         addr    = '0;
         mem_idx = '0;
         op      = decode_op(pending_instr_q);
-
-        commit_valid <= 1'b1;
-        commit_instr <= pending_instr_q;
-        commit_pc    <= pending_pc_q;
-        retire       <= 1'b1;
+        defer_retire = 1'b0;
 
         case (op)
           OP_ADD: begin
@@ -247,25 +289,51 @@ module rv32_core (
           end
           OP_LW: begin
             addr      = rs1_val + imm_i(pending_instr_q);
-            mem_idx   = (addr >> 2) % DATA_MEM_WORDS;
-            mem_valid <= 1'b1;
-            mem_addr  <= addr;
-            mem_rdata <= data_mem_q[mem_idx];
-            if (rd_idx(pending_instr_q) != 5'd0) begin
-              wb_valid <= 1'b1;
-              wb_rd    <= rd_idx(pending_instr_q);
-              wb_data  <= data_mem_q[mem_idx];
-              regs_q[rd_idx(pending_instr_q)] <= data_mem_q[mem_idx];
+            if ((addr >= MMIO_BASE) && (addr <= MMIO_END)) begin
+              defer_retire   = 1'b1;
+              mmio_pending_q <= 1'b1;
+              mmio_addr_q    <= addr;
+              mmio_wdata_q   <= '0;
+              mmio_rd_q      <= rd_idx(pending_instr_q);
+              mmio_write_q   <= 1'b0;
+              psel           <= 1'b1;
+              pwrite         <= 1'b0;
+              paddr          <= addr;
+              pwdata         <= '0;
+            end else begin
+              mem_idx   = (addr >> 2) % DATA_MEM_WORDS;
+              mem_valid <= 1'b1;
+              mem_addr  <= addr;
+              mem_rdata <= data_mem_q[mem_idx];
+              if (rd_idx(pending_instr_q) != 5'd0) begin
+                wb_valid <= 1'b1;
+                wb_rd    <= rd_idx(pending_instr_q);
+                wb_data  <= data_mem_q[mem_idx];
+                regs_q[rd_idx(pending_instr_q)] <= data_mem_q[mem_idx];
+              end
             end
           end
           OP_SW: begin
             addr      = rs1_val + imm_s(pending_instr_q);
-            mem_idx   = (addr >> 2) % DATA_MEM_WORDS;
-            mem_valid <= 1'b1;
-            mem_write <= 1'b1;
-            mem_addr  <= addr;
-            mem_wdata <= rs2_val;
-            data_mem_q[mem_idx] <= rs2_val;
+            if ((addr >= MMIO_BASE) && (addr <= MMIO_END)) begin
+              defer_retire   = 1'b1;
+              mmio_pending_q <= 1'b1;
+              mmio_addr_q    <= addr;
+              mmio_wdata_q   <= rs2_val;
+              mmio_rd_q      <= '0;
+              mmio_write_q   <= 1'b1;
+              psel           <= 1'b1;
+              pwrite         <= 1'b1;
+              paddr          <= addr;
+              pwdata         <= rs2_val;
+            end else begin
+              mem_idx   = (addr >> 2) % DATA_MEM_WORDS;
+              mem_valid <= 1'b1;
+              mem_write <= 1'b1;
+              mem_addr  <= addr;
+              mem_wdata <= rs2_val;
+              data_mem_q[mem_idx] <= rs2_val;
+            end
           end
           OP_EBREAK: begin
             halted <= 1'b1;
@@ -275,10 +343,16 @@ module rv32_core (
           end
         endcase
 
-        commit_next_pc  <= next_pc;
-        pc_q            <= next_pc;
-        regs_q[0]       <= '0;
-        pending_valid_q <= 1'b0;
+        if (!defer_retire) begin
+          commit_valid    <= 1'b1;
+          commit_instr    <= pending_instr_q;
+          commit_pc       <= pending_pc_q;
+          commit_next_pc  <= next_pc;
+          retire          <= 1'b1;
+          pc_q            <= next_pc;
+          regs_q[0]       <= '0;
+          pending_valid_q <= 1'b0;
+        end
       end
 
       if (instr_valid && instr_ready) begin

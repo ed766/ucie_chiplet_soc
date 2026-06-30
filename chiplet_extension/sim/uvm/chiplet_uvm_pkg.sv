@@ -6,6 +6,7 @@ package chiplet_uvm_pkg;
     import ucie_uvm_pkg::*;
     import dma_uvm_pkg::*;
     import power_uvm_pkg::*;
+    import axi_lite_ral_pkg::*;
     `include "uvm_macros.svh"
 
     class chiplet_noop_component_visitor extends uvm_visitor #(uvm_component);
@@ -30,6 +31,7 @@ package chiplet_uvm_pkg;
         ucie_scoreboard ucie_sb;
         dma_scoreboard  dma_sb;
         power_scoreboard power_sb;
+        axi_lite_ral_env axi_ral;
 
         function new(string name, uvm_component parent);
             super.new(name, parent);
@@ -41,6 +43,7 @@ package chiplet_uvm_pkg;
             dma = dma_agent::type_id::create("dma", this);
             power = power_agent::type_id::create("power", this);
 `ifndef VERILATOR
+            axi_ral = axi_lite_ral_env::type_id::create("axi_ral", this);
             ucie_cov = ucie_coverage::type_id::create("ucie_cov", this);
             power_cov = power_coverage::type_id::create("power_cov", this);
             ucie_sb = ucie_scoreboard::type_id::create("ucie_sb", this);
@@ -67,6 +70,7 @@ package chiplet_uvm_pkg;
         chiplet_env env;
         virtual chiplet_power_if pwr_vif;
         virtual chiplet_csr_if csr_vif;
+        virtual axi_lite_uvm_if axi_vif;
 
         function new(string name, uvm_component parent);
             super.new(name, parent);
@@ -77,6 +81,7 @@ package chiplet_uvm_pkg;
             env = chiplet_env::type_id::create("env", this);
             pwr_vif = g_pwr_vif;
             csr_vif = g_csr_vif;
+            axi_vif = axi_lite_ral_pkg::g_axi_lite_vif;
             if (pwr_vif == null) begin
                 `uvm_fatal(get_type_name(), "Missing virtual interface chiplet_power_if")
             end
@@ -101,6 +106,13 @@ package chiplet_uvm_pkg;
             power_uvm_pkg::g_isolation_cycles = 0;
             power_uvm_pkg::g_retention_events = 0;
             csr_vif.init();
+`ifdef VERILATOR
+            axi_vif.init();
+`else
+            if (axi_vif != null) begin
+                axi_vif.init();
+            end
+`endif
             pwr_vif.init();
             pwr_vif.apply_reset(8);
             repeat (16) #10;
@@ -236,6 +248,45 @@ package chiplet_uvm_pkg;
             if (power_uvm_pkg::g_sleep_cycles == 0 || power_uvm_pkg::g_retention_events == 0) begin
                 `uvm_error(get_type_name(), "Expected sleep cycles and retention events in power sleep/resume test")
             end
+            finish_uvm_test(phase);
+        endtask
+    endclass
+
+    class uvm_axi_lite_ral_smoke_test extends chiplet_base_test;
+        `uvm_component_utils(uvm_axi_lite_ral_smoke_test)
+
+        function new(string name, uvm_component parent);
+            super.new(name, parent);
+        endfunction
+
+        task run_phase(uvm_phase phase);
+            uvm_status_e status;
+            uvm_reg_data_t data;
+            phase.raise_objection(this);
+            reset_dut();
+`ifdef VERILATOR
+            // The Verilator compatibility runner handles this test
+            // procedurally in tb_chiplet_uvm. Full RAL frontdoor execution is
+            // used when UVM phases/TLM are available.
+`else
+            env.axi_ral.reg_model.dma_irq_en.write(status, 32'h1);
+            if (status != UVM_IS_OK) `uvm_error(get_type_name(), "RAL write dma_irq_en failed")
+            env.axi_ral.reg_model.dma_src_base.write(status, 32'd0);
+            if (status != UVM_IS_OK) `uvm_error(get_type_name(), "RAL write dma_src_base failed")
+            env.axi_ral.reg_model.dma_dst_base.write(status, 32'd32);
+            if (status != UVM_IS_OK) `uvm_error(get_type_name(), "RAL write dma_dst_base failed")
+            env.axi_ral.reg_model.dma_len.write(status, 32'd4);
+            if (status != UVM_IS_OK) `uvm_error(get_type_name(), "RAL write dma_len failed")
+            env.axi_ral.reg_model.dma_tag.write(status, 32'h0000_5a17);
+            if (status != UVM_IS_OK) `uvm_error(get_type_name(), "RAL write dma_tag failed")
+            env.axi_ral.reg_model.dma_ctrl.write(status, 32'h1);
+            if (status != UVM_IS_OK) `uvm_error(get_type_name(), "RAL doorbell write failed")
+            wait_dma_irq_direct(4096);
+            env.axi_ral.reg_model.dma_submit_status.read(status, data);
+            if (status != UVM_IS_OK) `uvm_error(get_type_name(), "RAL read dma_submit_status failed")
+            env.axi_ral.reg_model.dma_submit_result.read(status, data);
+            if (status != UVM_IS_OK) `uvm_error(get_type_name(), "RAL read dma_submit_result failed")
+`endif
             finish_uvm_test(phase);
         endtask
     endclass

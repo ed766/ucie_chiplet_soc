@@ -383,7 +383,70 @@ module tb_soc_chiplets #(
     initial begin
         wait (tb_cfg_ready);
         wait (rst_n);
-        case (power_mode_cfg)
+        if (test_name == "power_domain_sequence_matrix") begin
+            repeat (24) @(posedge clk);
+            power_state_q = PWR_CRYPTO_ONLY;
+            force u_chiplet.u_die_a.tx_stream_valid = 1'b0;
+            force u_chiplet.u_die_a.legacy_tx_stream_ready = 1'b0;
+            repeat (16) @(posedge clk);
+            release u_chiplet.u_die_a.tx_stream_valid;
+            release u_chiplet.u_die_a.legacy_tx_stream_ready;
+            power_state_q = PWR_RUN;
+            repeat (16) @(posedge clk);
+            power_state_q = PWR_SLEEP;
+            force u_chiplet.u_die_a.tx_stream_valid = 1'b0;
+            force u_chiplet.u_die_a.legacy_tx_stream_ready = 1'b0;
+            force u_chiplet.u_die_a.rx_stream_ready = 1'b0;
+            force u_chiplet.u_die_a.training_done = 1'b0;
+            force u_chiplet.u_die_b.training_done = 1'b0;
+            force u_chiplet.u_die_b.plaintext_ready = 1'b0;
+            repeat (16) @(posedge clk);
+            release u_chiplet.u_die_a.tx_stream_valid;
+            release u_chiplet.u_die_a.legacy_tx_stream_ready;
+            release u_chiplet.u_die_a.rx_stream_ready;
+            release u_chiplet.u_die_a.training_done;
+            release u_chiplet.u_die_b.training_done;
+            release u_chiplet.u_die_b.plaintext_ready;
+            power_state_q = PWR_RUN;
+            repeat (16) @(posedge clk);
+            power_state_q = PWR_DEEP_SLEEP;
+            force u_chiplet.u_die_a.tx_stream_valid = 1'b0;
+            force u_chiplet.u_die_a.legacy_tx_stream_ready = 1'b0;
+            force u_chiplet.u_die_a.rx_stream_ready = 1'b0;
+            force u_chiplet.u_die_a.training_done = 1'b0;
+            force u_chiplet.u_die_b.training_done = 1'b0;
+            force u_chiplet.u_die_b.plaintext_ready = 1'b0;
+            repeat (16) @(posedge clk);
+            release u_chiplet.u_die_a.tx_stream_valid;
+            release u_chiplet.u_die_a.legacy_tx_stream_ready;
+            release u_chiplet.u_die_a.rx_stream_ready;
+            release u_chiplet.u_die_b.plaintext_ready;
+            power_state_q = PWR_RUN;
+            repeat (power_recovery_cycles_cfg) @(posedge clk);
+            release u_chiplet.u_die_a.training_done;
+            release u_chiplet.u_die_b.training_done;
+        end else if (test_name == "power_invalid_transition_clamped") begin
+            repeat (32) @(posedge clk);
+            power_state_q = PWR_CRYPTO_ONLY;
+            force u_chiplet.u_die_a.tx_stream_valid = 1'b0;
+            force u_chiplet.u_die_a.legacy_tx_stream_ready = 1'b0;
+            repeat (8) @(posedge clk);
+            power_state_q = PWR_DEEP_SLEEP;
+            force u_chiplet.u_die_a.rx_stream_ready = 1'b0;
+            force u_chiplet.u_die_a.training_done = 1'b0;
+            force u_chiplet.u_die_b.training_done = 1'b0;
+            force u_chiplet.u_die_b.plaintext_ready = 1'b0;
+            repeat (12) @(posedge clk);
+            power_state_q = PWR_SLEEP;
+            repeat (8) @(posedge clk);
+            release u_chiplet.u_die_a.tx_stream_valid;
+            release u_chiplet.u_die_a.legacy_tx_stream_ready;
+            release u_chiplet.u_die_a.rx_stream_ready;
+            release u_chiplet.u_die_a.training_done;
+            release u_chiplet.u_die_b.training_done;
+            release u_chiplet.u_die_b.plaintext_ready;
+            power_state_q = PWR_RUN;
+        end else case (power_mode_cfg)
             "crypto_only": begin
                 repeat (power_event_start_cfg) @(posedge clk);
                 power_state_q = PWR_CRYPTO_ONLY;
@@ -2196,6 +2259,31 @@ module tb_soc_chiplets #(
                 pass_q = local_ok;
                 detail_q = pass_q ? "power_illegal_access_error_response_clean" : "dma_config_violation";
             end
+            "dma_submit_reject_overflow": begin
+                logic [31:0] overflow_word;
+                for (int reject_idx = 0; reject_idx < 4; reject_idx++) begin
+                    dma_enqueue_desc(8, 40, 3, 16'h2b20 + reject_idx);
+                end
+                dma_wait_for_comp_count(4, 256, hit_target);
+                local_ok = local_ok && hit_target;
+                dma_enqueue_desc(8, 40, 3, 16'h2b24);
+                dma_read_submit_result(accepted, rejected, err_code, tag);
+                cfg_read32(DMA_REJECT_OVF_ADDR, overflow_word);
+                local_ok = local_ok && !accepted && rejected &&
+                           (err_code == DMA_ERR_ODD_LEN) &&
+                           (tag == 16'h2b24) &&
+                           (overflow_word != 0);
+                for (int pop_idx = 0; pop_idx < 4; pop_idx++) begin
+                    dma_read_front_completion(empty, tag, status, err_code, words_retired);
+                    local_ok = local_ok && !empty &&
+                               (status == DMA_COMP_SUBMIT_REJECT) &&
+                               (words_retired == 0);
+                    dma_pop_completion();
+                end
+                dma_read_queue_status(DMA_COMP_Q_STATUS_ADDR, empty, full, count_local, head_local, tail_local);
+                pass_q = local_ok && empty && (count_local == 0);
+                detail_q = pass_q ? "dma_submit_reject_overflow_clean" : "dma_config_violation";
+            end
             "power_traffic_cross_test": begin
                 dma_set_irq_en(2'b01);
                 dma_preload_source_range(cfg.dma_src_base, cfg.dma_len_words);
@@ -2502,6 +2590,63 @@ module tb_soc_chiplets #(
                 pass_q = local_ok;
                 detail_q = pass_q ? "mem_inject_start_busy_reject_clean" : "memory_inject_reject_violation";
             end
+            "mem_inject_busy_overlap": begin
+                dma_preload_source_range(76, 8);
+                dma_clear_dest_range(140, 8);
+                push_before = dma_completion_push_count;
+                dma_enqueue_desc(76, 140, 8, 16'h3102);
+                dma_wait_for_state(2, 512, hit_target);
+                local_ok = local_ok && hit_target;
+                force u_chiplet.u_die_a.tx_stream_ready = 1'b0;
+                repeat (4) @(posedge clk);
+                count_local = u_chiplet.u_die_a.u_dma.tx_src_bank ? 77 : 76;
+                dma_mem_start_read(1'b0, count_local);
+                cfg_write32(DMA_MEM_INJECT_ADDR_ADDR, count_local[31:0]);
+                cfg_write32(DMA_MEM_INJECT_CTRL_ADDR, 32'h0000_0001);
+                dma_mem_read_inject_status(mem_inject_busy, mem_inject_done, mem_inject_reject_busy);
+                local_ok = local_ok && !mem_inject_busy && !mem_inject_done && mem_inject_reject_busy;
+                cfg_write32(DMA_MEM_INJECT_CTRL_ADDR, 32'h0000_0001);
+                dma_mem_read_inject_status(mem_inject_busy, mem_inject_done, mem_inject_reject_busy);
+                local_ok = local_ok && mem_inject_reject_busy;
+                release u_chiplet.u_die_a.tx_stream_ready;
+                dma_mem_wait_done(2048, hit_target);
+                local_ok = local_ok && hit_target;
+                dma_wait_for_completion_pushes(push_before + 1, max_cycles_cfg, hit_target);
+                local_ok = local_ok && hit_target;
+                dma_pop_completion();
+                pass_q = local_ok;
+                detail_q = pass_q ? "mem_inject_busy_overlap_clean" : "memory_inject_reject_violation";
+            end
+            "mem_op_sleep_deep_abort": begin
+                dma_preload_source_range(80, 8);
+                dma_clear_dest_range(144, 8);
+                dma_enqueue_desc(80, 144, 8, 16'h3103);
+                dma_wait_for_state(2, 512, hit_target);
+                local_ok = local_ok && hit_target;
+                force u_chiplet.u_die_a.tx_stream_ready = 1'b0;
+                repeat (4) @(posedge clk);
+                count_local = u_chiplet.u_die_a.u_dma.tx_src_bank ? 81 : 80;
+                dma_mem_start_read(1'b0, count_local);
+                repeat (2) @(posedge clk);
+                dma_mem_read_status(mem_busy, mem_done, mem_wait_conflict, mem_parity_error,
+                                    mem_invalid_read_seen, mem_op_reject_busy, mem_write_reject_dma_active);
+                local_ok = local_ok && mem_busy && !mem_done;
+                power_state_q = PWR_SLEEP;
+                repeat (6) @(posedge clk);
+                dma_mem_read_status(mem_busy, mem_done, mem_wait_conflict, mem_parity_error,
+                                    mem_invalid_read_seen, mem_op_reject_busy, mem_write_reject_dma_active);
+                local_ok = local_ok && mem_busy && !mem_done;
+                power_state_q = PWR_DEEP_SLEEP;
+                repeat (4) @(posedge clk);
+                dma_mem_read_status(mem_busy, mem_done, mem_wait_conflict, mem_parity_error,
+                                    mem_invalid_read_seen, mem_op_reject_busy, mem_write_reject_dma_active);
+                local_ok = local_ok && !mem_busy && !mem_done;
+                release u_chiplet.u_die_a.tx_stream_ready;
+                power_state_q = PWR_RUN;
+                repeat (8) @(posedge clk);
+                pass_q = local_ok && !u_chiplet.u_die_a.u_dma.active_valid_q;
+                detail_q = pass_q ? "mem_op_sleep_deep_abort_clean" : "memory_power_mode_violation";
+            end
             "mem_parity_src_detect": begin
                 dma_preload_source_range(72, 4);
                 dma_clear_dest_range(136, 4);
@@ -2518,6 +2663,38 @@ module tb_soc_chiplets #(
                          (src_parity_errors != 0) && !mem_last_is_dst && mem_last_on_dma &&
                          (last_mem_err_kind == 3'd2) && (last_mem_addr == 8'd72);
                 detail_q = pass_q ? "mem_parity_src_detect_clean" : "memory_integrity_violation";
+            end
+            "mem_invalid_src_dma_error": begin
+                dma_mem_set_ret_cfg(2'b01, 2'b11, 2'b00, 2'b00);
+                dma_scratch_write64(1'b0, 1, 64'h1111_2222_3333_4444);
+                dma_scratch_write64(1'b0, 2, 64'h5555_6666_7777_8888);
+                dma_clear_dest_range(180, 2);
+                power_state_q = PWR_SLEEP;
+                repeat (8) @(posedge clk);
+                power_state_q = PWR_RUN;
+                repeat (4) @(posedge clk);
+                dma_mem_read_valid_masks(src_invalid_bank_mask, dst_invalid_bank_mask);
+                local_ok = local_ok && (src_invalid_bank_mask == 2'b10) &&
+                           (dst_invalid_bank_mask == 2'b00);
+                push_before = dma_completion_push_count;
+                dma_enqueue_desc(1, 180, 2, 16'h3007);
+                dma_wait_for_completion_pushes(push_before + 1, max_cycles_cfg, hit_target);
+                dma_read_front_completion(empty, tag, status, err_code, words_retired);
+                dma_mem_read_err_status(last_mem_addr, mem_last_is_dst, mem_last_on_dma,
+                                        mem_last_bank_id, last_mem_err_kind);
+                dma_scratch_read64(1'b1, 180, observed_word);
+                dma_scratch_read64(1'b1, 181, observed_word_b);
+                pass_q = local_ok && hit_target && !empty &&
+                         (tag == 16'h3007) &&
+                         (status == DMA_COMP_RUNTIME_ERROR) &&
+                         (err_code == DMA_ERR_MEM_INVALID) &&
+                         (words_retired == 0) &&
+                         (observed_word == '0) &&
+                         (observed_word_b == '0) &&
+                         !mem_last_is_dst && mem_last_on_dma &&
+                         (last_mem_err_kind == 3'd3) &&
+                         (last_mem_addr == 8'd1);
+                detail_q = pass_q ? "mem_invalid_src_dma_error_clean" : "memory_invalid_dma_violation";
             end
             "mem_parity_dst_maint_detect": begin
                 programmed_word = 64'h1234_5678_9ABC_DEF0;
@@ -2576,6 +2753,31 @@ module tb_soc_chiplets #(
                          src_corruption_seen && lp_entry_seen && wake_apply_seen &&
                          (last_low_power_state == PWR_SLEEP);
                 detail_q = pass_q ? "mem_sleep_nonretained_bank_clean" : "memory_retention_violation";
+            end
+            "mem_sleep_dst_nonretained_bank": begin
+                dma_mem_set_ret_cfg(2'b11, 2'b01, 2'b00, 2'b00);
+                dma_scratch_write64(1'b1, 0, 64'h2222_3333_4444_5555);
+                dma_scratch_write64(1'b1, 1, 64'h6666_7777_8888_9999);
+                power_state_q = PWR_SLEEP;
+                repeat (8) @(posedge clk);
+                power_state_q = PWR_RUN;
+                repeat (4) @(posedge clk);
+                dma_mem_read_valid_masks(src_invalid_bank_mask, dst_invalid_bank_mask);
+                dma_scratch_read64(1'b1, 0, observed_word);
+                dma_scratch_read64(1'b1, 1, observed_word_b);
+                dma_mem_read_status(mem_busy, mem_done, mem_wait_conflict, mem_parity_error,
+                                    mem_invalid_read_seen, mem_op_reject_busy, mem_write_reject_dma_active);
+                dma_mem_read_ret_status(lp_entry_seen, wake_apply_seen, src_corruption_seen,
+                                        dst_corruption_seen, last_low_power_state);
+                pass_q = (src_invalid_bank_mask == 2'b00) &&
+                         (dst_invalid_bank_mask == 2'b10) &&
+                         (observed_word == 64'h2222_3333_4444_5555) &&
+                         (observed_word_b == mem_poison_word(1)) &&
+                         mem_done && !mem_parity_error && mem_invalid_read_seen &&
+                         !src_corruption_seen && dst_corruption_seen &&
+                         lp_entry_seen && wake_apply_seen &&
+                         (last_low_power_state == PWR_SLEEP);
+                detail_q = pass_q ? "mem_sleep_dst_nonretained_bank_clean" : "memory_retention_violation";
             end
             "mem_nonretained_readback_poison_clean": begin
                 dma_mem_set_ret_cfg(2'b01, 2'b11, 2'b00, 2'b00);
@@ -2983,6 +3185,35 @@ module tb_soc_chiplets #(
                     pass_q = pass_q &&
                              (power_isolation_assert_cycles != 0) &&
                              (power_activity_cross_link_traffic != 0);
+                end else if (test_name == "power_iso_before_switch_off") begin
+                    pass_q = pass_q &&
+                             (u_power_mon.seq_iso_before_switch_off_seen != 0) &&
+                             (u_power_mon.seq_iso_before_switch_off_violations == 0);
+                end else if (test_name == "power_restore_before_deiso") begin
+                    pass_q = pass_q &&
+                             (u_power_mon.seq_switch_on_before_restore_seen != 0) &&
+                             (u_power_mon.seq_restore_before_deiso_seen != 0) &&
+                             (u_power_mon.seq_switch_on_before_restore_violations == 0) &&
+                             (u_power_mon.seq_restore_before_deiso_violations == 0) &&
+                             (u_power_mon.retention_pulse_width_violations == 0);
+                end else if (test_name == "power_domain_sequence_matrix") begin
+                    pass_q = pass_q &&
+                             (power_domain_combo_run != 0) &&
+                             (power_domain_combo_crypto_only != 0) &&
+                             (power_domain_combo_sleep != 0) &&
+                             (power_domain_combo_deep_sleep != 0) &&
+                             (u_power_mon.seq_iso_before_switch_off_seen != 0) &&
+                             (u_power_mon.seq_switch_on_before_restore_seen != 0) &&
+                             (u_power_mon.seq_restore_before_deiso_seen != 0) &&
+                             (u_power_mon.seq_iso_before_switch_off_violations == 0) &&
+                             (u_power_mon.seq_switch_on_before_restore_violations == 0) &&
+                             (u_power_mon.seq_restore_before_deiso_violations == 0);
+                end else if (test_name == "power_invalid_transition_clamped") begin
+                    pass_q = pass_q &&
+                             (u_power_mon.unsupported_transition_seen != 0) &&
+                             (u_power_mon.seq_iso_before_switch_off_violations == 0) &&
+                             (u_power_mon.seq_switch_on_before_restore_violations == 0) &&
+                             (u_power_mon.seq_restore_before_deiso_violations == 0);
                 end
                 detail_q = pass_q ? "power_proxy_clean" : "power_proxy_violation";
             end else begin

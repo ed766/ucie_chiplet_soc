@@ -1,11 +1,11 @@
-name: smoke-bug
+name: open-source-dv-gates
 
 on:
   push:
   pull_request:
 
 jobs:
-  smoke-and-bugs:
+  core-evidence:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -30,11 +30,17 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install cryptography
 
-      - name: Run smoke suite
-        run: make -C chiplet_extension chiplet-sim SEED=20260406
+      - name: Run stable closure and expected bug validation
+        run: make -C chiplet_extension closure RANDOM_SEEDS=1 SEED=20260406
 
-      - name: Run bug-validation suite
-        run: make -C chiplet_extension bug-validate SEED=20260406
+      - name: Run open-source frontend quality checks
+        run: make -C chiplet_extension frontend-quality
+
+      - name: Validate static UPF intent
+        run: make -C chiplet_extension upf-check
+
+      - name: Run firmware-driven RV32 integration suite
+        run: make -C chiplet_extension firmware-soc-check
 
       - name: Upload verification reports
         if: always()
@@ -44,4 +50,3 @@ jobs:
           path: |
             chiplet_extension/reports/*.csv
             chiplet_extension/reports/*.md
-

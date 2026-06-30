@@ -104,7 +104,11 @@ def add_row(rows: list[dict[str, str]], check: str, non_uvm: str, uvm: str, pass
 def write_outputs(rows: list[dict[str, str]], csv_out: Path, md_out: Path) -> None:
     csv_out.parent.mkdir(parents=True, exist_ok=True)
     with csv_out.open("w", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=["check", "non_uvm", "uvm", "status", "detail"])
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=["check", "non_uvm", "uvm", "status", "detail"],
+            lineterminator="\n",
+        )
         writer.writeheader()
         writer.writerows(rows)
 

@@ -56,9 +56,18 @@ def executed_status(family: str) -> str:
     rows = [row for row in read_rows(EXEC_SUMMARY) if row.get("family") == family]
     if not rows:
         return "not run"
-    passed = sum(1 for row in rows if row.get("meets_expectation") == "1")
-    applied = sum(1 for row in rows if row.get("constraint_status") == "valid" and row.get("applied_plusargs"))
-    return f"{passed}/{len(rows)} executed rows met expectation; {applied}/{len(rows)} applied manifest plusargs"
+    valid_rows = [row for row in rows if row.get("constraint_status", "valid") == "valid"]
+    invalid_rows = [row for row in rows if row.get("constraint_status") == "invalid"]
+    passed = sum(1 for row in valid_rows if row.get("meets_expectation") == "1")
+    applied = sum(1 for row in valid_rows if row.get("applied_plusargs"))
+    if valid_rows and invalid_rows:
+        return (
+            f"{passed}/{len(valid_rows)} valid executed rows met expectation; "
+            f"{len(invalid_rows)} schema-rejected rows; {applied}/{len(valid_rows)} valid rows applied manifest plusargs"
+        )
+    if invalid_rows:
+        return f"0/0 valid executed rows; {len(invalid_rows)} schema-rejected rows; representative probe covers runnability"
+    return f"{passed}/{len(valid_rows)} valid executed rows met expectation; {applied}/{len(valid_rows)} valid rows applied manifest plusargs"
 
 
 def seed_preview(rows: list[dict[str, str]]) -> str:

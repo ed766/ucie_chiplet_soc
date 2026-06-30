@@ -108,18 +108,18 @@ Generated outputs:
 
 The stable Verilator regression now closes the functional coverage model.
 
-- 64 / 64 stable-report runs met expectation
-- 59 / 59 nominal stable-report runs passed
+- 70 / 70 stable-report runs met expectation
+- 65 / 65 nominal stable-report runs passed
 - 60 / 60 functional bins were covered in the stable suite
 - 1 / 1 randomized stable runs met expectation
 - 100 optional seeded-random stress scenarios are generated across the 25/50/25 families
 - optional seeded-random stress is supporting evidence; see `docs/project_metrics.md` for the current executed subset result
 - 8 / 8 cross-coverage evidence groups were observed
-- 31 protocol/control assertion invariants are inventoried
+- 52 protocol/control assertion invariants are inventoried, including twelve APB/MMIO and firmware-to-DMA checks
 - 5 / 5 expected bug-validation failures were observed
-- 20 / 20 power-proxy tests met expectation
+- 26 / 26 power-proxy rows met expectation
 - 19 / 19 DMA nominal runs met expectation
-- 13 / 13 memory nominal runs met expectation
+- 15 / 15 memory nominal runs met expectation
 - 1 / 1 DMA bug-validation run met expectation
 
 Source-of-truth artifacts:

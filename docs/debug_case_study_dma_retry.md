@@ -25,6 +25,21 @@ the replayed FLIT does not match the previously transmitted FLIT. In the closed
 flow this maps to `UCIE_BUG_RETRY_SEQ`, which fails in the retry-identity
 bucket.
 
+## Failure Signature
+
+When the retry-sequence bug is enabled, the first useful symptom is not a
+timeout. The link continues handshaking, but the retry checker and scoreboard
+observe that the replayed packet identity no longer matches the protected
+transmit identity.
+
+| Signal / artifact | Expected | Bug signature |
+| --- | --- | --- |
+| `retry_req` | opens a replay window | replay window still opens |
+| `flit_valid` / `flit_ready` | resend occurs before new retirement | handshake may still look legal |
+| replayed FLIT identity | matches stored failed FLIT | stale or mutated identity |
+| retry assertion | passes | retry identity property fails |
+| scoreboard | no duplicate/misordered commit | retry bucket records expected failure |
+
 ## Waveform Evidence
 
 The waveform below is generated deterministically by:
@@ -33,7 +48,7 @@ The waveform below is generated deterministically by:
 make -C chiplet_extension dma-retry-waveform
 ```
 
-![DMA retry debug waveform](/home/esgha/ucie_chiplet_soc/docs/images/dma_retry_waveform.png)
+![DMA retry debug waveform](images/dma_retry_waveform.png)
 
 The key debug landmarks are:
 

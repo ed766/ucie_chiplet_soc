@@ -17,8 +17,16 @@ Keep checked in:
 - `perf_characterization.csv`
 - `dma_mem_characterization.csv`
 - `project_metrics.csv`
+- `firmware_soc_summary.csv`
+- `firmware_coverage_summary.csv`
+- `firmware_cross_coverage_summary.csv`
+- `firmware_code_coverage_summary.txt`
+- `firmware_code_coverage_summary.md`
 
-Do not check in routine generated files matching `*_coverage.csv`,
+The firmware flat/cross coverage summaries and focused code-coverage report
+are curated exceptions because they are the canonical firmware evidence.
+
+Do not check in other routine generated files matching `*_coverage.csv`,
 `*_scoreboard.csv`, `*_power.csv`, seed-specific summaries, smoke summaries,
 or UVM per-test artifacts unless they are being used as a specific debug case
 study.

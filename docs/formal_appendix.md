@@ -18,6 +18,7 @@ the project methodology.
 - `chiplet_extension/formal/tb_dma_mem_props.sv`
 - `chiplet_extension/formal/tb_power_ctrl_props.sv`
 - `chiplet_extension/sim/assertions/chiplet_protocol_assertions.svh`
+- `chiplet_extension/sim/tb_axi_lite_csr_wrapper.sv`
 - `chiplet_extension/scripts/run_bounded_properties.py`
 - `chiplet_extension/reports/formal_summary.csv`
 - `docs/assertion_inventory.md`
@@ -42,6 +43,8 @@ directed stimuli. The main properties are:
 - invalid source banks abort DMA instead of being consumed silently
 - chiplet power-control sidebands match the declared PST/isolation policy
 - post-sleep DMA resume-completion observations occur only after restore
+- AXI-Lite address/data and response channels remain stable under protocol
+  backpressure in the optional CSR-wrapper bench
 
 ## How To Read The Evidence
 
@@ -66,7 +69,9 @@ The checked-in harness set is useful in three ways:
 
 `docs/assertion_inventory.md` is generated from the assertion inventory script
 and gives the interview-facing table of assertion name, protected invariant,
-harness/checker, and validation status.
+harness/checker, and validation status. It includes both bounded SVA harnesses
+and simulation-bench protocol assertions such as the AXI-Lite CSR wrapper
+checks.
 
 ## What It Is Not
 

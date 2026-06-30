@@ -26,9 +26,9 @@ This report summarizes optional bounded seeded-random collateral. These generate
 
 | Family | Expected scenarios | Generated scenarios | Seed preview | Representative validation | Executed subset |
 | --- | ---: | ---: | --- | --- | --- |
-| `random_smoke_25` (Random smoke) | 25 | 25 | `217151502`, `1041564174`, `783362976`, `1278363210`, `1346013229` | 1/1 representative probe rows met expectation | 20/25 executed rows met expectation; 25/25 applied manifest plusargs |
-| `stress_retry_50` (Retry/backpressure stress) | 50 | 50 | `1252224366`, `1418248492`, `1368639711`, `1489067733`, `1600501735` | 1/1 representative probe rows met expectation | 10/10 executed rows met expectation; 10/10 applied manifest plusargs |
-| `power_dma_cross_25` (Power/DMA cross stress) | 25 | 25 | `1261443206`, `864048886`, `1871676756`, `598393866`, `323884011` | 1/1 representative probe rows met expectation | 0/5 executed rows met expectation; 5/5 applied manifest plusargs |
+| `random_smoke_25` (Random smoke) | 25 | 25 | `217151502`, `1041564174`, `783362976`, `1278363210`, `1346013229` | 1/1 representative probe rows met expectation | 20/20 valid executed rows met expectation; 5 schema-rejected rows; 20/20 valid rows applied manifest plusargs |
+| `stress_retry_50` (Retry/backpressure stress) | 50 | 50 | `1252224366`, `1418248492`, `1368639711`, `1489067733`, `1600501735` | 1/1 representative probe rows met expectation | 10/10 valid executed rows met expectation; 10/10 valid rows applied manifest plusargs |
+| `power_dma_cross_25` (Power/DMA cross stress) | 25 | 25 | `1261443206`, `864048886`, `1871676756`, `598393866`, `323884011` | 1/1 representative probe rows met expectation | 0/0 valid executed rows; 5 schema-rejected rows; representative probe covers runnability |
 
 ## Reproduce By Seed
 

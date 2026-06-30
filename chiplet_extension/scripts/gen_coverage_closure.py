@@ -30,6 +30,7 @@ def write_cross_summary(path: Path, coverage_rows: list[dict[str, str]]) -> None
     with path.open("w", newline="") as handle:
         writer = csv.DictWriter(
             handle,
+            lineterminator="\n",
             fieldnames=[
                 "cross_group",
                 "required_metrics",

@@ -189,6 +189,39 @@ package soc_tests_pkg;
                 cfg.link.training_hold_start = 64;
                 cfg.link.training_hold_cycles = 24;
             end
+            "power_iso_before_switch_off": begin
+                cfg.scenario_kind = "power_proxy";
+                cfg.target_cipher_updates = 8;
+                cfg.power_mode = "sleep";
+                cfg.power_event_start = 48;
+                cfg.power_event_cycles = 24;
+                cfg.power_recovery_cycles = 40;
+                cfg.max_cycles = 9000;
+            end
+            "power_restore_before_deiso": begin
+                cfg.scenario_kind = "power_proxy";
+                cfg.target_cipher_updates = 8;
+                cfg.power_mode = "sleep";
+                cfg.power_event_start = 80;
+                cfg.power_event_cycles = 12;
+                cfg.power_recovery_cycles = 48;
+                cfg.max_cycles = 10000;
+            end
+            "power_domain_sequence_matrix": begin
+                cfg.scenario_kind = "power_proxy";
+                cfg.target_cipher_updates = 8;
+                cfg.power_mode = "deep_sleep";
+                cfg.power_event_start = 72;
+                cfg.power_event_cycles = 16;
+                cfg.power_recovery_cycles = 48;
+                cfg.max_cycles = 14000;
+            end
+            "power_invalid_transition_clamped": begin
+                cfg.scenario_kind = "power_proxy";
+                cfg.target_cipher_updates = 4;
+                cfg.power_mode = "run";
+                cfg.max_cycles = 10000;
+            end
             "dma_queue_smoke": begin
                 cfg.scenario_kind = "dma";
                 cfg.use_dma = 1'b1;
@@ -357,6 +390,12 @@ package soc_tests_pkg;
                 cfg.ref_words = 0;
                 cfg.max_cycles = 10000;
             end
+            "dma_submit_reject_overflow": begin
+                cfg.scenario_kind = "dma_negative";
+                cfg.use_dma = 1'b1;
+                cfg.ref_words = 0;
+                cfg.max_cycles = 9000;
+            end
             "mem_bank_parallel_service": begin
                 cfg.scenario_kind = "dma_mem";
                 cfg.use_dma = 1'b1;
@@ -399,8 +438,26 @@ package soc_tests_pkg;
                 cfg.ref_words = 0;
                 cfg.max_cycles = 12000;
             end
+            "mem_inject_busy_overlap": begin
+                cfg.scenario_kind = "dma_mem";
+                cfg.use_dma = 1'b1;
+                cfg.ref_words = 0;
+                cfg.max_cycles = 12000;
+            end
+            "mem_op_sleep_deep_abort": begin
+                cfg.scenario_kind = "dma_mem_power";
+                cfg.use_dma = 1'b1;
+                cfg.ref_words = 0;
+                cfg.max_cycles = 14000;
+            end
             "mem_parity_src_detect": begin
                 cfg.scenario_kind = "dma_mem";
+                cfg.use_dma = 1'b1;
+                cfg.ref_words = 0;
+                cfg.max_cycles = 12000;
+            end
+            "mem_invalid_src_dma_error": begin
+                cfg.scenario_kind = "dma_mem_power";
                 cfg.use_dma = 1'b1;
                 cfg.ref_words = 0;
                 cfg.max_cycles = 12000;
@@ -418,6 +475,12 @@ package soc_tests_pkg;
                 cfg.max_cycles = 12000;
             end
             "mem_sleep_nonretained_bank": begin
+                cfg.scenario_kind = "dma_mem_power";
+                cfg.use_dma = 1'b1;
+                cfg.ref_words = 0;
+                cfg.max_cycles = 12000;
+            end
+            "mem_sleep_dst_nonretained_bank": begin
                 cfg.scenario_kind = "dma_mem_power";
                 cfg.use_dma = 1'b1;
                 cfg.ref_words = 0;

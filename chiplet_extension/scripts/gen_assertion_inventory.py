@@ -12,6 +12,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 REPO = ROOT.parent
 FORMAL_SUMMARY = ROOT / "reports" / "formal_summary.csv"
+OPTIONAL_BENCH_SUMMARY = ROOT / "reports" / "optional_bench_summary.csv"
+FIRMWARE_SUMMARY = ROOT / "reports" / "firmware_soc_summary.csv"
 OUTPUT = REPO / "docs" / "assertion_inventory.md"
 
 
@@ -284,9 +286,9 @@ ENTRIES = (
     ),
     AssertionEntry(
         "Power/retention",
-        "p_iso_tracks_a_traffic",
+        "p_iso_safe_a_traffic",
         "low-power sequencing",
-        "Die A traffic isolation follows the corresponding switch state.",
+        "Die A traffic isolation may deassert only when the traffic switch is on.",
         "Powered-off traffic domain not isolated.",
         "power_isolation_blocks_tx",
         "bounded harness + simulation",
@@ -295,9 +297,9 @@ ENTRIES = (
     ),
     AssertionEntry(
         "Power/retention",
-        "p_iso_tracks_a_dma",
+        "p_iso_safe_a_dma",
         "low-power sequencing",
-        "Die A DMA isolation follows the corresponding switch state.",
+        "Die A DMA isolation may deassert only when the DMA switch is on.",
         "DMA domain exposed while switch policy says unavailable.",
         "dma_sleep_during_active_transfer",
         "bounded harness + simulation",
@@ -306,9 +308,9 @@ ENTRIES = (
     ),
     AssertionEntry(
         "Power/retention",
-        "p_iso_tracks_channel",
+        "p_iso_safe_channel",
         "low-power sequencing",
-        "Channel isolation follows the corresponding switch state.",
+        "Channel isolation may deassert only when the channel switch is on.",
         "Channel outputs not clamped while powered off.",
         "power_transition_with_link_backpressure",
         "bounded harness + simulation",
@@ -339,12 +341,45 @@ ENTRIES = (
     ),
     AssertionEntry(
         "Power/retention",
-        "p_valid_pst_combo",
+        "p_no_deisolated_off_domain",
         "power-state safety",
-        "The power controller only emits declared PST domain combinations.",
+        "No switchable domain is de-isolated while its switch policy says the domain is off.",
         "Illegal switch/isolation combination enters architectural state.",
         "power_run_mode / power_deep_sleep_recover",
         "bounded harness + simulation",
+        "chiplet_power_ctrl_props",
+        ROOT / "formal" / "tb_power_ctrl_props.sv",
+    ),
+    AssertionEntry(
+        "Power/retention",
+        "p_iso_before_switch_off",
+        "low-power sequencing",
+        "Isolation is asserted before any switchable chiplet domain is observed switching off.",
+        "A powered-down domain could expose unclamped outputs for one cycle.",
+        "power_isolation_blocks_tx / upf-check",
+        "bounded harness",
+        "chiplet_power_ctrl_props",
+        ROOT / "formal" / "tb_power_ctrl_props.sv",
+    ),
+    AssertionEntry(
+        "Power/retention",
+        "p_switch_on_before_restore",
+        "low-power sequencing",
+        "DMA restore pulses are only allowed after the DMA switch domain is powered on.",
+        "Retained DMA context restore occurs while the DMA domain is still off.",
+        "dma_sleep_during_active_transfer",
+        "bounded harness",
+        "chiplet_power_ctrl_props",
+        ROOT / "formal" / "tb_power_ctrl_props.sv",
+    ),
+    AssertionEntry(
+        "Power/retention",
+        "p_restore_before_deiso",
+        "low-power sequencing",
+        "DMA de-isolation after low-power wake requires a prior DMA sleep or memory restore observation.",
+        "DMA domain becomes visible before retained state is restored.",
+        "dma_sleep_during_active_transfer / dma_power_state_retention_matrix",
+        "bounded harness",
         "chiplet_power_ctrl_props",
         ROOT / "formal" / "tb_power_ctrl_props.sv",
     ),
@@ -370,6 +405,204 @@ ENTRIES = (
         "chiplet_power_ctrl_props",
         ROOT / "sim" / "tb_soc_chiplets.sv",
     ),
+    AssertionEntry(
+        "AXI-Lite",
+        "awaddr_stable_while_backpressured",
+        "control-bus safety",
+        "AXI-Lite write address remains stable while AWVALID is held without AWREADY.",
+        "CSR bridge samples a drifting write address under backpressure.",
+        "axi-lite-check",
+        "simulation bench",
+        "axi_lite_protocol_edges",
+        ROOT / "sim" / "tb_axi_lite_csr_wrapper.sv",
+    ),
+    AssertionEntry(
+        "AXI-Lite",
+        "wdata_wstrb_stable_while_backpressured",
+        "control-bus safety",
+        "AXI-Lite write data and byte enables remain stable while WVALID is held without WREADY.",
+        "CSR bridge writes corrupted data or accepts partial-strobe drift.",
+        "axi-lite-check",
+        "simulation bench",
+        "axi_lite_protocol_edges",
+        ROOT / "sim" / "tb_axi_lite_csr_wrapper.sv",
+    ),
+    AssertionEntry(
+        "AXI-Lite",
+        "araddr_stable_while_backpressured",
+        "control-bus safety",
+        "AXI-Lite read address remains stable while ARVALID is held without ARREADY.",
+        "CSR bridge returns data for an unintended address.",
+        "axi-lite-check",
+        "simulation bench",
+        "axi_lite_protocol_edges",
+        ROOT / "sim" / "tb_axi_lite_csr_wrapper.sv",
+    ),
+    AssertionEntry(
+        "AXI-Lite",
+        "bresp_stable_while_bready_low",
+        "control-bus response safety",
+        "AXI-Lite write response remains stable while BVALID is held and BREADY is low.",
+        "Software observes an unstable write response under response backpressure.",
+        "axi-lite-check",
+        "simulation bench",
+        "axi_lite_protocol_edges",
+        ROOT / "sim" / "tb_axi_lite_csr_wrapper.sv",
+    ),
+    AssertionEntry(
+        "AXI-Lite",
+        "rdata_rresp_stable_while_rready_low",
+        "control-bus response safety",
+        "AXI-Lite read data and response remain stable while RVALID is held and RREADY is low.",
+        "Software observes unstable read data under response backpressure.",
+        "axi-lite-check",
+        "simulation bench",
+        "axi_lite_protocol_edges",
+        ROOT / "sim" / "tb_axi_lite_csr_wrapper.sv",
+    ),
+    AssertionEntry(
+        "AXI-Lite",
+        "partial_wstrb_slverr",
+        "control-bus negative safety",
+        "Partial-strobe AXI-Lite writes return SLVERR and do not generate a CSR write pulse.",
+        "Unsupported byte write mutates a CSR.",
+        "axi-lite-check",
+        "simulation bench",
+        "axi_lite_protocol_edges",
+        ROOT / "sim" / "tb_axi_lite_csr_wrapper.sv",
+    ),
+    AssertionEntry(
+        "APB/firmware",
+        "apb_enable_requires_select",
+        "control-bus safety",
+        "An APB access phase cannot occur without an active peripheral select.",
+        "Malformed APB transfer reaches the DMA CSR bridge.",
+        "firmware-soc-check",
+        "simulation bench",
+        "firmware_soc_integration",
+        ROOT / "sim" / "tb_firmware_soc.sv",
+    ),
+    AssertionEntry(
+        "APB/firmware",
+        "apb_access_requires_setup",
+        "control-bus ordering invariant",
+        "Every APB access phase is preceded by a setup phase for the same transfer.",
+        "The CSR bridge accepts an access without APB setup sequencing.",
+        "firmware-soc-check",
+        "simulation bench",
+        "firmware_soc_integration",
+        ROOT / "sim" / "tb_firmware_soc.sv",
+    ),
+    AssertionEntry(
+        "APB/firmware",
+        "apb_one_csr_operation_per_transfer",
+        "control-bus transaction invariant",
+        "A successful APB transfer generates one CSR operation pulse and error transfers generate none.",
+        "A wait-stated transfer duplicates a CSR operation or an error access mutates state.",
+        "apb_wait_error / dma_smoke",
+        "simulation bench",
+        "firmware_soc_integration",
+        ROOT / "sim" / "tb_firmware_soc.sv",
+    ),
+    AssertionEntry(
+        "APB/firmware",
+        "apb_control_stable_during_wait",
+        "interface-stability invariant",
+        "APB address, direction, and write data remain stable while PREADY is low.",
+        "A wait-stated transfer changes identity before completion.",
+        "apb_wait_error",
+        "simulation bench",
+        "firmware_soc_integration",
+        ROOT / "sim" / "tb_firmware_soc.sv",
+    ),
+    AssertionEntry(
+        "APB/firmware",
+        "rv32_mmio_retire_requires_pready",
+        "ordering invariant",
+        "An RV32 MMIO load or store cannot retire before its APB transfer completes.",
+        "Firmware advances past a wait-stated or incomplete CSR operation.",
+        "apb_wait_error",
+        "simulation bench",
+        "firmware_soc_integration",
+        ROOT / "sim" / "tb_firmware_soc.sv",
+    ),
+    AssertionEntry(
+        "APB/firmware",
+        "doorbell_precedes_descriptor_accept",
+        "end-to-end ordering invariant",
+        "A firmware doorbell write precedes every descriptor acceptance event.",
+        "DMA accepts work that software did not submit.",
+        "dma_smoke / dma_back_to_back",
+        "simulation bench",
+        "firmware_soc_integration",
+        ROOT / "sim" / "tb_firmware_soc.sv",
+    ),
+    AssertionEntry(
+        "APB/firmware",
+        "software_completion_has_accepted_descriptor",
+        "end-to-end ordering invariant",
+        "A completion observed by firmware corresponds to previously accepted DMA work.",
+        "Firmware consumes a spurious or uncorrelated completion.",
+        "dma_smoke / dma_back_to_back",
+        "simulation bench",
+        "firmware_soc_integration",
+        ROOT / "sim" / "tb_firmware_soc.sv",
+    ),
+    AssertionEntry(
+        "APB/firmware",
+        "mmio_error_cannot_mutate_dma",
+        "fault-containment invariant",
+        "An APB error response cannot generate a valid DMA CSR operation.",
+        "Invalid firmware address silently changes DMA state.",
+        "apb_wait_error",
+        "simulation bench",
+        "firmware_soc_integration",
+        ROOT / "sim" / "tb_firmware_soc.sv",
+    ),
+    AssertionEntry(
+        "APB/firmware",
+        "restore_precedes_software_completion",
+        "low-power sequencing invariant",
+        "DMA sleep restore is observed before firmware can observe a post-wake completion.",
+        "Software consumes retained completion state before restore sequencing finishes.",
+        "sleep_resume",
+        "simulation bench",
+        "firmware_soc_integration",
+        ROOT / "sim" / "tb_firmware_soc.sv",
+    ),
+    AssertionEntry(
+        "APB/firmware",
+        "firmware_completion_order_matches_acceptance",
+        "end-to-end ordering invariant",
+        "Accepted descriptors produce non-reject completion records in accepted-tag order.",
+        "Firmware observes reordered or duplicate accepted-work completion identity.",
+        "dma_back_to_back / completion_fifo_stall",
+        "simulation bench",
+        "firmware_soc_integration",
+        ROOT / "sim" / "tb_firmware_soc.sv",
+    ),
+    AssertionEntry(
+        "APB/firmware",
+        "firmware_accept_matches_submitted_tag",
+        "end-to-end submission invariant",
+        "Every accepted descriptor tag matches the independent APB-observed firmware submission queue.",
+        "DMA accepts a descriptor identity different from the tag staged before the software doorbell.",
+        "dma_smoke / dma_back_to_back / queue_full_reject",
+        "simulation bench",
+        "firmware_soc_integration",
+        ROOT / "sim" / "tb_firmware_soc.sv",
+    ),
+    AssertionEntry(
+        "APB/firmware",
+        "firmware_completion_front_stable_while_stalled",
+        "software-visible stability invariant",
+        "The completion front entry remains stable while retire is stalled behind a full FIFO.",
+        "Firmware reads a changing completion record before issuing COMP_POP.",
+        "completion_fifo_stall",
+        "simulation bench",
+        "firmware_soc_integration",
+        ROOT / "sim" / "tb_firmware_soc.sv",
+    ),
 )
 
 
@@ -388,6 +621,37 @@ def read_formal_status() -> dict[str, str]:
     }
 
 
+def read_optional_bench_status() -> dict[str, str]:
+    if not OPTIONAL_BENCH_SUMMARY.exists():
+        return {}
+    with OPTIONAL_BENCH_SUMMARY.open(newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    status = {}
+    for row in rows:
+        if row.get("bench") == "axi_lite":
+            status["axi_lite_protocol_edges"] = (
+                "meets expectation"
+                if row.get("status") == "PASS"
+                else f"unexpected {row.get('status', 'UNKNOWN')}"
+            )
+    return status
+
+
+def read_firmware_status() -> dict[str, str]:
+    if not FIRMWARE_SUMMARY.exists():
+        return {}
+    with FIRMWARE_SUMMARY.open(newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    if not rows:
+        return {"firmware_soc_integration": "not run"}
+    passed = all(row.get("status") == "PASS" for row in rows)
+    return {
+        "firmware_soc_integration": (
+            "meets expectation" if passed else "unexpected scenario failure"
+        )
+    }
+
+
 def source_has_assertion(entry: AssertionEntry) -> bool:
     if not entry.source.exists():
         return False
@@ -403,6 +667,8 @@ def source_has_assertion(entry: AssertionEntry) -> bool:
 
 def main() -> int:
     status_by_case = read_formal_status()
+    status_by_case.update(read_optional_bench_status())
+    status_by_case.update(read_firmware_status())
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 
     lines = [
@@ -429,7 +695,7 @@ def main() -> int:
             "## Summary",
             "",
             f"- Total inventoried assertions/invariants: {len(ENTRIES)}",
-            "- Assertion categories: DMA, link/retry/credit, memory/parity, and power/retention.",
+            "- Assertion categories: DMA, link/retry/credit, memory/parity, power/retention, AXI-Lite, and APB/firmware.",
             "- Assertion classes include safety, ordering, interface-stability, bounded-progress, integrity, and low-power sequencing checks.",
             "- Simulation scoreboards remain the end-to-end data-integrity oracle; these assertions protect local protocol/control invariants.",
             "- Expected-fail bug demonstrations are tracked separately in `docs/bug_validation_cases.md` and `docs/bug_diary.md`.",

@@ -32,6 +32,11 @@
 !/chiplet_extension/reports/project_metrics.csv
 !/chiplet_extension/reports/closure_equivalence.csv
 !/chiplet_extension/reports/closure_equivalence.md
+!/chiplet_extension/reports/firmware_soc_summary.csv
+!/chiplet_extension/reports/firmware_coverage_summary.csv
+!/chiplet_extension/reports/firmware_cross_coverage_summary.csv
+!/chiplet_extension/reports/firmware_code_coverage_summary.txt
+!/chiplet_extension/reports/firmware_code_coverage_summary.md
 
 # Packaged exports
 *.zip

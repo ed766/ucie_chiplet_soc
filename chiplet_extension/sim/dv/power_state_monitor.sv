@@ -72,8 +72,51 @@ module power_state_monitor #(
     logic [1:0]  last_state_q;
     logic        waiting_resume_q;
     logic        waiting_deisol_traffic_q;
+    logic [5:0]  switch_vec_q;
+    logic [5:0]  iso_n_vec_q;
+    logic [5:0]  last_switch_vec_q;
+    logic [5:0]  last_iso_n_vec_q;
+    logic        last_save_dma_sleep_q;
+    logic        last_restore_dma_sleep_q;
+    logic        last_save_dma_mem_q;
+    logic        last_restore_dma_mem_q;
+    logic        restore_seen_since_lp_q;
     int unsigned crypto_drain_q;
     int unsigned resume_window_q;
+
+    int unsigned switch_pd_a_traffic_on_seen;
+    int unsigned switch_pd_a_traffic_off_seen;
+    int unsigned switch_pd_a_dma_on_seen;
+    int unsigned switch_pd_a_dma_off_seen;
+    int unsigned switch_pd_a_link_on_seen;
+    int unsigned switch_pd_a_link_off_seen;
+    int unsigned switch_pd_b_crypto_on_seen;
+    int unsigned switch_pd_b_crypto_off_seen;
+    int unsigned switch_pd_b_link_on_seen;
+    int unsigned switch_pd_b_link_off_seen;
+    int unsigned switch_pd_channel_on_seen;
+    int unsigned switch_pd_channel_off_seen;
+    int unsigned iso_pd_a_traffic_assert_seen;
+    int unsigned iso_pd_a_traffic_deassert_seen;
+    int unsigned iso_pd_a_dma_assert_seen;
+    int unsigned iso_pd_a_dma_deassert_seen;
+    int unsigned iso_pd_a_link_assert_seen;
+    int unsigned iso_pd_a_link_deassert_seen;
+    int unsigned iso_pd_b_crypto_assert_seen;
+    int unsigned iso_pd_b_crypto_deassert_seen;
+    int unsigned iso_pd_b_link_assert_seen;
+    int unsigned iso_pd_b_link_deassert_seen;
+    int unsigned iso_pd_channel_assert_seen;
+    int unsigned iso_pd_channel_deassert_seen;
+    int unsigned seq_iso_before_switch_off_seen;
+    int unsigned seq_iso_before_switch_off_violations;
+    int unsigned seq_switch_on_before_restore_seen;
+    int unsigned seq_switch_on_before_restore_violations;
+    int unsigned seq_restore_before_deiso_seen;
+    int unsigned seq_restore_before_deiso_violations;
+    int unsigned retention_pulse_width_ok_seen;
+    int unsigned retention_pulse_width_violations;
+    int unsigned unsupported_transition_seen;
 
     wire all_domains_on = sw_pd_a_traffic && sw_pd_a_dma && sw_pd_a_link &&
                           sw_pd_b_crypto && sw_pd_b_link && sw_pd_channel;
@@ -84,6 +127,14 @@ module power_state_monitor #(
     wire completion_pending = (dma_comp_count != 4'd0) || irq_pending;
     wire no_activity = !link_activity && !dma_active_valid &&
                        (dma_submit_count == 4'd0) && !completion_pending;
+    wire [5:0] switch_vec = {sw_pd_a_traffic, sw_pd_a_dma, sw_pd_a_link,
+                             sw_pd_b_crypto, sw_pd_b_link, sw_pd_channel};
+    wire [5:0] iso_n_vec = {iso_pd_a_traffic_n, iso_pd_a_dma_n, iso_pd_a_link_n,
+                            iso_pd_b_crypto_n, iso_pd_b_link_n, iso_pd_channel_n};
+    wire [5:0] switch_rise = switch_vec & ~last_switch_vec_q;
+    wire [5:0] switch_fall = ~switch_vec & last_switch_vec_q;
+    wire [5:0] iso_deassert = iso_n_vec & ~last_iso_n_vec_q;
+    wire [5:0] iso_assert = ~iso_n_vec & last_iso_n_vec_q;
 
     wire combo_run = all_domains_on && all_iso_deasserted;
     wire combo_crypto_only = !sw_pd_a_traffic && sw_pd_a_dma && sw_pd_a_link &&
@@ -251,8 +302,50 @@ module power_state_monitor #(
             last_state_q <= PWR_RUN;
             waiting_resume_q <= 1'b0;
             waiting_deisol_traffic_q <= 1'b0;
+            switch_vec_q <= 6'b111111;
+            iso_n_vec_q <= 6'b111111;
+            last_switch_vec_q <= 6'b111111;
+            last_iso_n_vec_q <= 6'b111111;
+            last_save_dma_sleep_q <= 1'b0;
+            last_restore_dma_sleep_q <= 1'b0;
+            last_save_dma_mem_q <= 1'b0;
+            last_restore_dma_mem_q <= 1'b0;
+            restore_seen_since_lp_q <= 1'b0;
             crypto_drain_q <= 0;
             resume_window_q <= 0;
+            switch_pd_a_traffic_on_seen <= 0;
+            switch_pd_a_traffic_off_seen <= 0;
+            switch_pd_a_dma_on_seen <= 0;
+            switch_pd_a_dma_off_seen <= 0;
+            switch_pd_a_link_on_seen <= 0;
+            switch_pd_a_link_off_seen <= 0;
+            switch_pd_b_crypto_on_seen <= 0;
+            switch_pd_b_crypto_off_seen <= 0;
+            switch_pd_b_link_on_seen <= 0;
+            switch_pd_b_link_off_seen <= 0;
+            switch_pd_channel_on_seen <= 0;
+            switch_pd_channel_off_seen <= 0;
+            iso_pd_a_traffic_assert_seen <= 0;
+            iso_pd_a_traffic_deassert_seen <= 0;
+            iso_pd_a_dma_assert_seen <= 0;
+            iso_pd_a_dma_deassert_seen <= 0;
+            iso_pd_a_link_assert_seen <= 0;
+            iso_pd_a_link_deassert_seen <= 0;
+            iso_pd_b_crypto_assert_seen <= 0;
+            iso_pd_b_crypto_deassert_seen <= 0;
+            iso_pd_b_link_assert_seen <= 0;
+            iso_pd_b_link_deassert_seen <= 0;
+            iso_pd_channel_assert_seen <= 0;
+            iso_pd_channel_deassert_seen <= 0;
+            seq_iso_before_switch_off_seen <= 0;
+            seq_iso_before_switch_off_violations <= 0;
+            seq_switch_on_before_restore_seen <= 0;
+            seq_switch_on_before_restore_violations <= 0;
+            seq_restore_before_deiso_seen <= 0;
+            seq_restore_before_deiso_violations <= 0;
+            retention_pulse_width_ok_seen <= 0;
+            retention_pulse_width_violations <= 0;
+            unsupported_transition_seen <= 0;
         end else begin
             case (power_state)
                 PWR_RUN: run_cycles <= run_cycles + 1;
@@ -260,6 +353,67 @@ module power_state_monitor #(
                 PWR_SLEEP: sleep_cycles <= sleep_cycles + 1;
                 default: deep_sleep_cycles <= deep_sleep_cycles + 1;
             endcase
+
+            if (switch_rise[5]) switch_pd_a_traffic_on_seen <= switch_pd_a_traffic_on_seen + 1;
+            if (switch_fall[5]) switch_pd_a_traffic_off_seen <= switch_pd_a_traffic_off_seen + 1;
+            if (switch_rise[4]) switch_pd_a_dma_on_seen <= switch_pd_a_dma_on_seen + 1;
+            if (switch_fall[4]) switch_pd_a_dma_off_seen <= switch_pd_a_dma_off_seen + 1;
+            if (switch_rise[3]) switch_pd_a_link_on_seen <= switch_pd_a_link_on_seen + 1;
+            if (switch_fall[3]) switch_pd_a_link_off_seen <= switch_pd_a_link_off_seen + 1;
+            if (switch_rise[2]) switch_pd_b_crypto_on_seen <= switch_pd_b_crypto_on_seen + 1;
+            if (switch_fall[2]) switch_pd_b_crypto_off_seen <= switch_pd_b_crypto_off_seen + 1;
+            if (switch_rise[1]) switch_pd_b_link_on_seen <= switch_pd_b_link_on_seen + 1;
+            if (switch_fall[1]) switch_pd_b_link_off_seen <= switch_pd_b_link_off_seen + 1;
+            if (switch_rise[0]) switch_pd_channel_on_seen <= switch_pd_channel_on_seen + 1;
+            if (switch_fall[0]) switch_pd_channel_off_seen <= switch_pd_channel_off_seen + 1;
+
+            if (iso_assert[5]) iso_pd_a_traffic_assert_seen <= iso_pd_a_traffic_assert_seen + 1;
+            if (iso_deassert[5]) iso_pd_a_traffic_deassert_seen <= iso_pd_a_traffic_deassert_seen + 1;
+            if (iso_assert[4]) iso_pd_a_dma_assert_seen <= iso_pd_a_dma_assert_seen + 1;
+            if (iso_deassert[4]) iso_pd_a_dma_deassert_seen <= iso_pd_a_dma_deassert_seen + 1;
+            if (iso_assert[3]) iso_pd_a_link_assert_seen <= iso_pd_a_link_assert_seen + 1;
+            if (iso_deassert[3]) iso_pd_a_link_deassert_seen <= iso_pd_a_link_deassert_seen + 1;
+            if (iso_assert[2]) iso_pd_b_crypto_assert_seen <= iso_pd_b_crypto_assert_seen + 1;
+            if (iso_deassert[2]) iso_pd_b_crypto_deassert_seen <= iso_pd_b_crypto_deassert_seen + 1;
+            if (iso_assert[1]) iso_pd_b_link_assert_seen <= iso_pd_b_link_assert_seen + 1;
+            if (iso_deassert[1]) iso_pd_b_link_deassert_seen <= iso_pd_b_link_deassert_seen + 1;
+            if (iso_assert[0]) iso_pd_channel_assert_seen <= iso_pd_channel_assert_seen + 1;
+            if (iso_deassert[0]) iso_pd_channel_deassert_seen <= iso_pd_channel_deassert_seen + 1;
+
+            if (|switch_fall) begin
+                if ((switch_fall & iso_n_vec) == 6'b0) begin
+                    seq_iso_before_switch_off_seen <= seq_iso_before_switch_off_seen + 1;
+                end else begin
+                    seq_iso_before_switch_off_violations <= seq_iso_before_switch_off_violations + 1;
+                end
+            end
+
+            if (restore_dma_sleep || restore_dma_mem) begin
+                restore_seen_since_lp_q <= 1'b1;
+                if (sw_pd_a_dma) begin
+                    seq_switch_on_before_restore_seen <= seq_switch_on_before_restore_seen + 1;
+                end else begin
+                    seq_switch_on_before_restore_violations <= seq_switch_on_before_restore_violations + 1;
+                end
+            end
+
+            if ((waiting_deisol_traffic_q || restore_seen_since_lp_q) && (|iso_deassert)) begin
+                if (restore_seen_since_lp_q) begin
+                    seq_restore_before_deiso_seen <= seq_restore_before_deiso_seen + 1;
+                end else begin
+                    seq_restore_before_deiso_violations <= seq_restore_before_deiso_violations + 1;
+                end
+            end
+
+            if ((save_dma_sleep && last_save_dma_sleep_q) ||
+                (restore_dma_sleep && last_restore_dma_sleep_q) ||
+                (save_dma_mem && last_save_dma_mem_q) ||
+                (restore_dma_mem && last_restore_dma_mem_q)) begin
+                retention_pulse_width_violations <= retention_pulse_width_violations + 1;
+            end else if (save_dma_sleep || restore_dma_sleep ||
+                         save_dma_mem || restore_dma_mem) begin
+                retention_pulse_width_ok_seen <= retention_pulse_width_ok_seen + 1;
+            end
 
             if ((power_state == PWR_RUN) && combo_run) begin
                 domain_combo_run <= domain_combo_run + 1;
@@ -315,27 +469,26 @@ module power_state_monitor #(
                 if (last_state_q == PWR_RUN && power_state == PWR_CRYPTO_ONLY) begin
                     trans_run_to_crypto_only <= trans_run_to_crypto_only + 1;
                     crypto_drain_q <= CRYPTO_DRAIN_GRACE;
-                end
-                if (last_state_q == PWR_CRYPTO_ONLY && power_state == PWR_RUN) begin
+                end else if (last_state_q == PWR_CRYPTO_ONLY && power_state == PWR_RUN) begin
                     trans_crypto_only_to_run <= trans_crypto_only_to_run + 1;
-                end
-                if (last_state_q == PWR_RUN && power_state == PWR_SLEEP) begin
+                end else if (last_state_q == PWR_RUN && power_state == PWR_SLEEP) begin
                     trans_run_to_sleep <= trans_run_to_sleep + 1;
-                end
-                if (last_state_q == PWR_SLEEP && power_state == PWR_RUN) begin
+                    restore_seen_since_lp_q <= 1'b0;
+                end else if (last_state_q == PWR_SLEEP && power_state == PWR_RUN) begin
                     trans_sleep_to_run <= trans_sleep_to_run + 1;
                     waiting_resume_q <= 1'b1;
                     waiting_deisol_traffic_q <= 1'b1;
                     resume_window_q <= RESUME_WINDOW;
-                end
-                if (last_state_q == PWR_RUN && power_state == PWR_DEEP_SLEEP) begin
+                end else if (last_state_q == PWR_RUN && power_state == PWR_DEEP_SLEEP) begin
                     trans_run_to_deep_sleep <= trans_run_to_deep_sleep + 1;
-                end
-                if (last_state_q == PWR_DEEP_SLEEP && power_state == PWR_RUN) begin
+                    restore_seen_since_lp_q <= 1'b0;
+                end else if (last_state_q == PWR_DEEP_SLEEP && power_state == PWR_RUN) begin
                     trans_deep_sleep_to_run <= trans_deep_sleep_to_run + 1;
                     waiting_resume_q <= 1'b1;
                     waiting_deisol_traffic_q <= 1'b1;
                     resume_window_q <= RESUME_WINDOW;
+                end else begin
+                    unsupported_transition_seen <= unsupported_transition_seen + 1;
                 end
                 last_state_q <= power_state;
             end
@@ -373,6 +526,14 @@ module power_state_monitor #(
                 isolation_release_traffic_seen <= isolation_release_traffic_seen + 1;
                 waiting_deisol_traffic_q <= 1'b0;
             end
+            last_switch_vec_q <= switch_vec;
+            last_iso_n_vec_q <= iso_n_vec;
+            switch_vec_q <= switch_vec;
+            iso_n_vec_q <= iso_n_vec;
+            last_save_dma_sleep_q <= save_dma_sleep;
+            last_restore_dma_sleep_q <= restore_dma_sleep;
+            last_save_dma_mem_q <= save_dma_mem;
+            last_restore_dma_mem_q <= restore_dma_mem;
         end
     end
 
@@ -406,6 +567,39 @@ module power_state_monitor #(
             $fdisplay(fd, "dma_sleep_restore_seen,%0d", dma_sleep_restore_seen);
             $fdisplay(fd, "dma_mem_save_seen,%0d", dma_mem_save_seen);
             $fdisplay(fd, "dma_mem_restore_seen,%0d", dma_mem_restore_seen);
+            $fdisplay(fd, "switch_pd_a_traffic_on_seen,%0d", switch_pd_a_traffic_on_seen);
+            $fdisplay(fd, "switch_pd_a_traffic_off_seen,%0d", switch_pd_a_traffic_off_seen);
+            $fdisplay(fd, "switch_pd_a_dma_on_seen,%0d", switch_pd_a_dma_on_seen);
+            $fdisplay(fd, "switch_pd_a_dma_off_seen,%0d", switch_pd_a_dma_off_seen);
+            $fdisplay(fd, "switch_pd_a_link_on_seen,%0d", switch_pd_a_link_on_seen);
+            $fdisplay(fd, "switch_pd_a_link_off_seen,%0d", switch_pd_a_link_off_seen);
+            $fdisplay(fd, "switch_pd_b_crypto_on_seen,%0d", switch_pd_b_crypto_on_seen);
+            $fdisplay(fd, "switch_pd_b_crypto_off_seen,%0d", switch_pd_b_crypto_off_seen);
+            $fdisplay(fd, "switch_pd_b_link_on_seen,%0d", switch_pd_b_link_on_seen);
+            $fdisplay(fd, "switch_pd_b_link_off_seen,%0d", switch_pd_b_link_off_seen);
+            $fdisplay(fd, "switch_pd_channel_on_seen,%0d", switch_pd_channel_on_seen);
+            $fdisplay(fd, "switch_pd_channel_off_seen,%0d", switch_pd_channel_off_seen);
+            $fdisplay(fd, "iso_pd_a_traffic_assert_seen,%0d", iso_pd_a_traffic_assert_seen);
+            $fdisplay(fd, "iso_pd_a_traffic_deassert_seen,%0d", iso_pd_a_traffic_deassert_seen);
+            $fdisplay(fd, "iso_pd_a_dma_assert_seen,%0d", iso_pd_a_dma_assert_seen);
+            $fdisplay(fd, "iso_pd_a_dma_deassert_seen,%0d", iso_pd_a_dma_deassert_seen);
+            $fdisplay(fd, "iso_pd_a_link_assert_seen,%0d", iso_pd_a_link_assert_seen);
+            $fdisplay(fd, "iso_pd_a_link_deassert_seen,%0d", iso_pd_a_link_deassert_seen);
+            $fdisplay(fd, "iso_pd_b_crypto_assert_seen,%0d", iso_pd_b_crypto_assert_seen);
+            $fdisplay(fd, "iso_pd_b_crypto_deassert_seen,%0d", iso_pd_b_crypto_deassert_seen);
+            $fdisplay(fd, "iso_pd_b_link_assert_seen,%0d", iso_pd_b_link_assert_seen);
+            $fdisplay(fd, "iso_pd_b_link_deassert_seen,%0d", iso_pd_b_link_deassert_seen);
+            $fdisplay(fd, "iso_pd_channel_assert_seen,%0d", iso_pd_channel_assert_seen);
+            $fdisplay(fd, "iso_pd_channel_deassert_seen,%0d", iso_pd_channel_deassert_seen);
+            $fdisplay(fd, "seq_iso_before_switch_off_seen,%0d", seq_iso_before_switch_off_seen);
+            $fdisplay(fd, "seq_iso_before_switch_off_violations,%0d", seq_iso_before_switch_off_violations);
+            $fdisplay(fd, "seq_switch_on_before_restore_seen,%0d", seq_switch_on_before_restore_seen);
+            $fdisplay(fd, "seq_switch_on_before_restore_violations,%0d", seq_switch_on_before_restore_violations);
+            $fdisplay(fd, "seq_restore_before_deiso_seen,%0d", seq_restore_before_deiso_seen);
+            $fdisplay(fd, "seq_restore_before_deiso_violations,%0d", seq_restore_before_deiso_violations);
+            $fdisplay(fd, "retention_pulse_width_ok_seen,%0d", retention_pulse_width_ok_seen);
+            $fdisplay(fd, "retention_pulse_width_violations,%0d", retention_pulse_width_violations);
+            $fdisplay(fd, "unsupported_transition_seen,%0d", unsupported_transition_seen);
             $fdisplay(fd, "activity_cross_no_traffic,%0d", activity_cross_no_traffic);
             $fdisplay(fd, "activity_cross_link_traffic,%0d", activity_cross_link_traffic);
             $fdisplay(fd, "activity_cross_dma_queued,%0d", activity_cross_dma_queued);

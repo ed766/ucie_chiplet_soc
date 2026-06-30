@@ -48,6 +48,7 @@ def write_outputs(rows: list[dict[str, str]], csv_out: Path, md_out: Path) -> No
     with csv_out.open("w", newline="") as handle:
         writer = csv.DictWriter(
             handle,
+            lineterminator="\n",
             fieldnames=[
                 "test",
                 "illegal_action",

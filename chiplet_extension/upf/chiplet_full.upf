@@ -9,8 +9,11 @@ set_power_intent -upf_version 4.0
 # Power domains
 # ---------------------------------------------------------------------------
 
+# AON_CHIPLET intentionally names only the explicit always-on power controller.
+# Top-level structural glue is treated as always-on context by the proxy flow;
+# switchable child instances are assigned below to avoid domain overlap.
 create_power_domain AON_CHIPLET \
-    -elements {soc_chiplet_top soc_chiplet_top/u_pwr_ctrl}
+    -elements {soc_chiplet_top/u_pwr_ctrl}
 
 create_power_domain PD_A_TRAFFIC \
     -elements {soc_chiplet_top/u_die_a/u_die_a_system}
@@ -124,6 +127,10 @@ create_power_switch PS_PD_CHANNEL \
 # Isolation
 # ---------------------------------------------------------------------------
 
+# Isolation is output-side, clamp-to-0, and controlled by active-low sidebands.
+# chiplet_power_ctrl sequences controls so isolation asserts before switch-off
+# and restore occurs before de-isolation after retained sleep.
+
 set_isolation ISO_PD_A_TRAFFIC \
     -domain PD_A_TRAFFIC \
     -applies_to outputs \
@@ -210,6 +217,10 @@ set_retention_control RET_DMA_MEM_BANKS \
 # ---------------------------------------------------------------------------
 # Power-state table
 # ---------------------------------------------------------------------------
+
+# Single voltage level is assumed for this student/open-source flow, so no
+# level shifter strategies are declared. Commercial implementation would
+# replace this tool-neutral intent with foundry/library-specific cells.
 
 create_power_state_table CHIPLET_PST \
     -domains {AON_CHIPLET PD_A_TRAFFIC PD_A_DMA PD_A_LINK PD_B_CRYPTO PD_B_LINK PD_CHANNEL}

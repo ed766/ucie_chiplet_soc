@@ -31,10 +31,19 @@
   sequencing failure classes.
 - Characterized DMA offload latency, retry overhead, backpressure sensitivity,
   and sleep/resume recovery behavior across named traffic scenarios.
+- Added open-source front-end quality collateral with Verilator lint, optional
+  Yosys/OpenSTA probes, Verilator code coverage, structural CDC/RDC checks,
+  an AXI-Lite CSR wrapper test, and a standalone C CRC reference model.
+- Integrated the lightweight RV32 core as a software-visible bus master and
+  executed twelve ROM-backed programs that configure DMA through APB MMIO,
+  poll IRQ/completion state, handle wait states and bus errors, and resume
+  after sleep; the focused lane runs `12 / 12` programs, closes `30 / 30`
+  MMIO/outcome points and `7 / 7` crosses, and reaches `86.62%` focused
+  Verilator line coverage for RV32/APB/ROM integration RTL.
 
 ## Supporting Numbers
 
-Use [`project_metrics.md`](/home/esgha/ucie_chiplet_soc/docs/project_metrics.md) as the
+Use [`project_metrics.md`](project_metrics.md) as the
 single source of truth for current counts. It is regenerated from canonical CSV
 reports by running:
 
@@ -58,15 +67,31 @@ Source files:
 - `chiplet_extension/reports/formal_summary.csv`
 - `chiplet_extension/reports/coverage_closure_matrix.md`
 - `chiplet_extension/reports/cross_coverage_summary.csv`
+- `chiplet_extension/reports/true_cross_coverage_summary.csv`
 - `chiplet_extension/reports/project_metrics.csv`
 - `chiplet_extension/reports/random_stress_regress_summary.csv`
+- `chiplet_extension/reports/frontend_quality_summary.md`
+- `chiplet_extension/reports/code_coverage_summary.md`
+- `chiplet_extension/reports/c_reference_summary.csv`
+- `chiplet_extension/reports/cdc_rdc_summary.csv`
+- `chiplet_extension/reports/firmware_soc_summary.csv`
+- `chiplet_extension/reports/firmware_coverage_summary.csv`
+- `chiplet_extension/reports/firmware_cross_coverage_summary.csv`
+- `chiplet_extension/reports/firmware_code_coverage_summary.md`
 - `docs/project_metrics.md`
 - `docs/assertion_inventory.md`
 - `docs/random_stress_summary.md`
+- `docs/true_cross_coverage_summary.md`
+- `docs/verification_traceability_matrix.md`
 - `docs/uvm_status.md`
 - `docs/performance_characterization.md`
 - `docs/bug_diary.md`
 - `docs/debug_case_study_dma_retry.md`
+- `docs/open_source_flow_summary.md`
+- `docs/clock_reset_cdc_plan.md`
+- `docs/c_reference_model_summary.md`
+- `docs/firmware_soc_verification.md`
+- `docs/debug_case_study_firmware_dma.md`
 
 ## Interview Talking Points
 
@@ -89,11 +114,23 @@ Source files:
 - The coverage closure matrix now includes non-gating cross-coverage evidence
   for queue occupancy, retry/backpressure, CRC recovery, memory validity,
   parity/error status, power/isolation, and AES return ordering.
+- The verification traceability matrix maps each major feature to stimulus,
+  checkers, assertions, coverage, and report artifacts for faster review.
+- The AXI-Lite wrapper keeps the internal DMA CSR map unchanged while showing a
+  standard SoC-style register integration path.
+- The flagship integration uses ROM-backed RV32 firmware over APB MMIO to
+  stage descriptors, ring the DMA doorbell, poll completion/IRQ state, and
+  exercise low-power resume without testbench CSR writes.
+- The C CRC model is intentionally standalone rather than DPI-based, making it
+  portable and easy to run in open-source regression environments.
 
 ## Honest Limitations To Mention
 
 - The power-state work is proxy-based rather than UPF-aware simulation.
 - The property harnesses are bounded assertion checks, not a complete formal
   signoff flow.
-- The stress suite still exists as explicit characterization and closure work
-  for anyone who wants to dig deeper.
+- The seeded-random stress suite is optional supporting evidence; generated
+  rows are schema-checked, and invalid generated combinations are reported
+  separately from valid executed rows.
+- Yosys/OpenSTA/code-coverage/CDC results are open-source quality proxies and
+  should not be described as commercial signoff closure.
