@@ -298,6 +298,30 @@ package soc_tests_pkg;
                 cfg.dma_len_words = 4;
                 cfg.dma_tag = 16'h110b;
             end
+            "dma_codecov_state_entropy": begin
+                cfg.scenario_kind = "coverage_edge";
+                cfg.use_dma = 1'b1;
+                cfg.ref_words = 0;
+                cfg.max_cycles = 30000;
+            end
+            "dma_codecov_error_matrix": begin
+                cfg.scenario_kind = "coverage_edge";
+                cfg.use_dma = 1'b1;
+                cfg.ref_words = 0;
+                cfg.max_cycles = 22000;
+            end
+            "dma_timeout_retire_stall": begin
+                cfg.scenario_kind = "coverage_edge";
+                cfg.use_dma = 1'b1;
+                cfg.ref_words = 0;
+                cfg.max_cycles = 26000;
+            end
+            "soc_bidirectional_payload_entropy": begin
+                cfg.scenario_kind = "coverage_edge";
+                cfg.use_dma = 1'b1;
+                cfg.ref_words = 0;
+                cfg.max_cycles = 28000;
+            end
             "dma_retry_recover_queue": begin
                 cfg.scenario_kind = "dma";
                 cfg.use_dma = 1'b1;
@@ -464,6 +488,12 @@ package soc_tests_pkg;
             end
             "mem_parity_dst_maint_detect": begin
                 cfg.scenario_kind = "dma_mem";
+                cfg.use_dma = 1'b1;
+                cfg.ref_words = 0;
+                cfg.max_cycles = 10000;
+            end
+            "mem_parity_src_maint_detect": begin
+                cfg.scenario_kind = "coverage_edge";
                 cfg.use_dma = 1'b1;
                 cfg.ref_words = 0;
                 cfg.max_cycles = 10000;

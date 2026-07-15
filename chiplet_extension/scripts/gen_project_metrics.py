@@ -131,6 +131,9 @@ def generate(csv_out: Path, md_out: Path) -> None:
     firmware_cross = read_csv(REPORTS / "firmware_cross_coverage_summary.csv")
     firmware_code_cov = key_value_file(REPORTS / "firmware_code_coverage_summary.txt")
     code_cov = key_value_file(REPORTS / "code_coverage_summary.txt")
+    solver_formal = read_csv(REPORTS / "formal_proof_summary.csv")
+    async_cdc = read_csv(REPORTS / "async_cdc_summary.csv")
+    uvm_ci = read_csv(REPORTS / "uvm_ci_regress_summary.csv")
 
     stable_pass = sum(1 for row in regress if yes(row.get("meets_expectation", "")))
     nominal_rows = [row for row in regress if row.get("expected_status") == "PASS"]
@@ -159,6 +162,11 @@ def generate(csv_out: Path, md_out: Path) -> None:
     firmware_cov_hit = sum(1 for row in firmware_coverage if row.get("hit") == "1")
     firmware_cross_hit = sum(1 for row in firmware_cross if row.get("hit") == "1")
     firmware_code_pct = firmware_code_cov.get("focus_line_coverage_pct", "NA")
+    solver_proves = [row for row in solver_formal if row.get("task") == "prove"]
+    solver_covers = [row for row in solver_formal if row.get("task") == "cover"]
+    solver_mutations = [row for row in solver_formal if row.get("task") == "mutation"]
+    async_pass = sum(row.get("status") == "PASS" for row in async_cdc)
+    uvm_pass = sum(row.get("status") == "PASS" for row in uvm_ci)
 
     metrics = [
         ("stable_runs", metric_pair(stable_pass, len(regress)), "Default stable/closure regression rows meeting expectation."),
@@ -172,6 +180,9 @@ def generate(csv_out: Path, md_out: Path) -> None:
         ("cross_coverage_groups", cross_pair, "Grouped cross-evidence derived from flat coverage metrics."),
         ("true_cross_groups", true_cross_pair, "Interaction-level cross evidence when generated."),
         ("bounded_property_checks", metric_pair(formal_pass, len(formal)), "Nominal and expected-fail bounded assertion harnesses."),
+        ("solver_formal_proofs", metric_pair(sum(row.get("status") == "PASS" for row in solver_proves), len(solver_proves)), "SymbiYosys unbounded safety proof tasks when the pinned toolchain is available."),
+        ("solver_formal_covers", metric_pair(sum(row.get("status") == "PASS" for row in solver_covers), len(solver_covers)), "Reachability tasks paired with solver proofs."),
+        ("formal_mutation_sensitivity", metric_pair(sum(row.get("status") == "PASS" for row in solver_mutations), len(solver_mutations)), "Expected counterexamples under property-specific mutations."),
         ("negative_tests", metric_pair(negative_pass, len(negative)), "Illegal-operation tests with explicit expected response."),
         ("optional_random_stress_subset", random_pair, "Optional seeded-random execution subset; not part of default closure."),
         ("assertion_inventory", assertions, "Inventoried protocol/control invariants."),
@@ -182,6 +193,12 @@ def generate(csv_out: Path, md_out: Path) -> None:
         ("firmware_outcome_crosses", metric_pair(firmware_cross_hit, len(firmware_cross)), "Firmware outcome, power-state, and wait-state interaction crosses."),
         ("firmware_focused_code_coverage", f"{firmware_code_pct}%" if firmware_code_pct != "NA" else "NA", "Focused Verilator line coverage for RV32/APB/ROM integration RTL."),
         ("optional_collateral_code_coverage", f"{optional_cov}%" if optional_cov != "NA" else "NA", "Verilator line coverage for optional AXI/CDC collateral RTL."),
+        ("integrated_async_cdc", metric_pair(async_pass, len(async_cdc)), "Optional two-clock chiplet matrix across clock ratios and reset skew."),
+        ("real_uvm_ci", metric_pair(uvm_pass, len(uvm_ci)), "Pinned Verilator/UVM phase, TLM, coverage, and RAL smoke lane when executed."),
+        ("design_line_coverage", f"{code_cov.get('design_line_coverage_pct', 'NA')}%" if code_cov.get("design_line_coverage_pct") else "NA", "Native Verilator design-RTL line coverage."),
+        ("design_branch_expression_coverage", f"{code_cov.get('design_branch_expression_coverage_pct', 'NA')}%" if code_cov.get('design_branch_expression_coverage_pct') else "NA", "Verilator design-RTL branch/expression outcome coverage."),
+        ("design_toggle_coverage", f"{code_cov.get('design_toggle_coverage_pct', 'NA')}%" if code_cov.get('design_toggle_coverage_pct') else "NA", "Raw toggle coverage with signals wider than 32 bits excluded by instrumentation policy."),
+        ("design_toggle_reviewed", f"{code_cov.get('design_toggle_reviewed_coverage_pct', 'NA')}%" if code_cov.get('design_toggle_reviewed_coverage_pct') else "NA", "Reviewed toggle coverage after documented structural, fixed-credit-bit, and diagnostic-counter exclusions."),
     ]
 
     csv_out.parent.mkdir(parents=True, exist_ok=True)

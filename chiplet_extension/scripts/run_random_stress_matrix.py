@@ -129,11 +129,6 @@ def validate_manifest_row(row: dict[str, str]) -> list[str]:
             errors.append("random_manifest_scenario supports single-issue DMA rows only")
         if parity_injection == "none" and dma_len < 8:
             errors.append("clean random_manifest_scenario rows require dma_len >= 8")
-    if test == "power_traffic_cross_test":
-        errors.append(
-            "power_traffic_cross_test has fixed retry/power timing; arbitrary manifest rows are schema-rejected and covered by the representative probe"
-        )
-
     max_words = dma_len * (4 if queue_pressure == "full_queue" else 2)
     if base_for_bank(src_bank, 8) + max_words >= 256:
         errors.append("source descriptor range exceeds scratchpad")
@@ -252,7 +247,7 @@ def plusargs_for_manifest_row(row: dict[str, str]) -> tuple[list[str], str]:
             *link_plusargs,
         ]
 
-    if test not in ("prbs_retry_backpressure",):
+    if test not in ("prbs_retry_backpressure", "power_traffic_cross_test"):
         plusargs.extend([
         f"TARGET_CIPHER_UPDATES={aes_blocks}",
         f"TARGET_TX_COUNT={max(32, aes_blocks * 32)}",
@@ -329,8 +324,8 @@ def run_manifest_row(row: dict[str, str], verilator: str) -> dict[str, str]:
         "meets_expectation": child.get("meets_expectation", "0"),
         "failure_bucket": bucket_from_row(child) if child else "runner_error",
         "detail": child.get("detail", "missing_child_summary"),
-        "log_path": child.get("log_path", ""),
-        "summary_csv": str(summary_path),
+        "log_path": child.get("log_path", "").replace(str(ROOT.parent) + "/", ""),
+        "summary_csv": str(summary_path.relative_to(ROOT.parent)),
         "runner_returncode": str(result.returncode),
         "constraint_status": constraint_status,
         "applied_plusargs": applied_plusargs,
@@ -343,7 +338,13 @@ def run_manifest_row(row: dict[str, str], verilator: str) -> dict[str, str]:
 def selected_manifest_rows(family: str) -> list[dict[str, str]]:
     path = REPORT_ROOT / f"{family}_manifest.csv"
     rows = read_rows(path)
-    return rows[: FAMILY_LIMITS[family]]
+    valid = [row for row in rows if not validate_manifest_row(row)]
+    required = FAMILY_LIMITS[family]
+    if len(valid) < required:
+        raise RuntimeError(
+            f"{family} has {len(valid)} valid rows; {required} are required for execution"
+        )
+    return valid[:required]
 
 
 def main() -> int:
@@ -382,7 +383,7 @@ def main() -> int:
         "applied_plusargs",
     ]
     with output.open("w", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer = csv.DictWriter(handle, fieldnames=fieldnames, lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
 

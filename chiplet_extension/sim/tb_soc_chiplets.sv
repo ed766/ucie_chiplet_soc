@@ -955,7 +955,7 @@ module tb_soc_chiplets #(
         .resend_request(u_chiplet.u_die_a.resend_request),
         .tx_fire       (u_chiplet.u_die_a.u_tx.debug_send_fire),
         .tx_flit       (u_chiplet.u_die_a.u_tx.debug_send_flit),
-        .link_ready    (u_chiplet.u_die_a.link_ready)
+        .link_ready    (u_chiplet.u_die_a.link_ready && (power_state_q == PWR_RUN))
     );
 
     retry_checker #(
@@ -968,7 +968,7 @@ module tb_soc_chiplets #(
         .resend_request(u_chiplet.u_die_b.resend_request),
         .tx_fire       (u_chiplet.u_die_b.u_tx.debug_send_fire),
         .tx_flit       (u_chiplet.u_die_b.u_tx.debug_send_flit),
-        .link_ready    (u_chiplet.u_die_b.link_ready)
+        .link_ready    (u_chiplet.u_die_b.link_ready && (power_state_q == PWR_RUN))
     );
 
     ucie_link_checker #(
@@ -1030,6 +1030,15 @@ module tb_soc_chiplets #(
 
     function automatic logic [DATA_WIDTH-1:0] dma_source_word(input int unsigned index);
         dma_source_word = 64'h1000_0000_0000_0000 | DATA_WIDTH'(index);
+    endfunction
+
+    function automatic logic [DATA_WIDTH-1:0] dma_entropy_word(input int unsigned index);
+        case (index[1:0])
+            2'd0: dma_entropy_word = 64'h0000_0000_0000_0000 ^ DATA_WIDTH'(index);
+            2'd1: dma_entropy_word = 64'hFFFF_FFFF_FFFF_FFFF ^ DATA_WIDTH'(index);
+            2'd2: dma_entropy_word = 64'hAAAA_AAAA_AAAA_AAAA ^ DATA_WIDTH'(index);
+            default: dma_entropy_word = 64'h5555_5555_5555_5555 ^ DATA_WIDTH'(index);
+        endcase
     endfunction
 
     task automatic cfg_write32(
@@ -1915,6 +1924,157 @@ module tb_soc_chiplets #(
         dma_mem_set_ret_cfg(2'b11, 2'b11, 2'b00, 2'b00);
 
         case (test_name)
+            "dma_csr_readback_sweep": begin
+                logic [31:0] csr_word;
+                for (int unsigned addr = 0; addr <= DMA_MEM_INJECT_STATUS_ADDR; addr += 4) begin
+                    cfg_read32(addr[7:0], csr_word);
+                    local_ok = local_ok && !$isunknown(csr_word);
+                end
+                pass_q = local_ok;
+                detail_q = pass_q ? "dma_csr_readback_sweep_clean" : "dma_csr_readback_violation";
+            end
+            "dma_codecov_state_entropy": begin
+                logic [31:0] active_tag_word;
+                int unsigned src_bases [0:3];
+                int unsigned dst_bases [0:3];
+                int unsigned lengths [0:3];
+                int unsigned staged_lengths [0:3];
+                logic [15:0] tags [0:3];
+                src_bases = '{2, 17, 66, 129};
+                dst_bases = '{32, 48, 96, 176};
+                lengths = '{4, 4, 8, 4};
+                staged_lengths = '{2, 4, 8, 16};
+                tags = '{16'hFFFF, 16'hAAAA, 16'h5555, 16'hC33C};
+                for (int idx = 0; idx < 4; idx++) begin
+                    dma_preload_source_range(src_bases[idx], lengths[idx]);
+                    dma_clear_dest_range(dst_bases[idx], lengths[idx]);
+                end
+                force u_chiplet.u_channel.induce_fwd_fault_q = 1'b0;
+                force u_chiplet.u_channel.induce_rev_fault_q = 1'b0;
+                force u_chiplet.u_die_a.tx_stream_ready = 1'b0;
+                dma_enqueue_desc(200, 240, 16, 16'h0F0F);
+                dma_wait_for_state(2, 512, hit_target);
+                local_ok = local_ok && hit_target;
+                for (int idx = 0; idx < 4; idx++) begin
+                    dma_enqueue_desc(src_bases[idx], dst_bases[idx], staged_lengths[idx], tags[idx]);
+                end
+                dma_wait_for_submit_count(4, 256, hit_target);
+                local_ok = local_ok && hit_target;
+                cfg_read32(DMA_ACTIVE_TAG_ADDR, active_tag_word);
+                dma_read_active_status(active_valid_local, stall_local, state_local,
+                                       submit_count_local, comp_count_local);
+                local_ok = local_ok && active_valid_local &&
+                           (active_tag_word[15:0] == 16'h0F0F);
+                dma_soft_reset();
+                release u_chiplet.u_die_a.tx_stream_ready;
+                push_before = dma_completion_push_count;
+                for (int idx = 0; idx < 4; idx++) begin
+                    dma_enqueue_desc(src_bases[idx], dst_bases[idx], lengths[idx], tags[idx]);
+                end
+                dma_wait_for_comp_count(4, max_cycles_cfg, hit_target);
+                local_ok = local_ok && hit_target;
+                dma_wait_for_completion_pushes(push_before + 4, 2048, hit_target);
+                local_ok = local_ok && hit_target;
+                for (int idx = 0; idx < 4; idx++) begin
+                    dma_read_front_completion(empty, tag, status, err_code, words_retired);
+                    local_ok = local_ok && !empty && (tag == tags[idx]) &&
+                               (status == DMA_COMP_SUCCESS) &&
+                               (words_retired == lengths[idx][8:0]);
+                    dma_pop_completion();
+                    dma_compare_dest_range(dst_bases[idx], lengths[idx]);
+                end
+                release u_chiplet.u_channel.induce_fwd_fault_q;
+                release u_chiplet.u_channel.induce_rev_fault_q;
+                pass_q = local_ok && (dma_mem_mismatch_count == 0);
+                detail_q = pass_q ? "dma_codecov_state_entropy_clean" : "dma_coverage_state_violation";
+            end
+            "dma_codecov_error_matrix": begin
+                logic [3:0] expected_errors [0:3];
+                logic [15:0] expected_tags [0:3];
+                expected_errors = '{DMA_ERR_ODD_LEN, DMA_ERR_RANGE,
+                                    DMA_ERR_SUBMIT_BLOCKED, DMA_ERR_QUEUE_FULL};
+                expected_tags = '{16'h8001, 16'h4002, 16'h2004, 16'h1008};
+                dma_enqueue_desc(8, 32, 3, expected_tags[0]);
+                dma_enqueue_desc(252, 40, 8, expected_tags[1]);
+                power_state_q = PWR_CRYPTO_ONLY;
+                repeat (2) @(posedge clk);
+                dma_enqueue_desc(8, 32, 4, expected_tags[2]);
+                power_state_q = PWR_SLEEP;
+                repeat (2) @(posedge clk);
+                for (int idx = 0; idx < 4; idx++) begin
+                    dma_enqueue_desc(8 + (idx * 8), 96 + (idx * 8), 4, 16'h0100 << idx);
+                end
+                dma_wait_for_submit_count(4, 256, hit_target);
+                local_ok = local_ok && hit_target;
+                dma_enqueue_desc(64, 160, 4, expected_tags[3]);
+                dma_wait_for_comp_count(4, 256, hit_target);
+                local_ok = local_ok && hit_target;
+                for (int idx = 0; idx < 4; idx++) begin
+                    dma_read_front_completion(empty, tag, status, err_code, words_retired);
+                    local_ok = local_ok && !empty && (tag == expected_tags[idx]) &&
+                               (status == DMA_COMP_SUBMIT_REJECT) &&
+                               (err_code == expected_errors[idx]) && (words_retired == 0);
+                    dma_pop_completion();
+                end
+                dma_soft_reset();
+                power_state_q = PWR_RUN;
+                pass_q = local_ok;
+                detail_q = pass_q ? "dma_codecov_error_matrix_clean" : "dma_coverage_error_matrix_violation";
+            end
+            "dma_timeout_retire_stall": begin
+                logic [15:0] front_tag_before;
+                logic [1:0] front_status_before;
+                logic [3:0] front_error_before;
+                logic [8:0] front_words_before;
+                for (int idx = 0; idx < 4; idx++) begin
+                    dma_enqueue_desc(8, 32, 3, 16'h7000 + idx);
+                end
+                dma_wait_for_comp_count(4, 256, hit_target);
+                local_ok = local_ok && hit_target;
+                dma_read_front_completion(empty, front_tag_before, front_status_before,
+                                          front_error_before, front_words_before);
+                dma_preload_source_range(80, 4);
+                dma_clear_dest_range(200, 4);
+                force u_chiplet.u_die_a.dma_rx_stream_valid = 1'b0;
+                push_before = dma_completion_push_count;
+                dma_enqueue_desc(80, 200, 4, 16'h7F7F);
+                dma_wait_for_state(4, max_cycles_cfg, hit_target);
+                local_ok = local_ok && hit_target;
+                dma_read_active_status(active_valid_local, stall_local, state_local,
+                                       submit_count_local, comp_count_local);
+                dma_read_front_completion(empty, tag, status, err_code, words_retired);
+                local_ok = local_ok && active_valid_local && stall_local &&
+                           (comp_count_local == 4) && (tag == front_tag_before) &&
+                           (status == front_status_before) && (err_code == front_error_before) &&
+                           (words_retired == front_words_before);
+                dma_pop_completion();
+                dma_wait_for_completion_pushes(push_before + 1, 2048, hit_target);
+                local_ok = local_ok && hit_target;
+                release u_chiplet.u_die_a.dma_rx_stream_valid;
+                for (int idx = 0; idx < 3; idx++) begin
+                    dma_pop_completion();
+                end
+                dma_read_front_completion(empty, tag, status, err_code, words_retired);
+                pass_q = local_ok && !empty && (tag == 16'h7F7F) &&
+                         (status == DMA_COMP_RUNTIME_ERROR) &&
+                         (err_code == DMA_ERR_TIMEOUT) && (words_retired == 0);
+                detail_q = pass_q ? "dma_timeout_retire_stall_clean" : "dma_timeout_retire_stall_violation";
+            end
+            "soc_bidirectional_payload_entropy": begin
+                for (int idx = 208; idx < 240; idx++) begin
+                    dma_scratch_write64(1'b0, idx, dma_entropy_word(idx));
+                end
+                dma_clear_dest_range(0, 32);
+                push_before = dma_completion_push_count;
+                dma_enqueue_desc(208, 0, 32, 16'hA55A);
+                dma_wait_for_completion_pushes(push_before + 1, max_cycles_cfg, hit_target);
+                dma_read_front_completion(empty, tag, status, err_code, words_retired);
+                dma_compare_dest_range(0, 32);
+                pass_q = hit_target && !empty && (tag == 16'hA55A) &&
+                         (status == DMA_COMP_SUCCESS) && (words_retired == 32) &&
+                         (dma_mem_mismatch_count == 0);
+                detail_q = pass_q ? "soc_bidirectional_payload_entropy_clean" : "soc_bidirectional_entropy_violation";
+            end
             "dma_queue_smoke": begin
                 dma_preload_source_range(cfg.dma_src_base, cfg.dma_len_words);
                 dma_clear_dest_range(cfg.dma_dst_base, cfg.dma_len_words);
@@ -2296,15 +2456,16 @@ module tb_soc_chiplets #(
 
                 dma_wait_for_state(2, 512, hit_target);
                 local_ok = local_ok && hit_target && u_chiplet.u_die_a.u_dma.active_valid_q;
+                repeat (power_event_start_cfg % 11) @(posedge clk);
 
                 power_state_q = PWR_CRYPTO_ONLY;
-                repeat (16) @(posedge clk);
+                repeat (power_event_cycles_cfg) @(posedge clk);
                 local_ok = local_ok && (power_domain_combo_crypto_only != 0);
                 power_state_q = PWR_RUN;
                 repeat (8) @(posedge clk);
 
                 power_state_q = PWR_SLEEP;
-                repeat (14) @(posedge clk);
+                repeat (power_event_cycles_cfg) @(posedge clk);
                 local_ok = local_ok &&
                            (power_isolation_assert_cycles != 0) &&
                            (power_isolation_blocked_cycles != 0) &&
@@ -2712,6 +2873,23 @@ module tb_soc_chiplets #(
                          (dst_parity_errors != 0) && mem_last_is_dst && !mem_last_on_dma &&
                          (last_mem_err_kind == 3'd1) && (last_mem_addr == 8'd90);
                 detail_q = pass_q ? "mem_parity_dst_maint_detect_clean" : "memory_integrity_violation";
+            end
+            "mem_parity_src_maint_detect": begin
+                programmed_word = 64'hF00D_CAFE_1357_9BDF;
+                dma_scratch_write64(1'b0, 173, programmed_word);
+                dma_mem_invert_parity(1'b0, 173);
+                dma_scratch_read64(1'b0, 173, observed_word);
+                dma_mem_read_status(mem_busy, mem_done, mem_wait_conflict, mem_parity_error,
+                                    mem_invalid_read_seen, mem_op_reject_busy, mem_write_reject_dma_active);
+                dma_mem_read_counters(src_conflicts, dst_conflicts, src_wait_cycles, dst_wait_cycles,
+                                      src_parity_errors, dst_parity_errors);
+                dma_mem_read_err_status(last_mem_addr, mem_last_is_dst, mem_last_on_dma,
+                                        mem_last_bank_id, last_mem_err_kind);
+                pass_q = mem_done && mem_parity_error && !mem_invalid_read_seen &&
+                         (observed_word == programmed_word) &&
+                         (src_parity_errors != 0) && !mem_last_is_dst && !mem_last_on_dma &&
+                         (last_mem_err_kind == 3'd1) && (last_mem_addr == 8'd173);
+                detail_q = pass_q ? "mem_parity_src_maint_detect_clean" : "memory_integrity_violation";
             end
             "mem_sleep_retained_bank": begin
                 programmed_word = 64'h0101_0101_0101_0101;
@@ -3146,6 +3324,7 @@ module tb_soc_chiplets #(
                 if ((test_name == "dma_retry_recover_queue") ||
                     (test_name == "dma_power_sleep_resume_queue") ||
                     (test_name == "dma_queue_full_reject") ||
+                    (test_name == "dma_codecov_error_matrix") ||
                     (test_name == "power_traffic_cross_test")) begin
                     pass_q = (latency_violation_count == 0 &&
                               power_resume_violations == 0);

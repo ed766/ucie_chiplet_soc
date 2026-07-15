@@ -75,8 +75,9 @@ not a list of hypothetical bugs.
 | Debug artifact | Run log, coverage CSV, and scoreboard artifacts linked from `regress_summary.csv`. |
 | Validation result | Expected failure proves local-memory integrity errors are software-visible. |
 
-## Notes
+## Validation Policy
 
-- The exact field-by-field regression diary is in `docs/bug_validation_cases.md`.
-- New diary entries should only be added after a matching bug mode, expected-fail regression, and failure bucket exist.
-- The diary is intended to support debug discussion; it does not replace the machine-readable regression reports.
+- Each entry maps to an implemented compile-time bug mode, expected-fail regression, checker, and failure bucket.
+- A bug test meets expectation only when it fails in its assigned bucket; a silent pass fails bug validation.
+- New entries require matching injected RTL behavior and machine-readable regression evidence.
+- The diary supports debug discussion but does not replace `regress_summary.csv` or `failure_buckets.csv`.

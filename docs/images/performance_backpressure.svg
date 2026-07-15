@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="360" viewBox="0 0 760 360">
+<style>text{font:13px sans-serif;fill:#25313c}.grid{stroke:#d8dee4;stroke-width:1}.axis{stroke:#25313c;stroke-width:1.5}.accept{stroke:#0b7285;fill:#0b7285}.throughput{stroke:#d9480f;fill:#d9480f}.line{fill:none;stroke-width:3}</style>
+<rect width="100%" height="100%" fill="#f8fafb"/>
+<text x="72" y="22" font-weight="bold">Backpressure sensitivity</text>
+<line x1="72" y1="302.0" x2="732" y2="302.0" class="grid"/><text x="60" y="306.0" text-anchor="end">0%</text><line x1="72" y1="235.5" x2="732" y2="235.5" class="grid"/><text x="60" y="239.5" text-anchor="end">25%</text><line x1="72" y1="169.0" x2="732" y2="169.0" class="grid"/><text x="60" y="173.0" text-anchor="end">50%</text><line x1="72" y1="102.5" x2="732" y2="102.5" class="grid"/><text x="60" y="106.5" text-anchor="end">75%</text><line x1="72" y1="36.0" x2="732" y2="36.0" class="grid"/><text x="60" y="40.0" text-anchor="end">100%</text>
+<line x1="72" y1="36" x2="72" y2="302" class="axis"/>
+<line x1="72" y1="302" x2="732" y2="302" class="axis"/>
+<text x="72.0" y="336" text-anchor="middle">0%</text><text x="292.0" y="336" text-anchor="middle">25%</text><text x="512.0" y="336" text-anchor="middle">50%</text><text x="732.0" y="336" text-anchor="middle">75%</text>
+<polyline points="72.0,36.0 292.0,95.4 512.0,159.0 732.0,228.6" class="line accept"/>
+<polyline points="72.0,36.0 292.0,36.0 512.0,36.0 732.0,36.2" class="line throughput"/>
+<circle cx="72.0" cy="36.0" r="4" class="accept"/><circle cx="292.0" cy="95.4" r="4" class="accept"/><circle cx="512.0" cy="159.0" r="4" class="accept"/><circle cx="732.0" cy="228.6" r="4" class="accept"/><circle cx="72.0" cy="36.0" r="4" class="throughput"/><circle cx="292.0" cy="36.0" r="4" class="throughput"/><circle cx="512.0" cy="36.0" r="4" class="throughput"/><circle cx="732.0" cy="36.2" r="4" class="throughput"/>
+<text x="460" y="22" class="accept">acceptance ratio</text>
+<text x="595" y="22" class="throughput">normalized throughput</text>
+<text x="380.0" y="356" text-anchor="middle">Requested backpressure duty</text>
+</svg>

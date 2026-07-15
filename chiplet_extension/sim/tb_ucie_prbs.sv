@@ -38,6 +38,7 @@ module tb_ucie_prbs;
     int unsigned gap_ceiling_cfg;
     int unsigned backpressure_modulus_cfg;
     int unsigned backpressure_hold_cfg;
+    int backpressure_duty_cfg;
     int unsigned error_inject_modulus_cfg;
     int unsigned credit_block_start_cfg;
     int unsigned credit_block_cycles_cfg;
@@ -102,6 +103,8 @@ module tb_ucie_prbs;
         gap_ceiling_cfg = cfg.link.gap_ceiling;
         backpressure_modulus_cfg = cfg.link.backpressure_modulus;
         backpressure_hold_cfg = cfg.link.backpressure_hold_cycles;
+        backpressure_duty_cfg = -1;
+        void'($value$plusargs("BACKPRESSURE_DUTY=%d", backpressure_duty_cfg));
         error_inject_modulus_cfg = cfg.link.error_inject_modulus;
         credit_block_start_cfg = cfg.link.credit_block_start;
         credit_block_cycles_cfg = cfg.link.credit_block_cycles;
@@ -117,7 +120,8 @@ module tb_ucie_prbs;
         channel_delay_cycles_cfg = cfg.link.channel_delay_cycles;
         allow_crc_error_cfg = cfg.allow_crc_error;
         randomized_cfg = cfg.randomized;
-        allow_training_timeout_cfg = (test_name == "prbs_link_degraded_timeout");
+        allow_training_timeout_cfg = (test_name == "prbs_link_degraded_timeout") ||
+                                     (test_name == "prbs_retrain_timeout_recover");
         enable_midflight_reset_cfg = cfg.link.enable_midflight_reset;
         enable_credit_starve_cfg = cfg.link.enable_credit_starve;
         enable_retry_burst_cfg = cfg.link.enable_retry_burst;
@@ -165,6 +169,10 @@ module tb_ucie_prbs;
     logic [DATA_WIDTH-1:0] rx_stream_data;
     logic                  rx_stream_valid;
     logic                  rx_stream_ready;
+    int unsigned downstream_sample_cycles_q;
+    int unsigned downstream_stall_cycles_q;
+    int unsigned downstream_accept_count_q;
+    int unsigned downstream_valid_cycles_q;
 
     // FLIT-level signals.
     logic [FLIT_WIDTH-1:0] flit_tx_payload;
@@ -249,6 +257,20 @@ module tb_ucie_prbs;
         end
     end
 
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            downstream_sample_cycles_q <= 0;
+            downstream_stall_cycles_q <= 0;
+            downstream_accept_count_q <= 0;
+            downstream_valid_cycles_q <= 0;
+        end else begin
+            downstream_sample_cycles_q <= downstream_sample_cycles_q + 1;
+            if (!rx_stream_ready) downstream_stall_cycles_q <= downstream_stall_cycles_q + 1;
+            if (rx_stream_valid) downstream_valid_cycles_q <= downstream_valid_cycles_q + 1;
+            if (rx_stream_valid && rx_stream_ready) downstream_accept_count_q <= downstream_accept_count_q + 1;
+        end
+    end
+
     assign traffic_pause_active = enable_lane_fault_window_cfg &&
                                   (cycle_count_q >= ((lane_fault_start_cfg > 8) ? (lane_fault_start_cfg - 8) : 0)) &&
                                   (cycle_count_q < (training_hold_start_cfg + training_hold_cycles_cfg + 16));
@@ -259,6 +281,11 @@ module tb_ucie_prbs;
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             rx_stream_ready <= 1'b1;
+            backpressure_hold_q <= 0;
+        end else if (backpressure_duty_cfg >= 0) begin
+            // Spread stalls across the window so duty is measurable without
+            // creating an unrealistic single 75-cycle receive blackout.
+            rx_stream_ready <= (((cycle_count_q * 37) % 100) >= backpressure_duty_cfg);
             backpressure_hold_q <= 0;
         end else if (!enable_backpressure_cfg) begin
             rx_stream_ready <= 1'b1;
@@ -788,6 +815,17 @@ module tb_ucie_prbs;
             end
         end
         u_scoreboard.write_report(score_path);
+        begin
+            int perf_fd;
+            perf_fd = $fopen(score_path, "a");
+            if (perf_fd != 0) begin
+                $fdisplay(perf_fd, "downstream_sample_cycles,%0d", downstream_sample_cycles_q);
+                $fdisplay(perf_fd, "downstream_stall_cycles,%0d", downstream_stall_cycles_q);
+                $fdisplay(perf_fd, "downstream_accept_count,%0d", downstream_accept_count_q);
+                $fdisplay(perf_fd, "downstream_valid_cycles,%0d", downstream_valid_cycles_q);
+                $fclose(perf_fd);
+            end
+        end
         u_stats.write_coverage(cov_path);
         u_stats.emit_result(
             "tb_ucie_prbs",

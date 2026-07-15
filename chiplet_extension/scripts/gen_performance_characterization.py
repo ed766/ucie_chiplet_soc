@@ -117,7 +117,7 @@ def regression_row(scenario: str, source: dict[str, str], notes: str, throughput
 
 def build_rows(perf_rows: list[dict[str, str]], regress_rows: list[dict[str, str]]) -> list[dict[str, str]]:
     no_fault = find_row(perf_rows, sweep="latency_vs_channel_delay", label="delay_0")
-    backpressure = find_row(perf_rows, sweep="throughput_vs_backpressure", label="bp_mod_4")
+    backpressure = find_row(perf_rows, sweep="throughput_vs_backpressure", label="bp_duty_50")
     crc_retry = find_row(perf_rows, sweep="retry_rate_vs_fault_density", label="crc_spacing_16")
     lane_fault = find_first(regress_rows, ("prbs_lane_fault_recover",))
     sleep_resume = find_first(regress_rows, ("dma_sleep_during_queued_work", "dma_power_sleep_resume_queue"))
@@ -262,11 +262,67 @@ def tradeoff_snapshot_rows(perf_rows: list[dict[str, str]], dma_mem_rows: list[d
     ]
 
 
+def render_backpressure_svg(perf_rows: list[dict[str, str]], output: Path) -> None:
+    points = [row for row in perf_rows if row.get("sweep") == "throughput_vs_backpressure"]
+    points.sort(key=lambda row: float(row.get("knob_value", "0")))
+    width, height = 760, 360
+    left, right, top, bottom = 72, 28, 36, 58
+    plot_w, plot_h = width - left - right, height - top - bottom
+
+    def x(value: float) -> float:
+        return left + (value / 75.0) * plot_w
+
+    def y(value: float) -> float:
+        return top + (1.0 - value) * plot_h
+
+    acceptance = [(float(row["knob_value"]), float(row["downstream_acceptance_ratio"])) for row in points]
+    throughput_values = [float(row["throughput_flits_per_cycle"]) for row in points]
+    throughput_scale = max(throughput_values) if throughput_values else 1.0
+    throughput = [
+        (float(row["knob_value"]), float(row["throughput_flits_per_cycle"]) / throughput_scale)
+        for row in points
+    ]
+
+    def polyline(values: list[tuple[float, float]]) -> str:
+        return " ".join(f"{x(px):.1f},{y(py):.1f}" for px, py in values)
+
+    grid = []
+    for pct in (0, 25, 50, 75, 100):
+        yy = y(pct / 100.0)
+        grid.append(f'<line x1="{left}" y1="{yy:.1f}" x2="{width-right}" y2="{yy:.1f}" class="grid"/>')
+        grid.append(f'<text x="{left-12}" y="{yy+4:.1f}" text-anchor="end">{pct}%</text>')
+    ticks = []
+    for duty in (0, 25, 50, 75):
+        xx = x(float(duty))
+        ticks.append(f'<text x="{xx:.1f}" y="{height-24}" text-anchor="middle">{duty}%</text>')
+    dots = []
+    for values, css in ((acceptance, "accept"), (throughput, "throughput")):
+        dots.extend(f'<circle cx="{x(px):.1f}" cy="{y(py):.1f}" r="4" class="{css}"/>' for px, py in values)
+    svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">
+<style>text{{font:13px sans-serif;fill:#25313c}}.grid{{stroke:#d8dee4;stroke-width:1}}.axis{{stroke:#25313c;stroke-width:1.5}}.accept{{stroke:#0b7285;fill:#0b7285}}.throughput{{stroke:#d9480f;fill:#d9480f}}.line{{fill:none;stroke-width:3}}</style>
+<rect width="100%" height="100%" fill="#f8fafb"/>
+<text x="{left}" y="22" font-weight="bold">Backpressure sensitivity</text>
+{''.join(grid)}
+<line x1="{left}" y1="{top}" x2="{left}" y2="{height-bottom}" class="axis"/>
+<line x1="{left}" y1="{height-bottom}" x2="{width-right}" y2="{height-bottom}" class="axis"/>
+{''.join(ticks)}
+<polyline points="{polyline(acceptance)}" class="line accept"/>
+<polyline points="{polyline(throughput)}" class="line throughput"/>
+{''.join(dots)}
+<text x="{width-300}" y="22" class="accept">acceptance ratio</text>
+<text x="{width-165}" y="22" class="throughput">normalized throughput</text>
+<text x="{width/2}" y="{height-4}" text-anchor="middle">Requested backpressure duty</text>
+</svg>'''
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(svg + "\n")
+
+
 def render_markdown(
     rows: list[dict[str, str]],
     dma_rows: list[dict[str, str]],
     perf_rows: list[dict[str, str]],
     output: Path,
+    plot_output: Path,
 ) -> None:
     lines = [
         "# Performance Characterization",
@@ -283,6 +339,25 @@ def render_markdown(
             f"| {row['Scenario']} | `{row['Source test']}` | {row['Avg latency']} | "
             f"{row['Max latency']} | {row['Retry count']} | {row['Throughput']} | {row['Notes']} |"
         )
+
+    lines.extend([
+        "",
+        "## Backpressure Duty Sweep",
+        "",
+        "| Requested duty | Observed duty | Acceptance ratio | Accepted throughput | p50 | p95 | Max |",
+        "| ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ])
+    for point in perf_rows:
+        if point.get("sweep") != "throughput_vs_backpressure":
+            continue
+        lines.append(
+            f"| {point.get('knob_value', NA)}% | {point.get('backpressure_duty_observed', NA)} | "
+            f"{point.get('downstream_acceptance_ratio', NA)} | {point.get('throughput_flits_per_cycle', NA)} | "
+            f"{point.get('latency_p50_cycles', NA)} | {point.get('latency_p95_cycles', NA)} | "
+            f"{point.get('latency_max_cycles', NA)} |"
+        )
+    plot_ref = plot_output.resolve().relative_to(output.parent.resolve()).as_posix()
+    lines.extend(["", f"![Measured backpressure sensitivity]({plot_ref})"])
 
     dma_table = dma_mem_table_rows(dma_rows)
     lines.extend(
@@ -332,7 +407,7 @@ def render_markdown(
             "## Observations",
             "",
             f"- The no-fault baseline reports {no_fault['Avg latency']} cycles average latency and {no_fault['Throughput']} flits/cycle throughput in the PRBS characterization path.",
-            f"- The selected backpressure point keeps average latency at {backpressure['Avg latency']} cycles while preserving a clean scoreboard result; the stress is visible in backpressure coverage rather than failures.",
+            "- As requested backpressure rises from 0% to 75%, downstream acceptance ratio falls from 1.0000 to 0.2759. Completed throughput remains near 0.1168 flits/cycle because this offered load has enough headroom; this identifies the source-rate bottleneck rather than overstating a throughput collapse.",
             f"- CRC retry recovery records {crc_retry['Retry count']} retries at the selected point, showing retry overhead without packet-order corruption.",
             f"- Back-to-back DMA queueing is visible in behavioral latency: queue depth 1 reports {queue1.get('Avg latency', NA)} average cycles, while queue depth 4 reports {queue4.get('Avg latency', NA)} average cycles because descriptors wait behind older accepted work.",
             f"- The banked scratchpad study shows lower conflict/wait pressure in 2-bank heavy contention ({bank2.get('Conflicts/wait', NA)}) than the 1-bank structural variant ({bank1.get('Conflicts/wait', NA)}).",
@@ -358,13 +433,16 @@ def main() -> int:
     parser.add_argument("--regress-csv", default=str(REPORT_ROOT / "regress_summary.csv"))
     parser.add_argument("--dma-mem-csv", default=str(REPORT_ROOT / "dma_mem_characterization.csv"))
     parser.add_argument("--output", default=str(DOC_ROOT / "performance_characterization.md"))
+    parser.add_argument("--plot-output", default=str(DOC_ROOT / "images" / "performance_backpressure.svg"))
     args = parser.parse_args()
 
     perf_rows = read_rows(Path(args.perf_csv))
     regress_rows = read_rows(Path(args.regress_csv))
     dma_mem_rows = read_rows(Path(args.dma_mem_csv))
     rows = build_rows(perf_rows, regress_rows)
-    render_markdown(rows, dma_mem_rows, perf_rows, Path(args.output))
+    plot_output = Path(args.plot_output)
+    render_backpressure_svg(perf_rows, plot_output)
+    render_markdown(rows, dma_mem_rows, perf_rows, Path(args.output), plot_output)
     print(f"Wrote {args.output}")
     return 0
 

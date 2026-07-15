@@ -62,43 +62,43 @@ CASES = (
     ),
     SweepCase(
         sweep="throughput_vs_backpressure",
-        label="bp_mod_16",
+        label="bp_duty_0",
         test="prbs_backpressure_wave",
-        knob_name="backpressure_modulus",
-        knob_value="16",
+        knob_name="backpressure_duty_pct",
+        knob_value="0",
         max_cycles=10000,
-        plusargs=("BACKPRESSURE_MOD=16", "BACKPRESSURE_HOLD=1"),
-        notes="Light backpressure.",
+        plusargs=("BACKPRESSURE_DUTY=0",),
+        notes="No receive-side backpressure baseline.",
     ),
     SweepCase(
         sweep="throughput_vs_backpressure",
-        label="bp_mod_8",
+        label="bp_duty_25",
         test="prbs_backpressure_wave",
-        knob_name="backpressure_modulus",
-        knob_value="8",
+        knob_name="backpressure_duty_pct",
+        knob_value="25",
         max_cycles=10000,
-        plusargs=("BACKPRESSURE_MOD=8", "BACKPRESSURE_HOLD=1"),
-        notes="Nominal backpressure wave.",
+        plusargs=("BACKPRESSURE_DUTY=25",),
+        notes="Receiver blocked for 25 percent of each 100-cycle window.",
     ),
     SweepCase(
         sweep="throughput_vs_backpressure",
-        label="bp_mod_4",
+        label="bp_duty_50",
         test="prbs_backpressure_wave",
-        knob_name="backpressure_modulus",
-        knob_value="4",
-        max_cycles=10000,
-        plusargs=("BACKPRESSURE_MOD=4", "BACKPRESSURE_HOLD=1"),
-        notes="Heavy backpressure.",
+        knob_name="backpressure_duty_pct",
+        knob_value="50",
+        max_cycles=20000,
+        plusargs=("BACKPRESSURE_DUTY=50",),
+        notes="Receiver blocked for 50 percent of each 100-cycle window.",
     ),
     SweepCase(
         sweep="throughput_vs_backpressure",
-        label="bp_mod_2",
+        label="bp_duty_75",
         test="prbs_backpressure_wave",
-        knob_name="backpressure_modulus",
-        knob_value="2",
-        max_cycles=12000,
-        plusargs=("BACKPRESSURE_MOD=2", "BACKPRESSURE_HOLD=1"),
-        notes="Near-saturation backpressure.",
+        knob_name="backpressure_duty_pct",
+        knob_value="75",
+        max_cycles=30000,
+        plusargs=("BACKPRESSURE_DUTY=75",),
+        notes="Receiver blocked for 75 percent of each 100-cycle window.",
     ),
     SweepCase(
         sweep="retry_rate_vs_fault_density",
@@ -204,15 +204,15 @@ def render_markdown(rows: list[dict[str, str]], output_path: Path) -> None:
             "",
             "## Throughput vs Backpressure",
             "",
-            "| Label | Backpressure modulus | Backpressure hits | Throughput (rx/sample_cycles) | Avg latency | Status |",
+            "| Label | Requested / observed duty | Acceptance ratio | Accepted throughput | p50 / p95 / max latency | Status |",
             "| --- | ---: | ---: | ---: | ---: | --- |",
         ]
     )
 
     for row in by_sweep.get("throughput_vs_backpressure", []):
         lines.append(
-            f"| `{row['label']}` | {row['knob_value']} | {row['backpressure_hits']} | {row['throughput_flits_per_cycle']} | "
-            f"{row['latency_avg_cycles']} | {row['status']} |"
+            f"| `{row['label']}` | {row['knob_value']}% / {row['backpressure_duty_observed']} | {row['downstream_acceptance_ratio']} | {row['throughput_flits_per_cycle']} | "
+            f"{row['latency_p50_cycles']} / {row['latency_p95_cycles']} / {row['latency_max_cycles']} | {row['status']} |"
         )
 
     lines.extend(
@@ -257,7 +257,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--markdown-out",
-        default=str(DOC_ROOT / "protocol_characterization.md"),
+        default=str(REPORT_ROOT / "protocol_characterization.md"),
         help="Destination markdown summary.",
     )
     args = parser.parse_args()
@@ -296,6 +296,10 @@ def main() -> int:
         rx_count = int(score_metrics.get("rx_count", "0"))
         retry_count = int(score_metrics.get("retry_count", "0"))
         sample_cycles = int(cov_metrics.get("sample_cycles", "0"))
+        downstream_samples = int(score_metrics.get("downstream_sample_cycles", "0"))
+        downstream_stalls = int(score_metrics.get("downstream_stall_cycles", "0"))
+        downstream_accepts = int(score_metrics.get("downstream_accept_count", "0"))
+        downstream_valid_cycles = int(score_metrics.get("downstream_valid_cycles", "0"))
         crc_hits = int(cov_metrics.get("crc_error", "0"))
         resend_hits = int(cov_metrics.get("resend_request", "0"))
         lane_fault_hits = int(cov_metrics.get("lane_fault", "0"))
@@ -317,8 +321,15 @@ def main() -> int:
                 "latency_min_cycles": score_metrics.get("latency_min_cycles", "0"),
                 "latency_max_cycles": score_metrics.get("latency_max_cycles", "0"),
                 "latency_avg_cycles": score_metrics.get("latency_avg_cycles", "0"),
+                "latency_p50_cycles": score_metrics.get("latency_p50_cycles", "0"),
+                "latency_p95_cycles": score_metrics.get("latency_p95_cycles", "0"),
                 "sample_cycles": str(sample_cycles),
-                "throughput_flits_per_cycle": fmt_ratio(rx_count, sample_cycles),
+                "throughput_flits_per_cycle": fmt_ratio(
+                    downstream_accepts if case.sweep == "throughput_vs_backpressure" else rx_count,
+                    downstream_samples if case.sweep == "throughput_vs_backpressure" else sample_cycles,
+                ),
+                "backpressure_duty_observed": fmt_ratio(downstream_stalls, downstream_samples),
+                "downstream_acceptance_ratio": fmt_ratio(downstream_accepts, downstream_valid_cycles),
                 "retry_rate": fmt_ratio(retry_count, tx_count),
                 "backpressure_hits": str(backpressure_hits),
                 "crc_error_hits": str(crc_hits),
@@ -352,8 +363,12 @@ def main() -> int:
                 "latency_min_cycles",
                 "latency_max_cycles",
                 "latency_avg_cycles",
+                "latency_p50_cycles",
+                "latency_p95_cycles",
                 "sample_cycles",
                 "throughput_flits_per_cycle",
+                "backpressure_duty_observed",
+                "downstream_acceptance_ratio",
                 "retry_rate",
                 "backpressure_hits",
                 "crc_error_hits",

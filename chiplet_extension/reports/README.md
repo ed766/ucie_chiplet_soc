@@ -14,6 +14,14 @@ Keep checked in:
 - `coverage_closure_matrix.md`
 - `cross_coverage_summary.csv`
 - `formal_summary.csv`
+- `formal_proof_summary.csv`
+- `async_cdc_summary.csv`
+- `uvm_ci_regress_summary.csv`
+- `uvm_ci_coverage_summary.csv`
+- `code_coverage_summary.txt`
+- `code_coverage_summary.md`
+- `code_coverage_test_ranking.csv`
+- `code_coverage_holes.csv`
 - `perf_characterization.csv`
 - `dma_mem_characterization.csv`
 - `project_metrics.csv`

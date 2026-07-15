@@ -41,6 +41,7 @@ module ucie_scoreboard #(
     int unsigned latency_total_cycles_q;
     int unsigned latency_min_cycles_q;
     int unsigned latency_max_cycles_q;
+    int unsigned latency_samples_q [0:DEPTH-1];
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -119,6 +120,9 @@ module ucie_scoreboard #(
                     latency_value <= latency_calc[15:0];
                     latency_valid <= 1'b1;
                     latency_sample_count_q <= latency_sample_count_q + 1;
+                    if (latency_sample_count_q < DEPTH) begin
+                        latency_samples_q[latency_sample_count_q] <= latency_calc;
+                    end
                     latency_total_cycles_q <= latency_total_cycles_q + latency_calc;
                     if (latency_calc < latency_min_cycles_q) begin
                         latency_min_cycles_q <= latency_calc;
@@ -138,6 +142,22 @@ module ucie_scoreboard #(
 
     task automatic write_report(input string path);
         int fd;
+        int unsigned sorted [0:DEPTH-1];
+        int unsigned sample_limit;
+        int unsigned tmp;
+        int unsigned p50;
+        int unsigned p95;
+        sample_limit = (latency_sample_count_q > DEPTH) ? DEPTH : latency_sample_count_q;
+        for (int i = 0; i < sample_limit; i++) sorted[i] = latency_samples_q[i];
+        for (int i = 0; i < sample_limit; i++) begin
+            for (int j = i + 1; j < sample_limit; j++) begin
+                if (sorted[j] < sorted[i]) begin
+                    tmp = sorted[i]; sorted[i] = sorted[j]; sorted[j] = tmp;
+                end
+            end
+        end
+        p50 = (sample_limit == 0) ? 0 : sorted[(sample_limit - 1) / 2];
+        p95 = (sample_limit == 0) ? 0 : sorted[((sample_limit * 95 + 99) / 100) - 1];
         fd = $fopen(path, "w");
         if (fd == 0) begin
             $display("Failed to open scoreboard report file: %s", path);
@@ -154,6 +174,8 @@ module ucie_scoreboard #(
             $fdisplay(fd, "latency_max_cycles,%0d", latency_max_cycles_q);
             $fdisplay(fd, "latency_avg_cycles,%0d",
                       (latency_sample_count_q == 0) ? 0 : (latency_total_cycles_q / latency_sample_count_q));
+            $fdisplay(fd, "latency_p50_cycles,%0d", p50);
+            $fdisplay(fd, "latency_p95_cycles,%0d", p95);
             $fclose(fd);
         end
     endtask

@@ -87,23 +87,20 @@ closure, not replacing the stable gate:
 
 - `chiplet_extension/sim/tb_chiplet_uvm.sv`
   - instantiates `soc_chiplet_top`, verification-only virtual interfaces, and
-    `run_test()` for non-Verilator/full-UVM simulators
-  - uses a Verilator-compatible UVM smoke runner when `VERILATOR` is defined,
-    because the CHIPS Alliance UVM `UVM_NO_DPI` flow still has practical
-    limitations in UVM phase/TLM traversal
+    `run_test()` for the pinned Verilator 5.048/UVM-Verilator lane and other
+    full-UVM simulators
+  - retains a compatibility runner for older Verilator builds
   - passes CSR, power, UCIe stream, and observation interfaces through
     package-level virtual-interface handles in the Verilator lane
 - `chiplet_extension/sim/uvm/`
   - contains full-UVM packages for UCIe, DMA/CSR, power, and the chiplet env
   - keeps UVM agents, sequencers/drivers, passive monitors, analysis ports,
-    scoreboards, coverage subscribers, and first-pass UVM smoke tests for
-    non-Verilator/full-UVM use
+    scoreboards, coverage subscribers, and first-pass UVM smoke tests
   - mirrors key monitor observations into direct counters for the Verilator
     smoke/regression lane
-- UVM closure uses the same named scenario intent and closure target as the
-  non-UVM stable lane, under UVM-namespaced reports. The local Verilator path
-  uses a compatibility runner where CHIPS Alliance UVM phase/TLM traversal is
-  not yet practical.
+- The pinned `uvm-ci` lane executes phases, TLM analysis paths, scoreboards,
+  coverage subscribers, and RAL frontdoor prediction. Full 60-bin UVM closure
+  equivalence remains separate from this four-test smoke contract.
 - This lane requires external `VERILATOR_UVM` and `UVM_HOME`; the local Debian
   Verilator `5.020` is not treated as sufficient for this optional lane.
 
@@ -458,6 +455,7 @@ Post-processing:
 - `chiplet_extension/scripts/check_uvm_env.py`
 - `chiplet_extension/scripts/run_uvm_regression.py`
 - `chiplet_extension/scripts/check_closure_equivalence.py`
+- `chiplet_extension/scripts/gen_code_coverage_report.py`
 
 Required validation commands:
 
@@ -468,6 +466,8 @@ Required validation commands:
 - `make -C chiplet_extension upf-check`
 - `make -C chiplet_extension firmware-soc-check`
 - `make -C chiplet_extension firmware-code-coverage`
+- `make -C chiplet_extension coverage-edges-check`
+- `make -C chiplet_extension code-coverage`
 
 Optional full-UVM validation commands:
 
@@ -486,6 +486,13 @@ Generated outputs:
 - `chiplet_extension/reports/coverage_summary.csv`
 - `chiplet_extension/reports/failure_buckets.csv`
 - `chiplet_extension/reports/top_failures.md`
+- `chiplet_extension/reports/code_coverage_summary.md`
+- `chiplet_extension/reports/code_coverage_holes.csv`
+
+The code-coverage gate reports raw line/branch/toggle evidence separately from
+reviewed toggle coverage. The reviewed denominator excludes only documented
+structurally unreachable baseline points and long-horizon diagnostic state;
+the six coverage-edge scenarios remain outside canonical functional closure.
 - `chiplet_extension/reports/verification_dashboard.md`
 - `chiplet_extension/reports/regression_history.csv`
 - `chiplet_extension/reports/closure_targets.md`
@@ -501,13 +508,13 @@ Generated outputs:
 - `chiplet_extension/reports/firmware_cross_coverage_summary.csv`
 - `chiplet_extension/reports/firmware_code_coverage_summary.md`
 - `docs/bug_diary.md`
-- `docs/bug_validation_cases.md`
+- `docs/bug_diary.md`
 - `docs/debug_case_study_dma_retry.md`
 - `docs/images/dma_retry_waveform.png`
 - `docs/firmware_soc_verification.md`
 - `docs/debug_case_study_firmware_dma.md`
 - `docs/images/firmware_dma_waveform.png`
-- `docs/protocol_characterization.md`
+- `docs/performance_characterization.md`
 
 Optional seeded-random collateral:
 

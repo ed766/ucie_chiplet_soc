@@ -42,7 +42,7 @@ package chiplet_uvm_pkg;
             ucie = ucie_agent::type_id::create("ucie", this);
             dma = dma_agent::type_id::create("dma", this);
             power = power_agent::type_id::create("power", this);
-`ifndef VERILATOR
+`ifdef CHIPLET_REAL_UVM
             axi_ral = axi_lite_ral_env::type_id::create("axi_ral", this);
             ucie_cov = ucie_coverage::type_id::create("ucie_cov", this);
             power_cov = power_coverage::type_id::create("power_cov", this);
@@ -54,7 +54,7 @@ package chiplet_uvm_pkg;
 
         function void connect_phase(uvm_phase phase);
             super.connect_phase(phase);
-`ifndef VERILATOR
+`ifdef CHIPLET_REAL_UVM
             ucie.monitor.ap.connect(ucie_cov.analysis_export);
             ucie.monitor.ap.connect(ucie_sb.analysis_export);
             dma.monitor.ap.connect(dma_sb.analysis_export);
@@ -106,13 +106,9 @@ package chiplet_uvm_pkg;
             power_uvm_pkg::g_isolation_cycles = 0;
             power_uvm_pkg::g_retention_events = 0;
             csr_vif.init();
-`ifdef VERILATOR
-            axi_vif.init();
-`else
             if (axi_vif != null) begin
                 axi_vif.init();
             end
-`endif
             pwr_vif.init();
             pwr_vif.apply_reset(8);
             repeat (16) #10;
@@ -212,11 +208,12 @@ package chiplet_uvm_pkg;
             dma_queue_smoke_sequence seq;
             phase.raise_objection(this);
             reset_dut();
-`ifdef VERILATOR
-            run_dma_queue_smoke_direct();
-`else
+            pwr_vif.dma_mode_force = 1'b1;
+`ifdef CHIPLET_REAL_UVM
             seq = dma_queue_smoke_sequence::type_id::create("seq");
             seq.start(env.dma.sequencer);
+`else
+            run_dma_queue_smoke_direct();
 `endif
             wait_cycles(64);
             if (dma_uvm_pkg::g_irq_events == 0) begin
@@ -238,11 +235,12 @@ package chiplet_uvm_pkg;
             power_sleep_resume_sequence pseq;
             phase.raise_objection(this);
             reset_dut();
-`ifdef VERILATOR
-            run_power_sleep_resume_direct();
-`else
+            pwr_vif.dma_mode_force = 1'b1;
+`ifdef CHIPLET_REAL_UVM
             pseq = power_sleep_resume_sequence::type_id::create("pseq");
             pseq.start(env.power.sequencer);
+`else
+            run_power_sleep_resume_direct();
 `endif
             wait_cycles(64);
             if (power_uvm_pkg::g_sleep_cycles == 0 || power_uvm_pkg::g_retention_events == 0) begin
@@ -264,11 +262,8 @@ package chiplet_uvm_pkg;
             uvm_reg_data_t data;
             phase.raise_objection(this);
             reset_dut();
-`ifdef VERILATOR
-            // The Verilator compatibility runner handles this test
-            // procedurally in tb_chiplet_uvm. Full RAL frontdoor execution is
-            // used when UVM phases/TLM are available.
-`else
+            pwr_vif.dma_mode_force = 1'b1;
+`ifdef CHIPLET_REAL_UVM
             env.axi_ral.reg_model.dma_irq_en.write(status, 32'h1);
             if (status != UVM_IS_OK) `uvm_error(get_type_name(), "RAL write dma_irq_en failed")
             env.axi_ral.reg_model.dma_src_base.write(status, 32'd0);
@@ -286,6 +281,9 @@ package chiplet_uvm_pkg;
             if (status != UVM_IS_OK) `uvm_error(get_type_name(), "RAL read dma_submit_status failed")
             env.axi_ral.reg_model.dma_submit_result.read(status, data);
             if (status != UVM_IS_OK) `uvm_error(get_type_name(), "RAL read dma_submit_result failed")
+`else
+            // The compatibility runner performs the same frontdoor accesses
+            // procedurally when real UVM phase/TLM support is unavailable.
 `endif
             finish_uvm_test(phase);
         endtask

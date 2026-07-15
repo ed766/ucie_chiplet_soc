@@ -161,6 +161,18 @@ package prbs_tests_pkg;
                 cfg.link.training_hold_cycles = 700;
                 cfg.max_cycles = 20000;
             end
+            "prbs_retrain_timeout_recover": begin
+                cfg.scenario_kind = "coverage_edge";
+                cfg.target_tx_count = 160;
+                cfg.allow_crc_error = 1'b1;
+                cfg.link.gap_ceiling = 0;
+                cfg.link.enable_lane_fault_window = 1'b1;
+                cfg.link.lane_fault_start = 144;
+                cfg.link.lane_fault_cycles = 2;
+                cfg.link.training_hold_start = 144;
+                cfg.link.training_hold_cycles = 1500;
+                cfg.max_cycles = 24000;
+            end
             "bug_credit_off_by_one": begin
                 cfg.scenario_kind = "bug_validation";
                 cfg.bug_mode = "UCIE_BUG_CREDIT_OFF_BY_ONE";

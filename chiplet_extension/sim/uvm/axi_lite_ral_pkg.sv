@@ -86,7 +86,7 @@ package axi_lite_ral_pkg;
         function new(string name = "axi_lite_ral_adapter");
             super.new(name);
             supports_byte_enable = 1;
-            provides_responses = 1;
+            provides_responses = 0;
         endfunction
 
         virtual function uvm_sequence_item reg2bus(const ref uvm_reg_bus_op rw);

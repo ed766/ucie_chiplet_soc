@@ -22,8 +22,12 @@ reporting flows.
 - Cross-coverage evidence groups observed: `8 / 8`
 - True interaction cross coverage: `10 / 10` non-gating groups
 - AXI-Lite CSR wrapper coverage: `18 / 18` directed protocol points
-- Optional seeded-random stress subset: `30 / 30` valid rows, plus `10` schema-rejected generated rows
+- Optional seeded-random stress subset: `40 / 40` valid executed rows, including `5 / 5` power/DMA-cross scenarios
+- Integrated asynchronous CDC matrix: `4 / 4` clock-ratio/reset-skew scenarios
 - Bounded property checks: `9 / 9`
+- Solver-backed formal: `7 / 7` proofs, `7 / 7` covers, and `7 / 7` mutation counterexamples
+- Real UVM CI lane: `4 / 4` phase/TLM/RAL smoke tests with zero UVM errors or fatals
+- Design RTL code coverage: `96.25%` line, `89.24%` branch/expression, `75.21%` raw toggle, `90.26%` reviewed toggle
 - Assertion inventory: `52` protocol/control invariants
 - Firmware-driven RV32 integration: `12 / 12` scenarios, `30 / 30` MMIO/outcome points, and `7 / 7` required crosses
 - Focused RV32/APB/ROM integration line coverage: `86.62%` Verilator proxy
@@ -39,9 +43,12 @@ make project-check
 make upf-check
 make frontend-quality
 make code-coverage
+make coverage-edges-check
 make axi-lite-check
 make firmware-soc-check
 make firmware-code-coverage
+make async-cdc-check
+make formal-prove       # requires OSS CAD Suite/SymbiYosys
 ```
 
 Then inspect `../docs/project_metrics.md`,
@@ -85,7 +92,7 @@ Current checked-in reports:
 - `reports/firmware_coverage_summary.csv`
 - `reports/firmware_cross_coverage_summary.csv`
 - `reports/firmware_code_coverage_summary.md`
-- `../docs/protocol_characterization.md`
+- `reports/protocol_characterization.md`
 - `../docs/performance_characterization.md`
 - `../docs/open_source_flow_summary.md`
 - `../docs/clock_reset_cdc_plan.md`
@@ -158,9 +165,9 @@ The optional full-UVM lane uses:
 - `sim/uvm/chiplet_uvm_pkg.sv`
 
 It requires `VERILATOR_UVM` and `UVM_HOME` and is not part of the default
-`make regress` gate. Under Verilator, the bench uses a compatibility runner
-with UVM reporting and direct monitor counters; non-Verilator/full-UVM
-simulators can use the checked-in `run_test()`/phase/TLM structure.
+`make regress` gate. The pinned Verilator `5.048` lane uses the checked-in
+`run_test()`/phase/TLM structure; older local Verilator builds retain a
+compatibility runner.
 
 ### UVM Implementation Evaluation
 
@@ -170,12 +177,11 @@ sequencers, drivers, passive monitors, scoreboards, coverage subscribers, and
 virtual-interface wiring. That makes it a real UVM architecture demonstration
 instead of only a module bench with UVM log macros.
 
-The local Verilator execution path is intentionally pragmatic. Because the
-available open-source UVM/Verilator flow still has practical limitations around
-phase/TLM traversal, `tb_chiplet_uvm.sv` uses UVM reporting with a
-Verilator-compatible runner and shared named-scenario infrastructure. This
-keeps the lane runnable while preserving the checked-in `run_test()` path for a
-full UVM simulator.
+The pinned open-source lane executes real phases, sequencers/drivers, TLM
+analysis connections, scoreboards, coverage subscribers, and AXI-Lite RAL
+frontdoor prediction. `make uvm-ci` currently passes four smoke tests with zero
+UVM errors or fatals. This remains supporting methodology evidence rather than
+the default closure gate.
 
 Closure quality is intended to be measured by equivalence, not by matching
 cycle-for-cycle behavior. When the optional UVM-capable environment is
@@ -412,6 +418,7 @@ make upf-check
 # Open-source front-end quality, code coverage, AXI-Lite, CDC/RDC, and C-model checks
 make frontend-quality
 make code-coverage
+make coverage-edges-check
 make axi-lite-check
 make cdc-rdc-check
 make c-reference-check
@@ -426,6 +433,7 @@ make uvm-smoke
 make uvm-ral-smoke
 make uvm-closure
 make uvm-regress
+make uvm-ci
 
 # Exploratory retry/fault closure suite
 make stress
@@ -500,7 +508,7 @@ Generated outputs:
 - `reports/closure_equivalence.md`
 - `reports/formal_summary.csv`
 - `reports/perf_characterization.csv`
-- `../docs/protocol_characterization.md`
+- `reports/protocol_characterization.md`
 
 Per-run artifacts also land in `reports/` as `*_coverage.csv` and
 `*_scoreboard.csv`.
@@ -589,9 +597,7 @@ correctly:
 - `dma_bug_done_early` -> `dma_completion`
 - `mem_bug_parity_skip` -> `memory_integrity`
 
-The field-by-field regression diary is maintained in
-`../docs/bug_validation_cases.md`. The interview-facing bug diary is
-`../docs/bug_diary.md`, and the DMA retry debug walkthrough is
+The consolidated injected-fault diary is `../docs/bug_diary.md`, and the DMA retry debug walkthrough is
 `../docs/debug_case_study_dma_retry.md`.
 
 ## Power-Proxy Verification
@@ -689,12 +695,5 @@ end-to-end flow proof point rather than a clean manufacturing sign-off.
 
 ## Supporting Docs
 
-- `../docs/dv_audit.md`
-- `../docs/verification_plan.md`
-- `../docs/bug_case_studies.md`
-- `../docs/bug_validation_cases.md`
-- `../docs/power_verification_plan.md`
-- `../docs/formal_appendix.md`
-- `../docs/protocol_characterization.md`
-- `../docs/performance_characterization.md`
-- `../docs/resume_metrics.md`
+Start with `../docs/README.md`; it limits the primary reviewer path to twelve
+evidence pages. Detailed generated reports remain under `reports/`.

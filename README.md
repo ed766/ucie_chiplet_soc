@@ -22,7 +22,11 @@ Current core snapshot:
 - AXI-Lite CSR wrapper coverage: `18 / 18` directed protocol points, `6` assertions, `0` assertion failures
 - Firmware-driven RV32 integration: `12 / 12` programs, `30 / 30` MMIO/outcome points, and `7 / 7` required crosses
 - Focused RV32/APB/ROM integration line coverage: `86.62%` Verilator proxy
-- Optional seeded-random stress subset: `30 / 30` valid rows, plus `10` schema-rejected generated rows
+- Optional seeded-random stress subset: `40 / 40` valid executed rows, including `5 / 5` power/DMA-cross scenarios
+- Integrated asynchronous CDC matrix: `4 / 4` clock-ratio/reset-skew scenarios
+- Solver-backed formal: `7 / 7` safety proofs, `7 / 7` reachability covers, and `7 / 7` mutation counterexamples
+- Real UVM CI lane: `4 / 4` phase/TLM/RAL smoke tests with zero UVM errors or fatals
+- Design RTL code coverage: `96.25%` line, `89.24%` branch/expression, `75.21%` raw toggle, and `90.26%` reviewed toggle
 - LibreLane ASIC flow: complete end-to-end, with DRC/LVS passing and residual antenna/max slew/max cap warnings still documented
 
 AXI-Lite is optional CSR/control-plane integration collateral around the DMA
@@ -41,6 +45,8 @@ make -C chiplet_extension code-coverage
 make -C chiplet_extension axi-lite-check
 make -C chiplet_extension firmware-soc-check
 make -C chiplet_extension firmware-code-coverage
+make -C chiplet_extension async-cdc-check
+make -C chiplet_extension formal-prove       # requires OSS CAD Suite/SymbiYosys
 ```
 
 Then open:
@@ -54,6 +60,7 @@ Then open:
 - [`docs/open_source_flow_summary.md`](docs/open_source_flow_summary.md) for open-source lint, quality, coverage, UPF, CDC/RDC, and C-model evidence.
 - [`docs/clock_reset_cdc_plan.md`](docs/clock_reset_cdc_plan.md) for clock/reset-domain and CDC/RDC strategy.
 - [`docs/firmware_soc_verification.md`](docs/firmware_soc_verification.md) for RV32 software-driven DMA evidence.
+- [`docs/README.md`](docs/README.md) for the consolidated reviewer evidence index.
 
 ### Hiring-Manager Quick Path
 
@@ -175,6 +182,7 @@ make assertion-inventory # generate assertion inventory documentation
 make upf-check        # static tool-neutral UPF intent sanity check
 make frontend-quality # Verilator lint + optional Yosys/OpenSTA + CDC/RDC summary
 make code-coverage    # Verilator code-coverage lane, separate from functional coverage
+make coverage-edges-check # six focused DMA/memory/link coverage scenarios
 make axi-lite-check   # AXI-Lite CSR wrapper directed test
 make cdc-rdc-check    # directed synchronizer/reset clock-ratio test
 make c-reference-check # standalone C FLIT CRC reference-model self-test
@@ -188,6 +196,7 @@ make uvm-smoke        # optional full-UVM smoke test
 make uvm-ral-smoke    # optional UVM RAL AXI-Lite CSR frontdoor smoke
 make uvm-closure      # optional UVM closure lane
 make uvm-regress      # alias for UVM closure
+make uvm-ci           # four-test real-UVM CI contract
 make stress           # exploratory retry/fault stress suite
 make random-smoke-25  # optional seeded-random manifest + representative run
 make stress-retry-50  # optional retry-stress manifest + representative run
@@ -223,7 +232,7 @@ regression regenerates:
 - `chiplet_extension/reports/frontend_quality_summary.md`
 - `chiplet_extension/reports/code_coverage_summary.md`
 - `chiplet_extension/reports/c_reference_summary.csv`
-- `docs/protocol_characterization.md`
+- `docs/performance_characterization.md`
 - `docs/performance_characterization.md`
 - `docs/assertion_inventory.md`
 - `docs/coverage_closure_case_study.md`
@@ -231,7 +240,7 @@ regression regenerates:
 - `docs/uvm_status.md`
 - `docs/true_cross_coverage_summary.md`
 - `docs/verification_traceability_matrix.md`
-- `docs/bug_validation_cases.md`
+- `docs/bug_diary.md`
 - `docs/open_source_flow_summary.md`
 - `docs/clock_reset_cdc_plan.md`
 
@@ -288,9 +297,8 @@ feature-grouped closure view, metric-to-test mapping, and cross-coverage
 evidence. Cross groups are quality evidence layered on top of the canonical
 `60 / 60` flat-bin closure target. The narrative closure walkthrough is in
 `docs/coverage_closure_case_study.md`. The bug diary in `docs/bug_diary.md` and
-the exact regression diary in `docs/bug_validation_cases.md` record the five
-implemented expected-fail bug modes and the checker/bucket that catches each
-one. The waveform-driven retry debug case study is in
+the consolidated diary in `docs/bug_diary.md` records the five implemented
+expected-fail bug modes and the checker/bucket that catches each one. The waveform-driven retry debug case study is in
 `docs/debug_case_study_dma_retry.md`.
 
 `docs/true_cross_coverage_summary.md` reports interaction-level cross evidence
@@ -317,19 +325,22 @@ close the same low-power proxy coverage target, and observe the same `5 / 5`
 expected bug-validation failures. The default checked evidence remains the
 non-UVM stable Verilator gate.
 
-The main limitation is tool support. In the local Verilator flow, the UVM bench
-uses UVM reporting plus a compatibility runner that reuses the shared named
-scenario and coverage infrastructure. The checked-in non-Verilator path keeps a
-normal `run_test()`/phase/TLM structure, but commercial-simulator UVM regression
-has not been used as the signoff gate.
+The pinned UVM lane uses Verilator `5.048` and the checked UVM-Verilator commit
+to execute `run_test()`, sequencers/drivers, TLM analysis paths, scoreboards,
+coverage subscribers, virtual interfaces, and AXI-Lite RAL frontdoor access.
+Its four smoke tests pass with zero UVM errors/fatals. A compatibility runner
+remains for older local Verilator builds, and commercial-simulator UVM signoff
+is not claimed.
 
-Verified in this workspace on June 11, 2026: the stable Verilator regression
+Verified in this workspace through July 1, 2026: the stable Verilator regression
 completed with `70 / 70` runs meeting expectation, `65 / 65` nominal passes,
 `1 / 1` randomized passes, `5 / 5` expected bug-validation failures, `19 / 19`
 DMA nominal passes, `15 / 15` memory nominal passes, and `60 / 60` covered
 functional bins. The bounded property appendix completed with `9 / 9`
 checks meeting expectation. The low-power proxy suite was
-refreshed with `26 / 26` rows meeting expectation.
+refreshed with `26 / 26` rows meeting expectation. The optional advanced lanes
+also report `40 / 40` valid stress runs, `4 / 4` real-UVM smoke tests, `4 / 4`
+integrated CDC scenarios, and `21 / 21` solver prove/cover/mutation tasks.
 
 For the full chiplet DV methodology and current test list, see
 `chiplet_extension/README.md`.

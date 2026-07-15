@@ -91,13 +91,37 @@ package dma_uvm_pkg;
             forever begin
                 seq_item_port.get_next_item(item);
                 case (item.op)
-                    DMA_CSR_WRITE: csr_vif.write32(item.addr, item.wdata);
-                    DMA_CSR_READ:  csr_vif.read32(item.addr, item.rdata);
+                    DMA_CSR_WRITE: write_csr(item.addr, item.wdata);
+                    DMA_CSR_READ:  read_csr(item.addr, item.rdata);
                     DMA_WAIT_IRQ:  wait_irq(item.timeout_cycles);
                     default: `uvm_error(get_type_name(), "Unsupported DMA CSR operation")
                 endcase
                 seq_item_port.item_done();
             end
+        endtask
+
+        task write_csr(input bit [7:0] addr, input bit [31:0] data);
+            #10;
+            csr_vif.cfg_valid = 1'b1;
+            csr_vif.cfg_write = 1'b1;
+            csr_vif.cfg_addr = addr;
+            csr_vif.cfg_wdata = data;
+            do #10; while (!csr_vif.cfg_ready);
+            csr_vif.cfg_valid = 1'b0;
+            csr_vif.cfg_write = 1'b0;
+            csr_vif.cfg_addr = '0;
+            csr_vif.cfg_wdata = '0;
+        endtask
+
+        task read_csr(input bit [7:0] addr, output bit [31:0] data);
+            #10;
+            csr_vif.cfg_valid = 1'b1;
+            csr_vif.cfg_write = 1'b0;
+            csr_vif.cfg_addr = addr;
+            do #10; while (!csr_vif.cfg_ready);
+            data = csr_vif.cfg_rdata;
+            csr_vif.cfg_valid = 1'b0;
+            csr_vif.cfg_addr = '0;
         endtask
 
         task wait_irq(input int unsigned timeout_cycles);
@@ -117,7 +141,7 @@ package dma_uvm_pkg;
         `uvm_component_utils(dma_monitor)
 
         virtual chiplet_obs_if obs_vif;
-`ifndef VERILATOR
+`ifdef CHIPLET_REAL_UVM
         uvm_analysis_port #(dma_event_item) ap;
 `endif
         bit last_done;
@@ -126,7 +150,7 @@ package dma_uvm_pkg;
 
         function new(string name, uvm_component parent);
             super.new(name, parent);
-`ifndef VERILATOR
+`ifdef CHIPLET_REAL_UVM
             ap = new("ap", this);
 `endif
         endfunction
@@ -169,7 +193,7 @@ package dma_uvm_pkg;
                     DMA_EVENT_IRQ:   g_irq_events++;
                     default: ;
                 endcase
-`ifndef VERILATOR
+`ifdef CHIPLET_REAL_UVM
                 ap.write(item);
 `endif
             end
@@ -189,7 +213,7 @@ package dma_uvm_pkg;
 
         function void build_phase(uvm_phase phase);
             super.build_phase(phase);
-`ifndef VERILATOR
+`ifdef CHIPLET_REAL_UVM
             sequencer = dma_sequencer::type_id::create("sequencer", this);
             driver = dma_csr_driver::type_id::create("driver", this);
 `endif
@@ -198,7 +222,7 @@ package dma_uvm_pkg;
 
         function void connect_phase(uvm_phase phase);
             super.connect_phase(phase);
-`ifndef VERILATOR
+`ifdef CHIPLET_REAL_UVM
             driver.seq_item_port.connect(sequencer.seq_item_export);
 `endif
         endfunction

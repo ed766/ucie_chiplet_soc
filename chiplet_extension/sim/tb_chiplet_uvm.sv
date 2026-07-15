@@ -506,10 +506,10 @@ module tb_chiplet_uvm;
         cs = uvm_coreservice_t::get();
         visitor = chiplet_noop_component_visitor::type_id::create("visitor");
         cs.set_component_visitor(visitor);
-`ifdef VERILATOR
-        run_verilator_uvm_smoke();
-`else
+`ifdef CHIPLET_REAL_UVM
         run_test();
+`else
+        run_verilator_uvm_smoke();
 `endif
     end
 endmodule : tb_chiplet_uvm

@@ -1,0 +1,5 @@
+test,status,returncode,uvm_info,uvm_warning,uvm_error,uvm_fatal,ref_csv,cov_csv,log
+uvm_prbs_smoke_test,PASS,0,6,1,0,0,,chiplet_extension/reports/uvm_ci_uvm_prbs_smoke_test_uvm_coverage.csv,chiplet_extension/build/uvm_regression/logs/uvm_prbs_smoke_test.log
+uvm_dma_queue_smoke_test,PASS,0,6,1,0,0,chiplet_extension/build/uvm_regression/reference/uvm_dma_queue_smoke_test_expected.csv,chiplet_extension/reports/uvm_ci_uvm_dma_queue_smoke_test_uvm_coverage.csv,chiplet_extension/build/uvm_regression/logs/uvm_dma_queue_smoke_test.log
+uvm_power_sleep_resume_test,PASS,0,6,1,0,0,chiplet_extension/build/uvm_regression/reference/uvm_power_sleep_resume_test_expected.csv,chiplet_extension/reports/uvm_ci_uvm_power_sleep_resume_test_uvm_coverage.csv,chiplet_extension/build/uvm_regression/logs/uvm_power_sleep_resume_test.log
+uvm_axi_lite_ral_smoke_test,PASS,0,6,1,0,0,,chiplet_extension/reports/uvm_ci_uvm_axi_lite_ral_smoke_test_uvm_coverage.csv,chiplet_extension/build/uvm_regression/logs/uvm_axi_lite_ral_smoke_test.log

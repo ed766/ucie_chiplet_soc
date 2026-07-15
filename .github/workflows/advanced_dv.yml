@@ -1,0 +1,106 @@
+name: advanced-dv-evidence
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "chiplet_extension/formal/**"
+      - "chiplet_extension/sim/uvm/**"
+      - "chiplet_extension/sim/tb_chiplet_uvm.sv"
+      - "chiplet_extension/rtl/cdc/**"
+      - "chiplet_extension/rtl/soc_chiplet_async_top.sv"
+      - "chiplet_extension/sim/tb_async_chiplet.sv"
+      - "chiplet_extension/scripts/run_solver_formal.py"
+      - "chiplet_extension/scripts/run_uvm_regression.py"
+      - ".github/workflows/advanced_dv.yml"
+
+jobs:
+  solver-formal:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache OSS CAD Suite
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.tool_cache }}/oss-cad-suite-2026-07-01
+          key: oss-cad-suite-linux-x64-2026-07-01
+      - name: Install pinned OSS CAD Suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="${RUNNER_TOOL_CACHE}/oss-cad-suite-2026-07-01"
+          if [[ ! -x "${root}/bin/sby" ]]; then
+            archive="${RUNNER_TEMP}/oss-cad-suite.tgz"
+            curl -L --retry 3 -o "${archive}" https://github.com/YosysHQ/oss-cad-suite-build/releases/download/2026-07-01/oss-cad-suite-linux-x64-20260701.tgz
+            echo "bc9799358a843e854f60ebbee1834573a9f7db9c1dcbed3ea7a32a36520612dc  ${archive}" | sha256sum -c -
+            mkdir -p "${root}"
+            tar -xzf "${archive}" --strip-components=1 -C "${root}"
+          fi
+          echo "${root}/bin" >> "${GITHUB_PATH}"
+      - name: Run solver-backed proofs, covers, and mutations
+        run: make -C chiplet_extension formal-prove
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: solver-formal-evidence
+          path: |
+            chiplet_extension/reports/formal_proof_summary.csv
+            chiplet_extension/build/formal_solver/*.log
+
+  real-uvm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Verilator build dependencies
+        run: sudo apt-get update && sudo apt-get install -y autoconf flex bison ccache libfl2 libfl-dev zlib1g-dev
+      - name: Cache Verilator v5.048
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.tool_cache }}/verilator-v5.048
+          key: verilator-v5.048-${{ runner.os }}
+      - name: Build pinned Verilator
+        shell: bash
+        run: |
+          set -euo pipefail
+          prefix="${RUNNER_TOOL_CACHE}/verilator-v5.048"
+          if [[ ! -x "${prefix}/bin/verilator" ]]; then
+            git clone --depth 1 --branch v5.048 https://github.com/verilator/verilator.git "${RUNNER_TEMP}/verilator"
+            cd "${RUNNER_TEMP}/verilator"
+            autoconf
+            ./configure --prefix="${prefix}"
+            make -j2
+            make install
+          fi
+          echo "${prefix}/bin" >> "${GITHUB_PATH}"
+          echo "VERILATOR_UVM=${prefix}/bin/verilator" >> "${GITHUB_ENV}"
+      - name: Checkout pinned UVM library
+        shell: bash
+        run: |
+          git clone https://github.com/chipsalliance/uvm-verilator.git "${RUNNER_TEMP}/uvm-verilator"
+          git -C "${RUNNER_TEMP}/uvm-verilator" checkout 656f20d087370a7c742e00188d20bbf30fa95339
+          echo "UVM_HOME=${RUNNER_TEMP}/uvm-verilator/src" >> "${GITHUB_ENV}"
+      - name: Run real UVM phases, TLM, coverage, and RAL smoke
+        run: make -C chiplet_extension uvm-ci
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: real-uvm-evidence
+          path: |
+            chiplet_extension/reports/uvm_ci_*.csv
+            chiplet_extension/build/uvm_regression/logs/*.log
+
+  integrated-cdc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y verilator
+      - name: Run multi-clock ratio and reset-skew matrix
+        run: make -C chiplet_extension async-cdc-check
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: integrated-cdc-evidence
+          path: |
+            chiplet_extension/reports/async_cdc_summary.csv
+            chiplet_extension/build/async_cdc/*.log

@@ -65,14 +65,14 @@ package ucie_uvm_pkg;
         `uvm_component_utils(ucie_monitor)
 
         virtual ucie_stream_if vif;
-`ifndef VERILATOR
+`ifdef CHIPLET_REAL_UVM
         uvm_analysis_port #(ucie_flit_item) ap;
 `endif
         int unsigned cycle_q;
 
         function new(string name, uvm_component parent);
             super.new(name, parent);
-`ifndef VERILATOR
+`ifdef CHIPLET_REAL_UVM
             ap = new("ap", this);
 `endif
         endfunction
@@ -116,7 +116,7 @@ package ucie_uvm_pkg;
                     UCIE_DIR_B_RX: g_b_rx_count++;
                     default: ;
                 endcase
-`ifndef VERILATOR
+`ifdef CHIPLET_REAL_UVM
                 ap.write(item);
 `endif
             end

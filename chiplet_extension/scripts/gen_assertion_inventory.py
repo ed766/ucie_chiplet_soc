@@ -698,7 +698,7 @@ def main() -> int:
             "- Assertion categories: DMA, link/retry/credit, memory/parity, power/retention, AXI-Lite, and APB/firmware.",
             "- Assertion classes include safety, ordering, interface-stability, bounded-progress, integrity, and low-power sequencing checks.",
             "- Simulation scoreboards remain the end-to-end data-integrity oracle; these assertions protect local protocol/control invariants.",
-            "- Expected-fail bug demonstrations are tracked separately in `docs/bug_validation_cases.md` and `docs/bug_diary.md`.",
+            "- Expected-fail bug demonstrations are consolidated in `docs/bug_diary.md`.",
         ]
     )
 

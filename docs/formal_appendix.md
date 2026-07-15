@@ -1,11 +1,24 @@
-# Formal Appendix - Bounded Verilator Property Checks
+# Formal Appendix - Simulation Assertions and Solver-Backed Proofs
 
 ## Scope
 
-This appendix is intentionally small and practical. It does not claim full
-theorem-proving formal signoff. Instead, it adds a compact set of bounded
-Verilator assertion harnesses that strengthen the DV story without changing
-the project methodology.
+The repository keeps two distinct property lanes. `formal-check` runs bounded
+Verilator assertion harnesses. `formal-prove` uses a pinned OSS CAD Suite and
+SymbiYosys for prove, cover, and mutation-sensitivity tasks. Neither is
+commercial formal signoff.
+
+## Solver-Backed Lane
+
+`make -C chiplet_extension formal-prove` runs seven proof families: credit
+bounds, APB single-operation behavior, retry identity, DMA completion
+accounting, invalid-source containment, power/isolation legality, and async
+FIFO safety. Every family has a reachability cover and an expected
+counterexample under mutation.
+
+The credit, APB, retry, power, and async-FIFO proofs instantiate real leaf RTL.
+DMA accounting and invalid-source containment are architectural contract
+proofs, not full `dma_offload_ctrl` proofs. CI pins OSS CAD Suite `2026-07-01`
+and verifies its archive checksum before execution.
 
 ## What Is Included
 
@@ -56,6 +69,9 @@ Current checked-in evidence:
 
 - `8 / 8` nominal bounded-property harnesses meeting expectation
 - `1 / 1` expected failing bug-demo harness for `UCIE_BUG_RETRY_SEQ`
+- `7 / 7` solver-backed safety proofs
+- `7 / 7` reachability covers paired with those proofs
+- `7 / 7` expected mutation counterexamples
 - DMA completion, timeout, memory-integrity, and power-control invariants now
   have bounded harness coverage in addition to regression coverage
 
@@ -75,7 +91,7 @@ checks.
 
 ## What It Is Not
 
-- not a SymbiYosys or theorem-proving formal signoff flow
+- not exhaustive full-chip or commercial formal signoff
 - not a replacement for simulation regressions
 - not a substitute for broader protocol verification
 

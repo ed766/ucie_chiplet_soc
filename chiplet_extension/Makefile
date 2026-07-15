@@ -25,6 +25,9 @@ RUN_OPTIONAL_BENCHES := $(ROOT_DIR)/scripts/run_optional_benches.py
 RUN_C_REFERENCE_CHECKS := $(ROOT_DIR)/scripts/run_c_reference_checks.py
 RUN_FIRMWARE_SOC := $(ROOT_DIR)/scripts/run_firmware_soc.py
 RENDER_FIRMWARE_WAVEFORM := $(ROOT_DIR)/scripts/render_firmware_waveform.py
+RUN_SOLVER_FORMAL := $(ROOT_DIR)/scripts/run_solver_formal.py
+RUN_ASYNC_CDC := $(ROOT_DIR)/scripts/run_async_cdc.py
+NORMALIZE_REPORT_PATHS := $(ROOT_DIR)/scripts/normalize_report_paths.py
 
 REPORT_ARTIFACTS := \
 	$(REPORTS_DIR)/regress_summary.csv \
@@ -51,6 +54,7 @@ REPORT_ARTIFACTS := \
 		$(REPORTS_DIR)/cdc_rdc_summary.csv \
 		$(REPORTS_DIR)/code_coverage_summary.txt \
 		$(REPORTS_DIR)/code_coverage_summary.md \
+		$(REPORTS_DIR)/code_coverage_holes.csv \
 		$(REPORTS_DIR)/c_reference_summary.csv \
 		$(REPORTS_DIR)/firmware_soc_summary.csv \
 		$(REPORTS_DIR)/firmware_coverage_summary.csv \
@@ -67,7 +71,7 @@ REPORT_ARTIFACTS := \
 		$(ROOT_DIR)/../docs/clock_reset_cdc_plan.md \
 		$(ROOT_DIR)/../docs/c_reference_model_summary.md
 
-.PHONY: chiplet-sim chiplet-report project-check regress closure closure-equivalence power-regress stress negative-regress negative-summary bug-validate formal-check assertion-inventory upf-check frontend-quality code-coverage axi-lite-check cdc-rdc-check credit-edges-check c-reference-check firmware-soc-smoke firmware-soc-check firmware-code-coverage firmware-waveform uvm-check-env uvm-smoke uvm-ral-smoke uvm-closure uvm-regress characterize characterize-link characterize-dma-mem performance-report project-metrics random-smoke-25 stress-retry-50 power-dma-cross-25 random-stress-run random-stress-summary cross-coverage-summary dma-retry-waveform clean
+.PHONY: chiplet-sim chiplet-report project-check regress closure closure-equivalence power-regress stress negative-regress negative-summary bug-validate formal-check formal-prove assertion-inventory upf-check frontend-quality code-coverage coverage-edges-check axi-lite-check cdc-rdc-check async-cdc-check credit-edges-check c-reference-check firmware-soc-smoke firmware-soc-check firmware-code-coverage firmware-waveform uvm-check-env uvm-smoke uvm-ci uvm-ral-smoke uvm-closure uvm-regress characterize characterize-link characterize-dma-mem performance-report project-metrics normalize-report-paths random-smoke-25 stress-retry-50 power-dma-cross-25 random-stress-run random-stress-summary cross-coverage-summary dma-retry-waveform clean
 
 chiplet-sim:
 	$(PYTHON) $(RUN_REGRESSION) --tests prbs_smoke,soc_smoke --random-seeds 1 --seed $(SEED) --verilator $(VERILATOR) --report-prefix smoke --run-id-prefix smoke
@@ -75,7 +79,7 @@ chiplet-sim:
 chiplet-report: regress formal-check assertion-inventory characterize performance-report
 	@echo "Chiplet verification reports:"
 	@printf '  %s\n' $(REPORT_ARTIFACTS)
-	@printf '  %s\n' $(ROOT_DIR)/../docs/protocol_characterization.md
+	@printf '  %s\n' $(ROOT_DIR)/../docs/performance_characterization.md
 
 project-check:
 	$(MAKE) closure RANDOM_SEEDS=1
@@ -87,6 +91,7 @@ project-check:
 	$(MAKE) firmware-soc-check
 	$(MAKE) performance-report
 	$(MAKE) project-metrics
+	$(MAKE) normalize-report-paths
 	@! rg -n "57 / 57|52 / 52|17 / 17|UPF scaffolding|UPF placeholders|Power-intent placeholders" $(ROOT_DIR)/../README.md $(ROOT_DIR)/../docs $(ROOT_DIR)/README.md
 
 regress:
@@ -119,6 +124,7 @@ power-dma-cross-25:
 
 random-stress-run: random-smoke-25 stress-retry-50 power-dma-cross-25
 	$(PYTHON) $(RUN_RANDOM_STRESS_MATRIX) --verilator $(VERILATOR)
+	$(PYTHON) $(NORMALIZE_REPORT_PATHS)
 
 cross-coverage-summary:
 	$(PYTHON) $(GEN_TRUE_CROSS_COVERAGE) --summary $(REPORTS_DIR)/regress_summary.csv --csv-out $(REPORTS_DIR)/true_cross_coverage_summary.csv --md-out $(ROOT_DIR)/../docs/true_cross_coverage_summary.md
@@ -138,6 +144,9 @@ bug-validate:
 formal-check:
 	$(PYTHON) $(ROOT_DIR)/scripts/run_bounded_properties.py
 
+formal-prove:
+	$(PYTHON) $(RUN_SOLVER_FORMAL)
+
 assertion-inventory:
 	$(PYTHON) $(GEN_ASSERTION_INVENTORY)
 
@@ -149,6 +158,9 @@ uvm-check-env:
 
 uvm-smoke: uvm-check-env
 	$(PYTHON) $(RUN_UVM_REGRESSION) --suite smoke --tests uvm_prbs_smoke_test --report-prefix uvm_smoke
+
+uvm-ci: uvm-check-env
+	$(PYTHON) $(RUN_UVM_REGRESSION) --suite smoke --tests uvm_prbs_smoke_test,uvm_dma_queue_smoke_test,uvm_power_sleep_resume_test,uvm_axi_lite_ral_smoke_test --report-prefix uvm_ci
 
 uvm-ral-smoke: uvm-check-env
 	$(PYTHON) $(RUN_UVM_REGRESSION) --suite smoke --tests uvm_axi_lite_ral_smoke_test --report-prefix uvm_ral_smoke
@@ -173,18 +185,28 @@ performance-report:
 frontend-quality:
 	$(PYTHON) $(RUN_FRONTEND_QUALITY) --verilator $(VERILATOR)
 
+coverage-edges-check:
+	$(PYTHON) $(RUN_REGRESSION) --suite coverage_edge --random-seeds 1 --seed $(SEED) --verilator $(VERILATOR) --report-prefix coverage_edges --run-id-prefix coverage_edges
+
 code-coverage:
 	$(PYTHON) $(RUN_REGRESSION) --suite closure --random-seeds 1 --seed $(SEED) --verilator $(VERILATOR) --report-prefix codecov --run-id-prefix codecov --code-coverage
 	$(PYTHON) $(RUN_REGRESSION) --suite negative --random-seeds 1 --seed $(SEED) --verilator $(VERILATOR) --report-prefix codecov_negative --run-id-prefix codecov_negative --code-coverage
 	$(PYTHON) $(RUN_REGRESSION) --tests prbs_link_degraded_timeout --random-seeds 1 --seed $(SEED) --verilator $(VERILATOR) --report-prefix codecov_edge --run-id-prefix codecov_edge --code-coverage
+	$(PYTHON) $(RUN_REGRESSION) --tests dma_csr_readback_sweep --random-seeds 1 --seed $(SEED) --verilator $(VERILATOR) --report-prefix codecov_csr --run-id-prefix codecov_csr --code-coverage
+	$(PYTHON) $(RUN_REGRESSION) --tests soc_rand_mix,prbs_rand_stress --random-seeds 8 --seed $(SEED) --verilator $(VERILATOR) --report-prefix codecov_entropy --run-id-prefix codecov_entropy --code-coverage
+	$(PYTHON) $(RUN_REGRESSION) --tests dma_queue_smoke --random-seeds 1 --seed $(SEED) --verilator $(VERILATOR) --report-prefix codecov_entropy_dma --run-id-prefix codecov_entropy_dma --code-coverage --plusarg DMA_SRC_BASE=240 --plusarg DMA_DST_BASE=224 --plusarg DMA_LEN_WORDS=16 --plusarg DMA_TAG=65535
+	$(PYTHON) $(RUN_REGRESSION) --suite coverage_edge --random-seeds 1 --seed $(SEED) --verilator $(VERILATOR) --report-prefix codecov_coverage_edges --run-id-prefix codecov_coverage_edges --code-coverage
 	$(PYTHON) $(RUN_OPTIONAL_BENCHES) --bench axi_lite --bench cdc_rdc --bench credit_mgr_edges --verilator $(VERILATOR) --code-coverage
-	$(PYTHON) $(GEN_CODE_COVERAGE_REPORT) --prefix codecov_
+	$(PYTHON) $(GEN_CODE_COVERAGE_REPORT) --prefix codecov_ --holes-out $(REPORTS_DIR)/code_coverage_holes.csv --enforce-release-targets
 
 axi-lite-check:
 	$(PYTHON) $(RUN_OPTIONAL_BENCHES) --bench axi_lite --verilator $(VERILATOR)
 
 cdc-rdc-check:
 	$(PYTHON) $(RUN_OPTIONAL_BENCHES) --bench cdc_rdc --verilator $(VERILATOR)
+
+async-cdc-check:
+	$(PYTHON) $(RUN_ASYNC_CDC) --verilator $(VERILATOR)
 
 credit-edges-check:
 	$(PYTHON) $(RUN_OPTIONAL_BENCHES) --bench credit_mgr_edges --verilator $(VERILATOR)
@@ -213,6 +235,9 @@ firmware-waveform: firmware-soc-check
 
 project-metrics:
 	$(PYTHON) $(GEN_PROJECT_METRICS)
+
+normalize-report-paths:
+	$(PYTHON) $(NORMALIZE_REPORT_PATHS)
 
 random-stress-summary:
 	$(PYTHON) $(GEN_RANDOM_STRESS_SUMMARY)
@@ -245,6 +270,7 @@ clean:
 			-name 'cdc_rdc_summary.csv' -o \
 			-name 'code_coverage_summary.txt' -o \
 			-name 'code_coverage_summary.md' -o \
+			-name 'code_coverage_holes.csv' -o \
 			-name 'code_coverage.info' -o \
 			-name 'c_reference_summary.csv' -o \
 			-name 'optional_bench_summary.csv' -o \

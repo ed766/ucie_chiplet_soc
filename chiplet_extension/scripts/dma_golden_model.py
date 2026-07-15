@@ -69,6 +69,13 @@ def encrypt_block(key: bytes, block_words: list[int]) -> list[int]:
 
 
 DMA_DESCRIPTOR_PLANS: dict[str, tuple[DmaDescriptor, ...]] = {
+    "dma_codecov_state_entropy": (
+        DmaDescriptor(2, 32, 4, 0xFFFF),
+        DmaDescriptor(17, 48, 4, 0xAAAA),
+        DmaDescriptor(66, 96, 8, 0x5555),
+        DmaDescriptor(129, 176, 4, 0xC33C),
+    ),
+    "soc_bidirectional_payload_entropy": (DmaDescriptor(208, 0, 32, 0xA55A),),
     "dma_queue_smoke": (DmaDescriptor(8, 32, 4, 0x1101),),
     "dma_queue_back_to_back": (
         DmaDescriptor(8, 32, 4, 0x1102),
@@ -137,6 +144,7 @@ DMA_DESCRIPTOR_PLANS: dict[str, tuple[DmaDescriptor, ...]] = {
 def build_dma_golden_from_descriptors(
     descriptors: tuple[DmaDescriptor, ...],
     key: bytes = AES_KEY,
+    source_word_fn=dma_source_word,
 ) -> GoldenResult:
     transactions: list[GoldenTransaction] = []
     destination_image: dict[int, int] = {}
@@ -150,7 +158,7 @@ def build_dma_golden_from_descriptors(
         dst_index = desc.dst_base
         for offset in range(0, desc.len_words, WORDS_PER_AES_BLOCK):
             src_indices = [desc.src_base + offset, desc.src_base + offset + 1]
-            block_words = [dma_source_word(src_indices[0]), dma_source_word(src_indices[1])]
+            block_words = [source_word_fn(src_indices[0]), source_word_fn(src_indices[1])]
             cipher_words = encrypt_block(key, block_words)
             for block_word_index, cipher_word in enumerate(cipher_words):
                 src_index = src_indices[block_word_index]
@@ -184,6 +192,13 @@ def build_dma_golden_from_descriptors(
 def build_dma_golden(test_name: str, key: bytes = AES_KEY) -> GoldenResult:
     if test_name not in DMA_DESCRIPTOR_PLANS:
         raise KeyError(test_name)
+    if test_name == "soc_bidirectional_payload_entropy":
+        patterns = (0x0000_0000_0000_0000, 0xFFFF_FFFF_FFFF_FFFF,
+                    0xAAAA_AAAA_AAAA_AAAA, 0x5555_5555_5555_5555)
+        return build_dma_golden_from_descriptors(
+            DMA_DESCRIPTOR_PLANS[test_name], key,
+            lambda index: patterns[index & 3] ^ index,
+        )
     return build_dma_golden_from_descriptors(DMA_DESCRIPTOR_PLANS[test_name], key)
 
 

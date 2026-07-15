@@ -10,8 +10,11 @@ low_power_proxy_targets,26 / 26,"Low-power proxy rows; aggregate targets: 4/4, 6
 cross_coverage_groups,8 / 8,Grouped cross-evidence derived from flat coverage metrics.
 true_cross_groups,10 / 10,Interaction-level cross evidence when generated.
 bounded_property_checks,9 / 9,Nominal and expected-fail bounded assertion harnesses.
+solver_formal_proofs,7 / 7,SymbiYosys unbounded safety proof tasks when the pinned toolchain is available.
+solver_formal_covers,7 / 7,Reachability tasks paired with solver proofs.
+formal_mutation_sensitivity,7 / 7,Expected counterexamples under property-specific mutations.
 negative_tests,9 / 9,Illegal-operation tests with explicit expected response.
-optional_random_stress_subset,30 / 30 valid; 10 schema-rejected,Optional seeded-random execution subset; not part of default closure.
+optional_random_stress_subset,40 / 40,Optional seeded-random execution subset; not part of default closure.
 assertion_inventory,52,Inventoried protocol/control invariants.
 axi_lite_protocol_coverage,18 / 18,Optional AXI-Lite CSR wrapper directed protocol coverage.
 axi_lite_optional_bench,PASS,AXI-Lite optional bench status.
@@ -19,4 +22,10 @@ firmware_soc_scenarios,12 / 12,ROM-backed RV32 programs controlling DMA through 
 firmware_mmio_coverage,30 / 30,Firmware/MMIO protocol and scenario coverage points.
 firmware_outcome_crosses,7 / 7,"Firmware outcome, power-state, and wait-state interaction crosses."
 firmware_focused_code_coverage,86.62%,Focused Verilator line coverage for RV32/APB/ROM integration RTL.
-optional_collateral_code_coverage,100.00%,Verilator line coverage for optional AXI/CDC collateral RTL.
+optional_collateral_code_coverage,92.37%,Verilator line coverage for optional AXI/CDC collateral RTL.
+integrated_async_cdc,4 / 4,Optional two-clock chiplet matrix across clock ratios and reset skew.
+real_uvm_ci,4 / 4,"Pinned Verilator/UVM phase, TLM, coverage, and RAL smoke lane when executed."
+design_line_coverage,96.25%,Native Verilator design-RTL line coverage.
+design_branch_expression_coverage,89.24%,Verilator design-RTL branch/expression outcome coverage.
+design_toggle_coverage,75.21%,Raw toggle coverage with signals wider than 32 bits excluded by instrumentation policy.
+design_toggle_reviewed,90.26%,"Reviewed toggle coverage after documented structural, fixed-credit-bit, and diagnostic-counter exclusions."

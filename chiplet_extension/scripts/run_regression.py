@@ -90,6 +90,7 @@ TEST_SPECS: tuple[TestSpec, ...] = (
     TestSpec("prbs_latency_high", "tb_ucie_prbs", max_cycles=14000),
     TestSpec("prbs_rand_stress", "tb_ucie_prbs", randomized=True, max_cycles=30000),
     TestSpec("prbs_link_degraded_timeout", "tb_ucie_prbs", default_enabled=False, max_cycles=20000, suites=("stress",)),
+    TestSpec("prbs_retrain_timeout_recover", "tb_ucie_prbs", default_enabled=False, max_cycles=24000, suites=("coverage_edge",)),
     TestSpec("prbs_retry_burst", "tb_ucie_prbs", default_enabled=False, suites=("stress",)),
     TestSpec("prbs_crc_storm", "tb_ucie_prbs", default_enabled=False, suites=("stress",)),
     TestSpec("prbs_fault_retrain", "tb_ucie_prbs", default_enabled=False, suites=("stress",)),
@@ -102,6 +103,11 @@ TEST_SPECS: tuple[TestSpec, ...] = (
     TestSpec("soc_retry_e2e", "tb_soc_chiplets", default_enabled=False, suites=("stress",)),
     TestSpec("soc_rand_mix", "tb_soc_chiplets", default_enabled=False, randomized=True, suites=("stress",)),
     TestSpec("random_manifest_scenario", "tb_soc_chiplets", default_enabled=False, max_cycles=32000, ref_words=0, suites=("stress",)),
+    TestSpec("dma_csr_readback_sweep", "tb_soc_chiplets", default_enabled=False, max_cycles=8000, ref_words=0, suites=("stress",)),
+    TestSpec("dma_codecov_state_entropy", "tb_soc_chiplets", default_enabled=False, max_cycles=30000, ref_words=20, suites=("coverage_edge",)),
+    TestSpec("dma_codecov_error_matrix", "tb_soc_chiplets", default_enabled=False, max_cycles=22000, ref_words=0, suites=("coverage_edge",)),
+    TestSpec("dma_timeout_retire_stall", "tb_soc_chiplets", default_enabled=False, max_cycles=26000, ref_words=0, suites=("coverage_edge",)),
+    TestSpec("soc_bidirectional_payload_entropy", "tb_soc_chiplets", default_enabled=False, max_cycles=28000, ref_words=32, suites=("coverage_edge",)),
     TestSpec("power_run_mode", "tb_soc_chiplets", suites=("stable", "power")),
     TestSpec("power_crypto_only", "tb_soc_chiplets", max_cycles=7000, suites=("stable", "power")),
     TestSpec("power_sleep_entry_exit", "tb_soc_chiplets", max_cycles=8000, suites=("stable", "power")),
@@ -147,6 +153,7 @@ TEST_SPECS: tuple[TestSpec, ...] = (
     TestSpec("mem_parity_src_detect", "tb_soc_chiplets", max_cycles=12000, ref_words=0, suites=("stable", "memory", "negative")),
     TestSpec("mem_invalid_src_dma_error", "tb_soc_chiplets", max_cycles=12000, ref_words=0, suites=("stable", "memory", "negative")),
     TestSpec("mem_parity_dst_maint_detect", "tb_soc_chiplets", max_cycles=10000, ref_words=0, suites=("stable", "memory")),
+    TestSpec("mem_parity_src_maint_detect", "tb_soc_chiplets", default_enabled=False, max_cycles=10000, ref_words=0, suites=("coverage_edge",)),
     TestSpec("mem_sleep_retained_bank", "tb_soc_chiplets", max_cycles=12000, ref_words=0, suites=("stable", "power", "memory")),
     TestSpec("mem_sleep_nonretained_bank", "tb_soc_chiplets", max_cycles=12000, ref_words=0, suites=("stable", "power", "memory")),
     TestSpec("mem_sleep_dst_nonretained_bank", "tb_soc_chiplets", max_cycles=12000, ref_words=0, suites=("stable", "power", "memory")),
@@ -305,7 +312,9 @@ def compile_binary(
             "--timing",
             "-Wall",
             *VERILATOR_WARNINGS,
-            "--coverage-line",
+            "--coverage",
+            "--coverage-max-width",
+            "32",
             *[f"-D{define}" for define in defines],
             *[f"-G{param}={value}" for param, value in normalized_params],
             "--top-module",
@@ -740,12 +749,21 @@ def run_suite(args: argparse.Namespace) -> int:
     print(f"Trend history:      {paths.history}")
     print(f"Closure targets:    {paths.closure_targets}")
     print(f"Closure matrix:     {paths.closure_matrix}")
+    summary_rows = load_csv_rows(paths.summary)
+    unmet = [row for row in summary_rows if row.get("meets_expectation") != "1"]
+    if unmet:
+        print(
+            "Unexpected regression outcomes: "
+            + ", ".join(row.get("test", row.get("run_id", "unknown")) for row in unmet),
+            file=sys.stderr,
+        )
+        return 1
     return 0
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the Verilator DV regression for the UCIe chiplet benches.")
-    parser.add_argument("--suite", default="stable", choices=["stable", "stress", "bug", "power", "closure", "negative"], help="Named regression suite.")
+    parser.add_argument("--suite", default="stable", choices=["stable", "stress", "bug", "power", "closure", "negative", "coverage_edge"], help="Named regression suite.")
     parser.add_argument("--tests", default="", help="Comma-separated explicit test list. Overrides --suite.")
     parser.add_argument("--random-seeds", type=int, default=3, help="Seeds to sweep for randomized named tests.")
     parser.add_argument("--seed", type=int, default=20260329, help="Master regression seed.")

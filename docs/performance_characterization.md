@@ -7,11 +7,22 @@ implementation signoff numbers.
 | Scenario | Source test | Avg latency | Max latency | Retry count | Throughput | Notes |
 | --- | --- | ---: | ---: | ---: | ---: | --- |
 | No fault | `prbs_latency_low` | 41 | 41 | 0 | 0.0289 | Baseline PRBS link path with no injected retry/fault window. |
-| Backpressure | `prbs_backpressure_wave` | 41 | 41 | 0 | 0.0292 | Heavy deterministic backpressure point; throughput remains scoreboard-clean. |
+| Backpressure | `prbs_backpressure_wave` | 41 | 41 | 0 | 0.1168 | Heavy deterministic backpressure point; throughput remains scoreboard-clean. |
 | CRC retry | `prbs_crc_burst_recover` | 41 | 41 | 2 | 0.0119 | CRC retry recovery with retry rate 0.0250. |
 | Lane fault | `prbs_lane_fault_recover` | 41 | 41 | 1 | 96/41 flits/latency-window | Lane fault recovery completed without scoreboard mismatch. |
 | Sleep/resume during queued DMA | `dma_sleep_during_queued_work` | 41 | 41 | 0 | 1/41 flits/latency-window | DMA descriptors completed=1, errors=0. |
 | Crypto-only mode | `dma_crypto_only_submit_blocked` | NA | NA | 0 | NA | Mode blocks new DMA submission; error/reject count=1. |
+
+## Backpressure Duty Sweep
+
+| Requested duty | Observed duty | Acceptance ratio | Accepted throughput | p50 | p95 | Max |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 0% | 0.0000 | 1.0000 | 0.1168 | 41 | 41 | 41 |
+| 25% | 0.2500 | 0.7766 | 0.1168 | 41 | 41 | 41 |
+| 50% | 0.4999 | 0.5377 | 0.1168 | 41 | 41 | 41 |
+| 75% | 0.7498 | 0.2759 | 0.1167 | 41 | 41 | 41 |
+
+![Measured backpressure sensitivity](images/performance_backpressure.svg)
 
 ## DMA/Memory Architecture Points
 
@@ -38,7 +49,7 @@ implementation signoff numbers.
 ## Observations
 
 - The no-fault baseline reports 41 cycles average latency and 0.0289 flits/cycle throughput in the PRBS characterization path.
-- The selected backpressure point keeps average latency at 41 cycles while preserving a clean scoreboard result; the stress is visible in backpressure coverage rather than failures.
+- As requested backpressure rises from 0% to 75%, downstream acceptance ratio falls from 1.0000 to 0.2759. Completed throughput remains near 0.1168 flits/cycle because this offered load has enough headroom; this identifies the source-rate bottleneck rather than overstating a throughput collapse.
 - CRC retry recovery records 2 retries at the selected point, showing retry overhead without packet-order corruption.
 - Back-to-back DMA queueing is visible in behavioral latency: queue depth 1 reports 219 average cycles, while queue depth 4 reports 546 average cycles because descriptors wait behind older accepted work.
 - The banked scratchpad study shows lower conflict/wait pressure in 2-bank heavy contention (3 src / 2 dst / 5 wait) than the 1-bank structural variant (8 src / 5 dst / 13 wait).

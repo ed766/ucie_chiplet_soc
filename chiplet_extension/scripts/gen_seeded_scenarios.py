@@ -57,8 +57,8 @@ def row_for(cfg: FamilyCfg, rng: random.Random, index: int, seed: int) -> dict[s
         power_transition_cycle = 0
         timeout_profile = "nominal"
         retry_window = 0
-        if dma_len == 1:
-            dma_len = 2
+        dma_len = int(choose(rng, (8, 12, 16)))
+        queue_pressure = "single"
     elif cfg.name == "stress_retry_50":
         # Link retry stress uses the PRBS retry/backpressure path. DMA, memory,
         # and power knobs are recorded for traceability but constrained inert.
@@ -76,8 +76,8 @@ def row_for(cfg: FamilyCfg, rng: random.Random, index: int, seed: int) -> dict[s
         # lane-fault errors that would change the expected outcome.
         parity_injection = "none"
         timeout_profile = "nominal"
-        if dma_len == 1:
-            dma_len = 2
+        dma_len = 4
+        queue_pressure = "pair"
         lane_fault_type = "none"
         crc_fault_at = str(choose(rng, ("early", "mid", "late")))
         backpressure_cycles = int(choose(rng, (8, 16, 32)))
@@ -106,9 +106,9 @@ def row_for(cfg: FamilyCfg, rng: random.Random, index: int, seed: int) -> dict[s
         "parity_injection": parity_injection,
         "timeout_profile": timeout_profile,
         "retry_window": str(retry_window),
-        "coverage_csv": str(REPORT_ROOT / f"{artifact_stem}_coverage.csv"),
-        "scoreboard_csv": str(REPORT_ROOT / f"{artifact_stem}_scoreboard.csv"),
-        "power_csv": str(REPORT_ROOT / f"{artifact_stem}_power.csv"),
+        "coverage_csv": f"chiplet_extension/reports/{artifact_stem}_coverage.csv",
+        "scoreboard_csv": f"chiplet_extension/reports/{artifact_stem}_scoreboard.csv",
+        "power_csv": f"chiplet_extension/reports/{artifact_stem}_power.csv",
     }
 
 

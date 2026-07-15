@@ -40,6 +40,24 @@ The primary supported command is:
 make -C chiplet_extension uvm-smoke
 ```
 
+The pinned real-UVM CI contract runs:
+
+```bash
+make -C chiplet_extension uvm-ci
+```
+
+It uses Verilator `v5.048` and `uvm-verilator` commit
+`656f20d087370a7c742e00188d20bbf30fa95339`, then runs PRBS, DMA queue,
+power sleep/resume, and AXI-Lite RAL smoke tests. Passing requires zero
+`UVM_ERROR`, zero `UVM_FATAL`, and expected scoreboard transactions.
+
+Current measured result: `4 / 4` tests pass with zero `UVM_ERROR` and zero
+`UVM_FATAL`. The lane executes `run_test()`, UVM phases, sequencers/drivers,
+TLM analysis connections, scoreboards, coverage subscribers, and RAL
+frontdoor prediction. Native covergroups remain mirrored into CSV counters
+because Verilator does not provide the same coverage database as a commercial
+simulator.
+
 The optional RAL smoke command is:
 
 ```bash
@@ -53,14 +71,17 @@ local AXI protocol-quality gate.
 
 It requires a UVM-capable Verilator setup through `VERILATOR_UVM` and
 `UVM_HOME`. The local Debian Verilator `5.020` path is not treated as a full
-UVM closure environment.
+UVM environment. The `advanced-dv-evidence` GitHub workflow owns the pinned
+execution contract.
 
 ## Compatibility Limitation
 
-The checked-in bench preserves a normal `run_test()` path for full-UVM
-simulators, but the local open-source Verilator flow uses a compatibility
-runner for practical phase/TLM limitations. That keeps the lane runnable as a
-methodology demonstration without replacing the stable non-UVM gate.
+The pinned Verilator `5.048` flow uses the normal `run_test()` path. A
+compatibility runner remains for older Verilator builds that cannot execute
+the same phase/TLM path. Neither path replaces the stable non-UVM closure gate.
+The pinned compile suppresses Verilator's `IMPURE` diagnostic for class-driven
+virtual-interface tasks; the same CSR/AXI handshakes are independently checked
+by the non-UVM directed protocol benches.
 
 ## Closure Position
 

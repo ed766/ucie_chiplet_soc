@@ -1,6 +1,8 @@
 # Clock, Reset, CDC, and RDC Plan
 
-The chiplet RTL is modeled as a primarily single-clock behavioral proxy for open-source simulation. This document records the intended clock/reset discipline and the reusable CDC/RDC collateral added for reviewer-facing quality checks.
+The default closure top remains a single-clock behavioral proxy. An optional
+`soc_chiplet_async_top` adds genuine two-clock integration evidence with
+Gray-pointer asynchronous FIFOs on both serialized die-to-die paths.
 
 ## Clock and Reset Domains
 
@@ -10,6 +12,8 @@ The chiplet RTL is modeled as a primarily single-clock behavioral proxy for open
 | AXI-Lite CSR wrapper | `aclk` | `aresetn` | Optional control-bus integration wrapper | Independent wrapper testbench |
 | CDC source example | `clk_src` | `rst_src_n` | Reusable event/source-side CDC collateral | Exercised by `tb_cdc_reset` |
 | CDC destination example | `clk_dst` | `rst_dst_n` | Reusable synchronized destination domain | Exercised by `tb_cdc_reset` |
+| Die A async integration | `clk_a` | `rst_a_n` | Compute/DMA and A-to-B FIFO writer | `async-cdc-check` |
+| Die B async integration | `clk_b` | `rst_b_n` | AES service and B-to-A FIFO writer | `async-cdc-check` |
 
 ## Crossing Strategy
 
@@ -18,6 +22,7 @@ The chiplet RTL is modeled as a primarily single-clock behavioral proxy for open
 | Single-bit level control | Two-flop synchronizer | `chiplet_extension/rtl/cdc/cdc_sync_2ff.sv` | `make -C chiplet_extension cdc-rdc-check` |
 | Source-domain event pulse | Toggle-based pulse synchronizer | `chiplet_extension/rtl/cdc/cdc_pulse_sync.sv` | `make -C chiplet_extension cdc-rdc-check` |
 | Main chiplet datapath | Single-clock proxy model | `soc_chiplet_top.sv` | Existing Verilator closure |
+| Optional cross-die payload and return | Gray-pointer asynchronous FIFO in each direction | `async_fifo_gray.sv`, `soc_chiplet_async_top.sv` | four-ratio matrix plus solver property lane |
 | Reset release | Per-domain active-low reset sequencing | CDC/RDC testbench and structural report | `frontend-quality` plus `cdc-rdc-check` |
 
 ## Crossing Inventory
@@ -60,6 +65,15 @@ chiplet datapath, and the documented datapath waiver.
 - destination reset clears synchronized outputs.
 - reset release does not create a duplicate synchronized event.
 
+## Integrated Multi-Clock Matrix
+
+`make -C chiplet_extension async-cdc-check` runs independent Die A/Die B clock
+ratios `1:1`, `5:7`, `3:5`, and `5:2` with staggered reset release. It requires
+traffic in both directions, no FIFO overflow, no read-side duplication, and
+clean recovery. Results are written to `reports/async_cdc_summary.csv`.
+
 ## Design Intent
 
-The project does not claim a fully asynchronous chiplet implementation. The purpose of this collateral is to show practical CDC/RDC discipline, reusable synchronizer primitives, structural reporting, and directed reset/clock-ratio testing using open-source tools.
+The asynchronous top is optional collateral and does not replace the canonical
+single-clock architecture. This is open-source CDC evidence, not commercial
+CDC/RDC signoff.

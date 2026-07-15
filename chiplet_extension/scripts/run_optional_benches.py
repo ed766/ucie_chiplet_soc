@@ -23,6 +23,13 @@ AXI_COVERAGE_CSV = ROOT / "reports" / "axi_lite_coverage_summary.csv"
 AXI_COVERAGE_MD = ROOT.parent / "docs" / "axi_lite_coverage_summary.md"
 CODE_COVERAGE_ARTIFACTS = ROOT / "build" / "verilator_regression" / "artifacts"
 
+
+def display_path(path: Path) -> str:
+    try:
+        return path.relative_to(ROOT.parent).as_posix()
+    except ValueError:
+        return str(path)
+
 WARNINGS = [
     "-Wno-fatal",
     "-Wno-DECLFILENAME",
@@ -211,7 +218,9 @@ def run_bench(verilator: str, bench: Bench, code_coverage: bool = False) -> dict
             "--timing",
             "-Wall",
             *WARNINGS,
-            "--coverage-line",
+            "--coverage",
+            "--coverage-max-width",
+            "32",
             "--top-module",
             bench.top,
             *[str(path) for path in bench.sources],
@@ -249,9 +258,9 @@ def run_bench(verilator: str, bench: Bench, code_coverage: bool = False) -> dict
             "status": "FAIL",
             "detail": "compile_failed",
             "elapsed_s": f"{time.time() - start:.3f}",
-            "compile_log": str(compile_log),
+            "compile_log": display_path(compile_log),
             "run_log": "",
-            "coverage_dat": str(coverage_path) if code_coverage else "",
+            "coverage_dat": display_path(coverage_path) if code_coverage else "",
         }
 
     run_env = os.environ.copy()
@@ -275,9 +284,9 @@ def run_bench(verilator: str, bench: Bench, code_coverage: bool = False) -> dict
         "status": "PASS" if passed else "FAIL",
         "detail": detail,
         "elapsed_s": f"{time.time() - start:.3f}",
-        "compile_log": str(compile_log),
-        "run_log": str(run_log),
-        "coverage_dat": str(coverage_path) if code_coverage else "",
+        "compile_log": display_path(compile_log),
+        "run_log": display_path(run_log),
+        "coverage_dat": display_path(coverage_path) if code_coverage else "",
     }
 
 
@@ -285,7 +294,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run optional chiplet collateral benches.")
     parser.add_argument("--bench", action="append", choices=sorted(BENCHES), required=True)
     parser.add_argument("--verilator", default="verilator")
-    parser.add_argument("--code-coverage", action="store_true", help="Build optional bench with Verilator line coverage.")
+    parser.add_argument("--code-coverage", action="store_true", help="Build optional bench with Verilator line/expression/toggle/user coverage.")
     args = parser.parse_args()
 
     REPORT.parent.mkdir(parents=True, exist_ok=True)

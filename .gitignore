@@ -37,6 +37,14 @@
 !/chiplet_extension/reports/firmware_cross_coverage_summary.csv
 !/chiplet_extension/reports/firmware_code_coverage_summary.txt
 !/chiplet_extension/reports/firmware_code_coverage_summary.md
+!/chiplet_extension/reports/formal_proof_summary.csv
+!/chiplet_extension/reports/async_cdc_summary.csv
+!/chiplet_extension/reports/uvm_ci_regress_summary.csv
+!/chiplet_extension/reports/uvm_ci_coverage_summary.csv
+!/chiplet_extension/reports/code_coverage_summary.txt
+!/chiplet_extension/reports/code_coverage_summary.md
+!/chiplet_extension/reports/code_coverage_test_ranking.csv
+!/chiplet_extension/reports/code_coverage_holes.csv
 
 # Packaged exports
 *.zip

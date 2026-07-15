@@ -76,7 +76,8 @@ package power_uvm_pkg;
             power_state_item item;
             forever begin
                 seq_item_port.get_next_item(item);
-                pwr_vif.set_power_state(item.state);
+                #10;
+                pwr_vif.power_state = item.state;
                 repeat (item.hold_cycles) #10;
                 seq_item_port.item_done();
             end
@@ -87,13 +88,13 @@ package power_uvm_pkg;
         `uvm_component_utils(power_monitor)
 
         virtual chiplet_power_if pwr_vif;
-`ifndef VERILATOR
+`ifdef CHIPLET_REAL_UVM
         uvm_analysis_port #(power_event_item) ap;
 `endif
 
         function new(string name, uvm_component parent);
             super.new(name, parent);
-`ifndef VERILATOR
+`ifdef CHIPLET_REAL_UVM
             ap = new("ap", this);
 `endif
         endfunction
@@ -137,7 +138,7 @@ package power_uvm_pkg;
                         item.save_dma_mem || item.restore_dma_mem) begin
                         g_retention_events++;
                     end
-`ifndef VERILATOR
+`ifdef CHIPLET_REAL_UVM
                     ap.write(item);
 `endif
                 end
@@ -158,7 +159,7 @@ package power_uvm_pkg;
 
         function void build_phase(uvm_phase phase);
             super.build_phase(phase);
-`ifndef VERILATOR
+`ifdef CHIPLET_REAL_UVM
             sequencer = power_sequencer::type_id::create("sequencer", this);
             driver = power_driver::type_id::create("driver", this);
 `endif
@@ -167,7 +168,7 @@ package power_uvm_pkg;
 
         function void connect_phase(uvm_phase phase);
             super.connect_phase(phase);
-`ifndef VERILATOR
+`ifdef CHIPLET_REAL_UVM
             driver.seq_item_port.connect(sequencer.seq_item_export);
 `endif
         endfunction

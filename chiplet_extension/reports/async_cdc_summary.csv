@@ -1,0 +1,5 @@
+clock_ratio,reset_skew,status,log
+5:5,0,PASS,chiplet_extension/build/async_cdc/ratio_5_5_skew_0.log
+5:7,1,PASS,chiplet_extension/build/async_cdc/ratio_5_7_skew_1.log
+3:5,2,PASS,chiplet_extension/build/async_cdc/ratio_3_5_skew_2.log
+5:2,3,PASS,chiplet_extension/build/async_cdc/ratio_5_2_skew_3.log

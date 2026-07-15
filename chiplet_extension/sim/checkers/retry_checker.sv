@@ -30,7 +30,7 @@ module retry_checker #(
             if (crc_error) begin
                 expect_resend_q <= 1'b1;
                 resend_window_q <= RESEND_WINDOW;
-            end else if (expect_resend_q && resend_window_q != 0) begin
+            end else if (expect_resend_q && resend_window_q != 0 && link_ready) begin
                 resend_window_q <= resend_window_q - 1;
                 if (resend_window_q == 1) begin
                     $error("RETRY_RESEND_WINDOW: resend request missing within %0d cycles", RESEND_WINDOW);
@@ -42,7 +42,7 @@ module retry_checker #(
                 expect_resend_q <= 1'b0;
                 resend_window_q <= 0;
                 progress_window_q <= RESEND_WINDOW;
-            end else if (progress_window_q != 0) begin
+            end else if (progress_window_q != 0 && link_ready) begin
                 progress_window_q <= progress_window_q - 1;
                 if (tx_fire) begin
                     progress_window_q <= 0;
