@@ -498,6 +498,12 @@ package soc_tests_pkg;
                 cfg.ref_words = 0;
                 cfg.max_cycles = 10000;
             end
+            "dma_csr_readback_sweep": begin
+                cfg.scenario_kind = "coverage_edge";
+                cfg.use_dma = 1'b1;
+                cfg.ref_words = 0;
+                cfg.max_cycles = 8000;
+            end
             "mem_sleep_retained_bank": begin
                 cfg.scenario_kind = "dma_mem_power";
                 cfg.use_dma = 1'b1;

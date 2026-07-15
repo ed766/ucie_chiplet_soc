@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -54,6 +55,9 @@ def main() -> int:
         return fail(f"Could not run {verilator} --version")
 
     BUILD_ROOT.mkdir(parents=True, exist_ok=True)
+    obj_dir = BUILD_ROOT / "obj_dir"
+    if obj_dir.exists():
+        shutil.rmtree(obj_dir)
     smoke = BUILD_ROOT / "uvm_env_smoke.sv"
     smoke.write_text(
         "module uvm_env_smoke;\n"
@@ -81,7 +85,7 @@ def main() -> int:
         "--top-module",
         "uvm_env_smoke",
         "-Mdir",
-        str(BUILD_ROOT / "obj_dir"),
+        str(obj_dir),
     ]
     result = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
     (BUILD_ROOT / "uvm_env_smoke.compile.log").write_text(
