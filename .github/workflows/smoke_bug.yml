@@ -5,6 +5,15 @@ on:
   pull_request:
 
 jobs:
+  documentation-consistency:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Regenerate README metrics and validate links
+        run: make -C chiplet_extension readme-metrics docs-check
+      - name: Require reproducible documentation
+        run: git diff --exit-code
+
   core-evidence:
     runs-on: ubuntu-latest
     defaults:

@@ -48,7 +48,7 @@ not a list of hypothetical bugs.
 | Injected fault | `UCIE_BUG_RETRY_SEQ` |
 | Checker / assertion | `retry_checker.sv`, `ucie_scoreboard.sv`, and `tb_ucie_tx_retry_props.sv`. |
 | Regression | `bug_retry_seq` |
-| Debug artifact | See `docs/debug_case_study_dma_retry.md` and `docs/images/dma_retry_waveform.png` for the retry timeline style used in debug. |
+| Debug artifact | See `docs/reference/debug_case_study_dma_retry.md` and `docs/images/dma_retry_waveform.png` for the retry timeline style used in debug. |
 | Validation result | Expected failure proves retry identity is checked directly rather than inferred from handshakes. |
 
 ## DMA Completion Generated Too Early

@@ -20,7 +20,7 @@ SIM = ROOT / "sim"
 BUILD = ROOT / "build" / "optional_benches"
 REPORT = ROOT / "reports" / "optional_bench_summary.csv"
 AXI_COVERAGE_CSV = ROOT / "reports" / "axi_lite_coverage_summary.csv"
-AXI_COVERAGE_MD = ROOT.parent / "docs" / "axi_lite_coverage_summary.md"
+AXI_COVERAGE_MD = ROOT.parent / "docs" / "reference" / "axi_lite_coverage_summary.md"
 CODE_COVERAGE_ARTIFACTS = ROOT / "build" / "verilator_regression" / "artifacts"
 
 

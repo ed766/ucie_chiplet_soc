@@ -48,7 +48,7 @@ The waveform below is generated deterministically by:
 make -C chiplet_extension dma-retry-waveform
 ```
 
-![DMA retry debug waveform](images/dma_retry_waveform.png)
+![DMA retry debug waveform](../images/dma_retry_waveform.png)
 
 The key debug landmarks are:
 

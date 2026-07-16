@@ -154,7 +154,7 @@ def generate(csv_out: Path, md_out: Path) -> None:
     cross_pair = cross_summary(cross)
     true_cross_pair = cross_summary(true_cross)
     random_pair = random_stress_summary(random_stress)
-    assertions = assertion_count(DOCS / "assertion_inventory.md")
+    assertions = assertion_count(DOCS / "reference" / "assertion_inventory.md")
     axi_pair = axi_lite_summary(axi_lite)
     axi_status = optional_bench_summary(optional_benches, "axi_lite")
     optional_cov = code_cov.get("optional_collateral_rtl_line_coverage_pct", "NA")

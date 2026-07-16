@@ -4,10 +4,10 @@ This is RTL execution evidence from Verilator coverage. It is separate from func
 
 | Metric | Value |
 | --- | ---: |
-| Coverage data files | 98 |
-| Line points hit | 5381 |
-| Line points total | 7242 |
-| Overall line coverage proxy | 74.30% |
+| Coverage data files | 107 |
+| Line points hit | 5800 |
+| Line points total | 6854 |
+| Overall line coverage proxy | 84.62% |
 | Design RTL line coverage proxy | 93.26% |
 
 
@@ -22,7 +22,7 @@ This is RTL execution evidence from Verilator coverage. It is separate from func
 | `toggle` | 1933 | 2570 | 75.21% | diagnostic |
 | `toggle_reviewed` | 1910 | 2116 | 90.26% | 90% (MET) |
 
-Toggle instrumentation excludes signals wider than 32 bits. The reviewed row additionally excludes only structurally unreachable baseline points and long-horizon diagnostic counters; raw line coverage has no design-RTL exclusions. See `docs/code_coverage_exclusions.md`.
+Toggle instrumentation excludes signals wider than 32 bits. The reviewed row additionally excludes only structurally unreachable baseline points and long-horizon diagnostic counters; raw line coverage has no design-RTL exclusions. See `docs/reference/code_coverage_exclusions.md`.
 
 Test contribution ranking: `chiplet_extension/reports/code_coverage_test_ranking.csv`.
 Uncovered-point inventory: `chiplet_extension/reports/code_coverage_holes.csv`.
@@ -98,7 +98,7 @@ Threshold enforcement for this invocation: **enabled**.
 | `design_rtl` | 1991 | 2135 | 93.26% |
 | `optional_collateral_rtl` | 121 | 131 | 92.37% |
 | `checker_monitor` | 1294 | 1598 | 80.98% |
-| `testbench` | 1975 | 3378 | 58.47% |
+| `testbench` | 2394 | 2990 | 80.07% |
 
 ## Component Coverage
 

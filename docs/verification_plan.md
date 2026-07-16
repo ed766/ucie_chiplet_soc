@@ -78,7 +78,7 @@ closure, not replacing the stable gate:
 - `chiplet_extension/sim/assertions/chiplet_protocol_assertions.svh`
   - reusable assertion intent for DMA queue integrity, credit bounds, retry
     replay, memory integrity, IRQ/pending behavior, and power sequencing
-- `docs/assertion_inventory.md`
+- `docs/reference/assertion_inventory.md`
   - generated assertion inventory grouped by DMA, link/retry/credit,
     memory/parity, and power/retention invariants
 - These are bounded property checks, not theorem-proving formal signoff.
@@ -509,10 +509,10 @@ the six coverage-edge scenarios remain outside canonical functional closure.
 - `chiplet_extension/reports/firmware_code_coverage_summary.md`
 - `docs/bug_diary.md`
 - `docs/bug_diary.md`
-- `docs/debug_case_study_dma_retry.md`
+- `docs/reference/debug_case_study_dma_retry.md`
 - `docs/images/dma_retry_waveform.png`
 - `docs/firmware_soc_verification.md`
-- `docs/debug_case_study_firmware_dma.md`
+- `docs/reference/debug_case_study_firmware_dma.md`
 - `docs/images/firmware_dma_waveform.png`
 - `docs/performance_characterization.md`
 
@@ -522,11 +522,11 @@ Optional seeded-random collateral:
 - `chiplet_extension/reports/stress_retry_50_manifest.csv`
 - `chiplet_extension/reports/power_dma_cross_25_manifest.csv`
 - `chiplet_extension/reports/random_stress_regress_summary.csv`
-- `docs/random_stress_summary.md`
+- `docs/reference/random_stress_summary.md`
 
 Assertion collateral:
 
-- `docs/assertion_inventory.md`
+- `docs/reference/assertion_inventory.md`
 
 UVM collateral:
 

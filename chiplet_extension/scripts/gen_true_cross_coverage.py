@@ -15,7 +15,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 REPORT_ROOT = ROOT / "reports"
-DOC_OUT = ROOT.parent / "docs" / "true_cross_coverage_summary.md"
+DOC_OUT = ROOT.parent / "docs" / "reference" / "true_cross_coverage_summary.md"
 MIN_OBSERVED = 8
 
 

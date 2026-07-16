@@ -44,7 +44,7 @@ Coverage was closed with a mix of directed tests and bounded stress:
 
 - Functional coverage: `60 / 60` bins in `chiplet_extension/reports/coverage_summary.csv`.
 - Grouped closure matrix: `chiplet_extension/reports/coverage_closure_matrix.md`.
-- Interaction evidence: `chiplet_extension/reports/true_cross_coverage_summary.csv` and `docs/true_cross_coverage_summary.md`.
+- Interaction evidence: `chiplet_extension/reports/true_cross_coverage_summary.csv` and `docs/reference/true_cross_coverage_summary.md`.
 - Regression evidence: `chiplet_extension/reports/regress_summary.csv`.
 - Bug sensitivity: `docs/bug_diary.md` and `chiplet_extension/reports/failure_buckets.csv`.
 

@@ -201,7 +201,7 @@ def main() -> int:
             "",
             "These cross groups are quality evidence layered on top of the canonical flat closure vector. They do not replace the `60 / 60` closure target.",
             "",
-            "Optional seeded-random stress evidence is summarized separately in `docs/random_stress_summary.md`; it is useful for stress confidence but is not a gating closure target.",
+            "Optional seeded-random stress evidence is summarized separately in `docs/reference/random_stress_summary.md`; it is useful for stress confidence but is not a gating closure target.",
             "",
             "| Cross group | Evidence metrics | Status |",
             "| --- | --- | --- |",

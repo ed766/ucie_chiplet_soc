@@ -10,7 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 REPO = ROOT.parent
 REPORTS = ROOT / "reports"
-OUTPUT = REPO / "docs" / "random_stress_summary.md"
+OUTPUT = REPO / "docs" / "reference" / "random_stress_summary.md"
 EXEC_SUMMARY = REPORTS / "random_stress_regress_summary.csv"
 
 FAMILIES = (

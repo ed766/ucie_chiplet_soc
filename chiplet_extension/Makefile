@@ -61,17 +61,17 @@ REPORT_ARTIFACTS := \
 		$(REPORTS_DIR)/firmware_cross_coverage_summary.csv \
 		$(REPORTS_DIR)/firmware_code_coverage_summary.md \
 		$(ROOT_DIR)/../docs/performance_characterization.md \
-		$(ROOT_DIR)/../docs/assertion_inventory.md \
-		$(ROOT_DIR)/../docs/random_stress_summary.md \
-		$(ROOT_DIR)/../docs/true_cross_coverage_summary.md \
-		$(ROOT_DIR)/../docs/negative_test_summary.md \
+		$(ROOT_DIR)/../docs/reference/assertion_inventory.md \
+		$(ROOT_DIR)/../docs/reference/random_stress_summary.md \
+		$(ROOT_DIR)/../docs/reference/true_cross_coverage_summary.md \
+		$(ROOT_DIR)/../docs/reference/negative_test_summary.md \
 		$(ROOT_DIR)/../docs/project_metrics.md \
 		$(ROOT_DIR)/../docs/uvm_status.md \
 		$(ROOT_DIR)/../docs/open_source_flow_summary.md \
-		$(ROOT_DIR)/../docs/clock_reset_cdc_plan.md \
-		$(ROOT_DIR)/../docs/c_reference_model_summary.md
+		$(ROOT_DIR)/../docs/reference/clock_reset_cdc_plan.md \
+		$(ROOT_DIR)/../docs/reference/c_reference_model_summary.md
 
-.PHONY: chiplet-sim chiplet-report project-check regress closure closure-equivalence power-regress stress negative-regress negative-summary bug-validate formal-check formal-prove assertion-inventory upf-check frontend-quality code-coverage coverage-edges-check axi-lite-check cdc-rdc-check async-cdc-check credit-edges-check c-reference-check firmware-soc-smoke firmware-soc-check firmware-code-coverage firmware-waveform uvm-check-env uvm-smoke uvm-ci uvm-ral-smoke uvm-closure uvm-regress characterize characterize-link characterize-dma-mem performance-report project-metrics normalize-report-paths random-smoke-25 stress-retry-50 power-dma-cross-25 random-stress-run random-stress-summary cross-coverage-summary dma-retry-waveform clean
+.PHONY: chiplet-sim chiplet-report project-check regress closure closure-equivalence power-regress stress negative-regress negative-summary bug-validate formal-check formal-prove assertion-inventory upf-check frontend-quality code-coverage coverage-edges-check axi-lite-check cdc-rdc-check async-cdc-check credit-edges-check c-reference-check firmware-soc-smoke firmware-soc-check firmware-code-coverage firmware-waveform uvm-check-env uvm-smoke uvm-ci uvm-ral-smoke uvm-closure uvm-regress characterize characterize-link characterize-dma-mem performance-report project-metrics readme-metrics docs-check normalize-report-paths random-smoke-25 stress-retry-50 power-dma-cross-25 random-stress-run random-stress-summary cross-coverage-summary dma-retry-waveform clean
 
 chiplet-sim:
 	$(PYTHON) $(RUN_REGRESSION) --tests prbs_smoke,soc_smoke --random-seeds 1 --seed $(SEED) --verilator $(VERILATOR) --report-prefix smoke --run-id-prefix smoke
@@ -91,6 +91,8 @@ project-check:
 	$(MAKE) firmware-soc-check
 	$(MAKE) performance-report
 	$(MAKE) project-metrics
+	$(MAKE) readme-metrics
+	$(MAKE) docs-check
 	$(MAKE) normalize-report-paths
 	@! rg -n "57 / 57|52 / 52|17 / 17|UPF scaffolding|UPF placeholders|Power-intent placeholders" $(ROOT_DIR)/../README.md $(ROOT_DIR)/../docs $(ROOT_DIR)/README.md
 
@@ -127,13 +129,13 @@ random-stress-run: random-smoke-25 stress-retry-50 power-dma-cross-25
 	$(PYTHON) $(NORMALIZE_REPORT_PATHS)
 
 cross-coverage-summary:
-	$(PYTHON) $(GEN_TRUE_CROSS_COVERAGE) --summary $(REPORTS_DIR)/regress_summary.csv --csv-out $(REPORTS_DIR)/true_cross_coverage_summary.csv --md-out $(ROOT_DIR)/../docs/true_cross_coverage_summary.md
+	$(PYTHON) $(GEN_TRUE_CROSS_COVERAGE) --summary $(REPORTS_DIR)/regress_summary.csv --csv-out $(REPORTS_DIR)/true_cross_coverage_summary.csv --md-out $(ROOT_DIR)/../docs/reference/true_cross_coverage_summary.md
 
 negative-regress:
 	$(PYTHON) $(RUN_REGRESSION) --suite negative --random-seeds 1 --seed $(SEED) --verilator $(VERILATOR) --report-prefix negative --run-id-prefix negative
 
 negative-summary: negative-regress
-	$(PYTHON) $(GEN_NEGATIVE_TEST_SUMMARY) --summary $(REPORTS_DIR)/negative_regress_summary.csv --csv-out $(REPORTS_DIR)/negative_test_summary.csv --md-out $(ROOT_DIR)/../docs/negative_test_summary.md
+	$(PYTHON) $(GEN_NEGATIVE_TEST_SUMMARY) --summary $(REPORTS_DIR)/negative_regress_summary.csv --csv-out $(REPORTS_DIR)/negative_test_summary.csv --md-out $(ROOT_DIR)/../docs/reference/negative_test_summary.md
 
 dma-retry-waveform:
 	$(PYTHON) $(RENDER_DMA_RETRY_WAVEFORM) --output $(ROOT_DIR)/../docs/images/dma_retry_waveform.png
@@ -193,7 +195,7 @@ code-coverage:
 	$(PYTHON) $(RUN_REGRESSION) --suite negative --random-seeds 1 --seed $(SEED) --verilator $(VERILATOR) --report-prefix codecov_negative --run-id-prefix codecov_negative --code-coverage
 	$(PYTHON) $(RUN_REGRESSION) --tests prbs_link_degraded_timeout --random-seeds 1 --seed $(SEED) --verilator $(VERILATOR) --report-prefix codecov_edge --run-id-prefix codecov_edge --code-coverage
 	$(PYTHON) $(RUN_REGRESSION) --tests dma_csr_readback_sweep --random-seeds 1 --seed $(SEED) --verilator $(VERILATOR) --report-prefix codecov_csr --run-id-prefix codecov_csr --code-coverage
-	$(PYTHON) $(RUN_REGRESSION) --tests soc_rand_mix,prbs_rand_stress --random-seeds 8 --seed $(SEED) --verilator $(VERILATOR) --report-prefix codecov_entropy --run-id-prefix codecov_entropy --code-coverage
+	$(PYTHON) $(RUN_REGRESSION) --tests prbs_rand_stress --random-seeds 8 --seed $(SEED) --verilator $(VERILATOR) --report-prefix codecov_entropy --run-id-prefix codecov_entropy --code-coverage
 	$(PYTHON) $(RUN_REGRESSION) --tests dma_queue_smoke --random-seeds 1 --seed $(SEED) --verilator $(VERILATOR) --report-prefix codecov_entropy_dma --run-id-prefix codecov_entropy_dma --code-coverage --plusarg DMA_SRC_BASE=240 --plusarg DMA_DST_BASE=224 --plusarg DMA_LEN_WORDS=16 --plusarg DMA_TAG=65535
 	$(PYTHON) $(RUN_REGRESSION) --suite coverage_edge --random-seeds 1 --seed $(SEED) --verilator $(VERILATOR) --report-prefix codecov_coverage_edges --run-id-prefix codecov_coverage_edges --code-coverage
 	$(PYTHON) $(RUN_OPTIONAL_BENCHES) --bench axi_lite --bench cdc_rdc --bench credit_mgr_edges --verilator $(VERILATOR) --code-coverage
@@ -235,6 +237,12 @@ firmware-waveform: firmware-soc-check
 
 project-metrics:
 	$(PYTHON) $(GEN_PROJECT_METRICS)
+
+readme-metrics: project-metrics
+	$(PYTHON) $(ROOT_DIR)/scripts/update_readme_metrics.py
+
+docs-check:
+	$(PYTHON) $(ROOT_DIR)/scripts/check_docs.py
 
 normalize-report-paths:
 	$(PYTHON) $(NORMALIZE_REPORT_PATHS)

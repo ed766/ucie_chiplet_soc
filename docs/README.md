@@ -1,20 +1,33 @@
-# Verification Evidence Index
+# Documentation Index
 
-This is the curated reviewer path. Generated CSV and detailed supporting
-artifacts remain under `chiplet_extension/reports/`.
+The primary reviewer path is intentionally limited to twelve documents. Generated and specialist collateral remains available under `reference/` without competing with the project narrative.
 
-1. [`project_metrics.md`](project_metrics.md) - current evidence snapshot.
-2. [`verification_traceability_matrix.md`](verification_traceability_matrix.md) - requirement-to-test/checker mapping.
-3. [`firmware_soc_verification.md`](firmware_soc_verification.md) - RV32/APB firmware-driven subsystem verification.
-4. [`bug_diary.md`](bug_diary.md) - five implemented injected bugs and debug evidence.
-5. [`coverage_closure_case_study.md`](coverage_closure_case_study.md) - functional and interaction closure strategy.
-6. [`assertion_inventory.md`](assertion_inventory.md) - simulation and bounded property inventory.
-7. [`formal_appendix.md`](formal_appendix.md) - bounded and solver-backed formal claim boundaries.
-8. [`power_verification_plan.md`](power_verification_plan.md) - proxy behavior and UPF static intent.
-9. [`clock_reset_cdc_plan.md`](clock_reset_cdc_plan.md) - standalone and integrated multi-clock CDC evidence.
-10. [`performance_characterization.md`](performance_characterization.md) - latency, throughput, queueing, and recovery tradeoffs.
-11. [`uvm_status.md`](uvm_status.md) - real-UVM CI and local compatibility status.
-12. [`open_source_flow_summary.md`](open_source_flow_summary.md) - tool coverage and non-signoff boundaries.
+## Primary Documents
 
-AXI-Lite, negative-test, cross-coverage, C-model, and waveform case-study pages
-are supporting collateral linked from the traceability matrix.
+1. [Project metrics](project_metrics.md) - canonical report-backed snapshot.
+2. [Verification plan](verification_plan.md) - closure layers, scenarios, and acceptance policy.
+3. [Verification traceability](verification_traceability_matrix.md) - requirement-to-stimulus/checker/evidence mapping.
+4. [Firmware-driven verification](firmware_soc_verification.md) - RV32/APB MMIO scenarios and coverage.
+5. [Power verification](power_verification_plan.md) - proxy behavior, UPF intent, isolation, and retention.
+6. [Coverage closure case study](coverage_closure_case_study.md) - functional and interaction closure strategy.
+7. [Formal appendix](formal_appendix.md) - bounded and solver-backed property evidence.
+8. [Bug diary](bug_diary.md) - implemented mutations and failure triage.
+9. [Performance characterization](performance_characterization.md) - measured behavioral tradeoffs.
+10. [Open-source flow summary](open_source_flow_summary.md) - simulation, coverage, implementation, and signoff boundaries.
+11. [UVM status](uvm_status.md) - supporting real-UVM phase/TLM/RAL lane.
+12. This index.
+
+## Reference Collateral
+
+- [Assertion inventory](reference/assertion_inventory.md)
+- [AXI-Lite protocol coverage](reference/axi_lite_coverage_summary.md)
+- [C reference model](reference/c_reference_model_summary.md)
+- [Clock/reset and CDC plan](reference/clock_reset_cdc_plan.md)
+- [Code-coverage exclusions](reference/code_coverage_exclusions.md)
+- [DMA retry debug case](reference/debug_case_study_dma_retry.md)
+- [Firmware DMA waveform case](reference/debug_case_study_firmware_dma.md)
+- [Negative-test summary](reference/negative_test_summary.md)
+- [Seeded-random stress summary](reference/random_stress_summary.md)
+- [True interaction coverage](reference/true_cross_coverage_summary.md)
+
+Canonical machine-readable evidence remains under `chiplet_extension/reports/`. Raw logs, build products, and waveform databases are generated locally and are not reviewer-facing release artifacts.

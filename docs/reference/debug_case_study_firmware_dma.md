@@ -12,7 +12,7 @@ The `dma_smoke` ROM program stages a descriptor through APB MMIO, writes the DMA
 
 ## Waveform Evidence
 
-![RV32 firmware APB DMA waveform](images/firmware_dma_waveform.png)
+![RV32 firmware APB DMA waveform](../images/firmware_dma_waveform.png)
 
 The trace is generated from an actual Verilator event CSV. It shows RV32 instruction commits, APB handshakes, descriptor acceptance, completion push, level IRQ, completion service, and the final `EBREAK` halt.
 

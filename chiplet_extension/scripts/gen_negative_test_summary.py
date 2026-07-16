@@ -11,7 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 REPORT_ROOT = ROOT / "reports"
-DOC_OUT = ROOT.parent / "docs" / "negative_test_summary.md"
+DOC_OUT = ROOT.parent / "docs" / "reference" / "negative_test_summary.md"
 
 
 @dataclass(frozen=True)

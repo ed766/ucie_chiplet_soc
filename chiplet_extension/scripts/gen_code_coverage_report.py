@@ -112,7 +112,11 @@ def write_test_ranking(test_hits: dict[str, set[str]], output: Path) -> None:
         })
     rows.sort(key=lambda row: (row["unique_points"], row["covered_points"]), reverse=True)
     with output.open("w", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=["test_artifact", "covered_points", "unique_points"])
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=["test_artifact", "covered_points", "unique_points"],
+            lineterminator="\n",
+        )
         writer.writeheader(); writer.writerows(rows)
 
 
@@ -186,6 +190,7 @@ def write_coverage_holes(
         writer = csv.DictWriter(
             handle,
             fieldnames=("point_type", "source", "line", "object", "hit_count", "reviewed_exclusion"),
+            lineterminator="\n",
         )
         writer.writeheader()
         writer.writerows(rows)
@@ -366,6 +371,8 @@ def main() -> int:
             for point_type, values in sorted(native_points.items()) if values
         ],
         f"design_branch_expression_coverage_pct={coverage_pct(sum(count > 0 for count in native_points.get('branch', {}).values()), len(native_points.get('branch', {}))):.2f}",
+        f"design_toggle_points_hit={sum(count > 0 for count in native_points.get('toggle', {}).values())}",
+        f"design_toggle_points_total={len(native_points.get('toggle', {}))}",
         f"design_toggle_reviewed_points_hit={reviewed_toggle_hit}",
         f"design_toggle_reviewed_points_total={reviewed_toggle_total}",
         f"design_toggle_reviewed_coverage_pct={coverage_pct(reviewed_toggle_hit, reviewed_toggle_total):.2f}",
@@ -422,7 +429,7 @@ def main() -> int:
         )
     lines.extend([
         "",
-        "Toggle instrumentation excludes signals wider than 32 bits. The reviewed row additionally excludes only structurally unreachable baseline points and long-horizon diagnostic counters; raw line coverage has no design-RTL exclusions. See `docs/code_coverage_exclusions.md`.",
+        "Toggle instrumentation excludes signals wider than 32 bits. The reviewed row additionally excludes only structurally unreachable baseline points and long-horizon diagnostic counters; raw line coverage has no design-RTL exclusions. See `docs/reference/code_coverage_exclusions.md`.",
         "",
         f"Test contribution ranking: `{display_path(ranking_out)}`.",
         f"Uncovered-point inventory: `{display_path(Path(args.holes_out).resolve())}`." if args.holes_out else "",

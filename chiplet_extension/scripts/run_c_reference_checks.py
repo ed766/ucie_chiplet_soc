@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parent.parent
 MODEL = ROOT / "models" / "flit_crc_ref.c"
 BUILD_DIR = ROOT / "build" / "c_reference"
 REPORT_CSV = ROOT / "reports" / "c_reference_summary.csv"
-REPORT_MD = ROOT.parent / "docs" / "c_reference_model_summary.md"
+REPORT_MD = ROOT.parent / "docs" / "reference" / "c_reference_model_summary.md"
 
 
 def main() -> int:

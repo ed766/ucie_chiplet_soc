@@ -53,18 +53,18 @@ make formal-prove       # requires OSS CAD Suite/SymbiYosys
 
 Then inspect `../docs/project_metrics.md`,
 `../docs/verification_traceability_matrix.md`, `../docs/coverage_closure_case_study.md`,
-`../docs/bug_diary.md`, and `../docs/true_cross_coverage_summary.md`. For AXI-Lite/control-bus collateral,
-inspect `../docs/axi_lite_coverage_summary.md`. For UPF and low-power intent,
+`../docs/bug_diary.md`, and `../docs/reference/true_cross_coverage_summary.md`. For AXI-Lite/control-bus collateral,
+inspect `../docs/reference/axi_lite_coverage_summary.md`. For UPF and low-power intent,
 inspect `reports/upf_intent_summary.md` and `../docs/power_verification_plan.md`.
 For open-source quality collateral, also inspect
-`../docs/open_source_flow_summary.md` and `../docs/clock_reset_cdc_plan.md`.
+`../docs/open_source_flow_summary.md` and `../docs/reference/clock_reset_cdc_plan.md`.
 For CPU-driven subsystem evidence, inspect `../docs/firmware_soc_verification.md`.
-The trace walkthrough is in `../docs/debug_case_study_firmware_dma.md`.
+The trace walkthrough is in `../docs/reference/debug_case_study_firmware_dma.md`.
 
 Hiring-manager quick path: start with `../docs/project_metrics.md`, then
 `../docs/verification_traceability_matrix.md`, `../docs/coverage_closure_case_study.md`,
 `../docs/bug_diary.md`,
-`../docs/axi_lite_coverage_summary.md`, and `reports/upf_intent_summary.md`.
+`../docs/reference/axi_lite_coverage_summary.md`, and `reports/upf_intent_summary.md`.
 
 Current checked-in reports:
 
@@ -95,14 +95,14 @@ Current checked-in reports:
 - `reports/protocol_characterization.md`
 - `../docs/performance_characterization.md`
 - `../docs/open_source_flow_summary.md`
-- `../docs/clock_reset_cdc_plan.md`
+- `../docs/reference/clock_reset_cdc_plan.md`
 - `../docs/project_metrics.md`
-- `../docs/assertion_inventory.md`
+- `../docs/reference/assertion_inventory.md`
 - `../docs/coverage_closure_case_study.md`
-- `../docs/random_stress_summary.md`
+- `../docs/reference/random_stress_summary.md`
 - `../docs/uvm_status.md`
-- `../docs/true_cross_coverage_summary.md`
-- `../docs/axi_lite_coverage_summary.md`
+- `../docs/reference/true_cross_coverage_summary.md`
+- `../docs/reference/axi_lite_coverage_summary.md`
 - `../docs/verification_traceability_matrix.md`
 - `../docs/firmware_soc_verification.md`
 
@@ -598,7 +598,7 @@ correctly:
 - `mem_bug_parity_skip` -> `memory_integrity`
 
 The consolidated injected-fault diary is `../docs/bug_diary.md`, and the DMA retry debug walkthrough is
-`../docs/debug_case_study_dma_retry.md`.
+`../docs/reference/debug_case_study_dma_retry.md`.
 
 ## Power-Proxy Verification
 

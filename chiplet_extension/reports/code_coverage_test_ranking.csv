@@ -2,7 +2,7 @@ test_artifact,covered_points,unique_points
 codecov_optional_credit_mgr_edges.coverage,34,34
 codecov_power_deep_sleep_recover.coverage,1343,30
 codecov_coverage_edges_dma_timeout_retire_stall.coverage,1544,14
-codecov_coverage_edges_dma_codecov_state_entropy.coverage,1747,10
+codecov_coverage_edges_dma_codecov_state_entropy.coverage,1747,9
 codecov_coverage_edges_soc_bidirectional_payload_entropy.coverage,1653,9
 codecov_mem_parity_dst_maint_detect.coverage,702,8
 codecov_coverage_edges_mem_parity_src_maint_detect.coverage,718,7
@@ -73,6 +73,7 @@ codecov_dma_range_reject.coverage,648,0
 codecov_dma_odd_len_reject.coverage,631,0
 codecov_mem_sleep_retained_bank.coverage,625,0
 codecov_dma_reset_mid_queue.coverage,620,0
+codecov_csr_dma_csr_readback_sweep.coverage,539,0
 codecov_dma_comp_pop_empty.coverage,512,0
 codecov_negative_dma_comp_pop_empty.coverage,512,0
 codecov_prbs_lane_fault_recover.coverage,504,0
@@ -83,7 +84,14 @@ codecov_entropy_prbs_rand_stress_seed011660ff.coverage,450,0
 codecov_entropy_prbs_rand_stress_seed0f3f3459.coverage,450,0
 codecov_entropy_prbs_rand_stress_seed132b315f.coverage,450,0
 codecov_entropy_prbs_rand_stress_seed21593db7.coverage,450,0
+codecov_entropy_prbs_rand_stress_seed22ff4677.coverage,450,0
+codecov_entropy_prbs_rand_stress_seed375fe470.coverage,450,0
+codecov_entropy_prbs_rand_stress_seed3b5be064.coverage,450,0
+codecov_entropy_prbs_rand_stress_seed499c71a9.coverage,450,0
 codecov_entropy_prbs_rand_stress_seed4e7089b6.coverage,450,0
+codecov_entropy_prbs_rand_stress_seed53d41ef2.coverage,450,0
+codecov_entropy_prbs_rand_stress_seed5e7aff07.coverage,450,0
+codecov_entropy_prbs_rand_stress_seed626147fe.coverage,450,0
 codecov_entropy_prbs_rand_stress_seed6f69ceb1.coverage,450,0
 codecov_entropy_prbs_rand_stress_seed78b51d29.coverage,450,0
 codecov_entropy_prbs_rand_stress_seed799b966c.coverage,450,0
@@ -95,5 +103,6 @@ codecov_prbs_latency_nominal.coverage,450,0
 codecov_prbs_rand_stress.coverage,450,0
 codecov_prbs_reset_midflight.coverage,450,0
 codecov_prbs_smoke.coverage,450,0
+codecov_entropy_prbs_rand_stress_seed65494e63.coverage,448,0
 codecov_optional_axi_lite.coverage,0,0
 codecov_optional_cdc_rdc.coverage,0,0

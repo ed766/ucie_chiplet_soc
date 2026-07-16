@@ -141,7 +141,7 @@ def scan_cdc_rdc() -> tuple[dict[str, str], list[dict[str, str]]]:
         {
             "crossing": "chiplet_datapath_waiver",
             "strategy": "documented waiver: no asynchronous die-to-die clock crossing in this behavioral proxy",
-            "evidence": "docs/clock_reset_cdc_plan.md",
+            "evidence": "docs/reference/clock_reset_cdc_plan.md",
             "status": "WAIVED",
         },
     ]

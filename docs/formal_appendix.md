@@ -34,7 +34,7 @@ and verifies its archive checksum before execution.
 - `chiplet_extension/sim/tb_axi_lite_csr_wrapper.sv`
 - `chiplet_extension/scripts/run_bounded_properties.py`
 - `chiplet_extension/reports/formal_summary.csv`
-- `docs/assertion_inventory.md`
+- `docs/reference/assertion_inventory.md`
 
 ## Invariants Of Interest
 
@@ -83,7 +83,7 @@ The checked-in harness set is useful in three ways:
 - it adds focused DMA, memory-integrity, CRC-reject, and power-PST invariants
 - it provides one bug-demo case for `UCIE_BUG_RETRY_SEQ`
 
-`docs/assertion_inventory.md` is generated from the assertion inventory script
+`docs/reference/assertion_inventory.md` is generated from the assertion inventory script
 and gives the interview-facing table of assertion name, protected invariant,
 harness/checker, and validation status. It includes both bounded SVA harnesses
 and simulation-bench protocol assertions such as the AXI-Lite CSR wrapper

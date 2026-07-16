@@ -14,7 +14,7 @@ REPO = ROOT.parent
 FORMAL_SUMMARY = ROOT / "reports" / "formal_summary.csv"
 OPTIONAL_BENCH_SUMMARY = ROOT / "reports" / "optional_bench_summary.csv"
 FIRMWARE_SUMMARY = ROOT / "reports" / "firmware_soc_summary.csv"
-OUTPUT = REPO / "docs" / "assertion_inventory.md"
+OUTPUT = REPO / "docs" / "reference" / "assertion_inventory.md"
 
 
 @dataclass(frozen=True)
