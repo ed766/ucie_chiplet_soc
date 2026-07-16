@@ -238,7 +238,7 @@ firmware-waveform: firmware-soc-check
 project-metrics:
 	$(PYTHON) $(GEN_PROJECT_METRICS)
 
-readme-metrics: project-metrics
+readme-metrics:
 	$(PYTHON) $(ROOT_DIR)/scripts/update_readme_metrics.py
 
 docs-check:
