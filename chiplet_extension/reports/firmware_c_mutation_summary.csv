@@ -1,0 +1,12 @@
+mutation,expected,assertion_detected,iss_detected,status,first_mismatch
+RV32_BUG_MRET_SKIP,SVA_AND_ISS_MISMATCH,1,1,PASS,"order 128: next PC 0x000003ec, expected 0x000003e8"
+TRACE_WRONG_NEXT_PC,ISS_MISMATCH,NA,1,PASS,"order 0: next PC 0x00000000, expected 0x00000004"
+TRACE_WRONG_RD_VALUE,ISS_MISMATCH,NA,1,PASS,"order 0: rd value 0x00004001, expected 0x00004000"
+TRACE_WRONG_MEMORY_MASK,ISS_MISMATCH,NA,1,PASS,"order 10: store mask 0x0, expected 0xf"
+TRACE_WRONG_MCAUSE,ISS_MISMATCH,NA,1,PASS,"order 82: mcause 1, expected 5"
+TRACE_WRONG_INSTRUCTION,ISS_MISMATCH,NA,1,PASS,"order 0: instruction 0x00005117, image has 0x00004117"
+TRACE_WRONG_MEMORY_DATA,ISS_MISMATCH,NA,1,PASS,"order 44: load source 0x55aa33c4, expected modeled memory 0x55aa33c5"
+TRACE_WRONG_CSR_SNAPSHOT,ISS_MISMATCH,NA,1,PASS,"order 0: CSR 0x300=0xffffffff, expected 0x00000000"
+TRACE_WRONG_RESET_EPOCH,ISS_MISMATCH,NA,1,PASS,"order 3: retirement order 3, expected 0"
+TRACE_DUPLICATE_RETIREMENT,ISS_MISMATCH,NA,1,PASS,"order 1: retirement order 1, expected 2"
+TRACE_DROPPED_RETIREMENT,ISS_MISMATCH,NA,1,PASS,"order 3: retirement order 3, expected 2"

@@ -28,6 +28,29 @@ module tb_firmware_soc;
     logic [31:0] cpu_mem_addr;
     logic [31:0] cpu_mem_wdata;
     logic [31:0] cpu_mem_rdata;
+    logic cpu_rvfi_valid;
+    logic [63:0] cpu_rvfi_order;
+    logic [31:0] cpu_rvfi_insn;
+    logic cpu_rvfi_trap;
+    logic cpu_rvfi_intr;
+    logic [31:0] cpu_rvfi_pc_rdata;
+    logic [31:0] cpu_rvfi_pc_wdata;
+    logic [4:0] cpu_rvfi_rs1_addr;
+    logic [4:0] cpu_rvfi_rs2_addr;
+    logic [31:0] cpu_rvfi_rs1_rdata;
+    logic [31:0] cpu_rvfi_rs2_rdata;
+    logic [4:0] cpu_rvfi_rd_addr;
+    logic [31:0] cpu_rvfi_rd_wdata;
+    logic [31:0] cpu_rvfi_mem_addr;
+    logic [3:0] cpu_rvfi_mem_rmask;
+    logic [3:0] cpu_rvfi_mem_wmask;
+    logic [31:0] cpu_rvfi_mem_rdata;
+    logic [31:0] cpu_rvfi_mem_wdata;
+    logic [31:0] cpu_rvfi_mstatus;
+    logic [31:0] cpu_rvfi_mie;
+    logic [31:0] cpu_rvfi_mtvec;
+    logic [31:0] cpu_rvfi_mepc;
+    logic [31:0] cpu_rvfi_mcause;
     logic [31:0] cpu_paddr;
     logic cpu_psel;
     logic cpu_penable;
@@ -76,6 +99,11 @@ module tb_firmware_soc;
     integer software_completion_reads;
     integer completion_order_errors;
     integer assertion_failures;
+    integer first_doorbell_cycle;
+    integer first_completion_cycle;
+    integer first_irq_cycle;
+    integer irq_entry_cycle;
+    integer handler_cycles_seen;
     integer sleep_hold;
     integer deep_sleep_hold;
     integer reset_hold;
@@ -119,6 +147,19 @@ module tb_firmware_soc;
     integer accepted_submit_check_count;
     integer submission_correlation_errors;
     integer trace_fd;
+    integer rvfi_trace_fd;
+    string rvfi_trace_path;
+    string power_event;
+    string error_profile;
+    integer requested_apb_wait;
+    integer requested_backpressure;
+    integer backpressure_hold;
+    integer reset_epoch;
+    integer forced_irq_entries;
+    integer reset_on_irq_countdown;
+    bit forced_irq_active;
+    bit irq_force_started;
+    integer reset_phase_observed;
 
     int unsigned ref_observed_count;
     int unsigned ref_mismatch_count;
@@ -127,7 +168,19 @@ module tb_firmware_soc;
 
     always #5 clk = ~clk;
 
+    always @(negedge rst_n) begin
+        if (cycles > 0) reset_epoch++;
+    end
+
+`ifdef FIRMWARE_C_MODE
+    soc_chiplet_rv32_top #(
+        .ROM_WORDS(2048),
+        .CPU_DATA_MEM_WORDS(4096),
+        .CPU_ENABLE_TRAPS(1'b1)
+    ) dut (
+`else
     soc_chiplet_rv32_top dut (
+`endif
         .clk(clk),
         .rst_n(rst_n),
         .power_state(power_state),
@@ -145,6 +198,29 @@ module tb_firmware_soc;
         .cpu_mem_addr(cpu_mem_addr),
         .cpu_mem_wdata(cpu_mem_wdata),
         .cpu_mem_rdata(cpu_mem_rdata),
+        .cpu_rvfi_valid(cpu_rvfi_valid),
+        .cpu_rvfi_order(cpu_rvfi_order),
+        .cpu_rvfi_insn(cpu_rvfi_insn),
+        .cpu_rvfi_trap(cpu_rvfi_trap),
+        .cpu_rvfi_intr(cpu_rvfi_intr),
+        .cpu_rvfi_pc_rdata(cpu_rvfi_pc_rdata),
+        .cpu_rvfi_pc_wdata(cpu_rvfi_pc_wdata),
+        .cpu_rvfi_rs1_addr(cpu_rvfi_rs1_addr),
+        .cpu_rvfi_rs2_addr(cpu_rvfi_rs2_addr),
+        .cpu_rvfi_rs1_rdata(cpu_rvfi_rs1_rdata),
+        .cpu_rvfi_rs2_rdata(cpu_rvfi_rs2_rdata),
+        .cpu_rvfi_rd_addr(cpu_rvfi_rd_addr),
+        .cpu_rvfi_rd_wdata(cpu_rvfi_rd_wdata),
+        .cpu_rvfi_mem_addr(cpu_rvfi_mem_addr),
+        .cpu_rvfi_mem_rmask(cpu_rvfi_mem_rmask),
+        .cpu_rvfi_mem_wmask(cpu_rvfi_mem_wmask),
+        .cpu_rvfi_mem_rdata(cpu_rvfi_mem_rdata),
+        .cpu_rvfi_mem_wdata(cpu_rvfi_mem_wdata),
+        .cpu_rvfi_mstatus(cpu_rvfi_mstatus),
+        .cpu_rvfi_mie(cpu_rvfi_mie),
+        .cpu_rvfi_mtvec(cpu_rvfi_mtvec),
+        .cpu_rvfi_mepc(cpu_rvfi_mepc),
+        .cpu_rvfi_mcause(cpu_rvfi_mcause),
         .cpu_paddr(cpu_paddr),
         .cpu_psel(cpu_psel),
         .cpu_penable(cpu_penable),
@@ -167,6 +243,36 @@ module tb_firmware_soc;
         .update_event(ref_update_event),
         .mismatch_event(ref_mismatch_event)
     );
+
+`ifdef FIRMWARE_C_MODE
+    rv32_firmware_assertions u_rv32_firmware_assertions (
+        .clk(clk),
+        .rst_n(rst_n),
+        .x0_value(dut.u_cpu.regs_q[0]),
+        .retire(cpu_retire),
+        .wb_valid(dut.u_cpu.wb_valid),
+        .psel(cpu_psel),
+        .penable(cpu_penable),
+        .pready(cpu_pready),
+        .pslverr(cpu_pslverr),
+        .rvfi_valid(cpu_rvfi_valid),
+        .rvfi_order(cpu_rvfi_order),
+        .rvfi_insn(cpu_rvfi_insn),
+        .rvfi_trap(cpu_rvfi_trap),
+        .rvfi_intr(cpu_rvfi_intr),
+        .rvfi_pc_rdata(cpu_rvfi_pc_rdata),
+        .rvfi_pc_wdata(cpu_rvfi_pc_wdata),
+        .rvfi_rd_addr(cpu_rvfi_rd_addr),
+        .rvfi_rd_wdata(cpu_rvfi_rd_wdata),
+        .rvfi_mem_addr(cpu_rvfi_mem_addr),
+        .rvfi_mem_rmask(cpu_rvfi_mem_rmask),
+        .rvfi_mem_wmask(cpu_rvfi_mem_wmask),
+        .rvfi_mstatus(cpu_rvfi_mstatus),
+        .rvfi_mie(cpu_rvfi_mie),
+        .rvfi_mepc(cpu_rvfi_mepc),
+        .rvfi_mcause(cpu_rvfi_mcause)
+    );
+`endif
 
     function automatic logic [63:0] source_word(input int unsigned addr);
         source_word = 64'h1000_0000_0000_0000 | 64'(addr);
@@ -237,7 +343,7 @@ module tb_firmware_soc;
                     record_assertion_failure("apb_control_stable_during_wait");
                 end
             end
-            if (cpu_retire && cpu_mem_valid && cpu_mem_addr >= 32'h100 &&
+            if (cpu_retire && cpu_mem_valid && cpu_mem_addr >= 32'h100 && cpu_mem_addr <= 32'h1ff &&
                 !(prev_psel && prev_penable && prev_pready)) begin
                 record_assertion_failure("rv32_mmio_retire_requires_pready");
             end
@@ -272,6 +378,7 @@ module tb_firmware_soc;
                 end
                 if (cpu_pwrite && cpu_paddr == 32'h100 && cpu_pwdata[0]) begin
                     doorbells_seen++;
+                    if (first_doorbell_cycle < 0) first_doorbell_cycle = cycles;
                     prior_doorbell = 1'b1;
                     submitted_tags[submitted_tag_count] = firmware_staged_tag;
                     submitted_tag_count++;
@@ -300,6 +407,10 @@ module tb_firmware_soc;
                 else range_errors_seen++;
             end
             if (irq_done) irq_high_cycles++;
+            if (irq_done && !prev_irq_done && first_irq_cycle < 0) first_irq_cycle = cycles;
+            if (cpu_rvfi_valid && cpu_rvfi_intr) irq_entry_cycle = cycles;
+            if (cpu_rvfi_valid && cpu_rvfi_insn == 32'h3020_0073 && irq_entry_cycle >= 0)
+                handler_cycles_seen = cycles - irq_entry_cycle;
             if ((dut.u_chiplet.u_die_a.u_dma.irq_status_q != 0) &&
                 (dut.u_chiplet.u_die_a.u_dma.irq_en_q == 0)) begin
                 irq_masked_pending_seen = 1'b1;
@@ -319,12 +430,19 @@ module tb_firmware_soc;
                 submit_accepts++;
             end
             if (dut.u_chiplet.u_die_a.u_dma.submit_reject_event_q) begin
+                if ((accepted_submit_check_count >= submitted_tag_count) ||
+                    (dut.u_chiplet.u_die_a.u_dma.staged_tag_q != submitted_tags[accepted_submit_check_count])) begin
+                    submission_correlation_errors++;
+                    record_assertion_failure("firmware_reject_matches_submitted_tag");
+                end
+                accepted_submit_check_count++;
                 submit_rejects++;
                 if (dut.u_chiplet.u_die_a.u_dma.submit_reject_err_code_q == 4'd3) queue_full_rejects++;
                 if (dut.u_chiplet.u_die_a.u_dma.submit_reject_err_code_q == 4'd5) blocked_rejects++;
             end
             if (dut.u_chiplet.u_die_a.u_dma.comp_push_event_q) begin
                 completion_pushes++;
+                if (first_completion_cycle < 0) first_completion_cycle = cycles;
                 case (dut.u_chiplet.u_die_a.u_dma.comp_push_status_q)
                     COMP_SUCCESS: successful_completions++;
                     COMP_RUNTIME_ERROR: begin
@@ -375,8 +493,28 @@ module tb_firmware_soc;
     end
 
     always @(negedge clk) begin
+`ifdef FIRMWARE_C_MODE
+        if ((test_name == "gcc_reset_irq_handler") && reset_on_irq_countdown > 0) begin
+            reset_on_irq_countdown--;
+            if (reset_on_irq_countdown == 0) begin
+                rst_n = 1'b0;
+                reset_applied = 1'b1;
+                reset_phase_observed = 2;
+                reset_hold = 4;
+            end
+        end else if ((test_name == "gcc_reset_irq_handler") && reset_applied && !rst_n && reset_hold > 0) begin
+            reset_hold--;
+            if (reset_hold == 0) begin
+                preload_source_memory();
+                rst_n = 1'b1;
+                reset_recovery_seen = 1'b1;
+            end
+        end
+`endif
         if (test_name == "apb_reset_mid_wait") begin
-            if (!reset_applied && rst_n && cpu_psel && cpu_penable && !cpu_pready) begin
+            if (!reset_applied && rst_n &&
+                (((test_name == "gcc_apb_reset_phase") && cycles >= 40) ||
+                 ((test_name != "gcc_apb_reset_phase") && cpu_psel && cpu_penable && !cpu_pready))) begin
                 rst_n = 1'b0;
                 reset_applied = 1'b1;
                 reset_hold = 4;
@@ -391,11 +529,45 @@ module tb_firmware_soc;
         end
 
         if (rst_n) begin
-            if (test_name == "sleep_resume") begin
-                if (!sleep_applied && doorbells_seen > 0) begin
+            if (test_name == "gcc_apb_matrix") begin
+                case (mmio_reads + mmio_writes)
+                    0, 1: apb_wait_cycles = 4'd0;
+                    2, 3: apb_wait_cycles = 4'd1;
+                    4, 5: apb_wait_cycles = 4'd3;
+                    default: apb_wait_cycles = 4'd5;
+                endcase
+            end
+            if ((test_name == "gcc_random_workload") && requested_backpressure > 0 &&
+                !link_hold_active && doorbells_seen > 0 && completion_pushes == 0) begin
+                force dut.u_chiplet.u_die_a.tx_stream_ready = 1'b0;
+                link_hold_active = 1'b1;
+                backpressure_hold = requested_backpressure;
+            end else if ((test_name == "gcc_random_workload") && link_hold_active && backpressure_hold > 0) begin
+                backpressure_hold--;
+                if (backpressure_hold == 0) begin
+                    release dut.u_chiplet.u_die_a.tx_stream_ready;
+                    link_hold_active = 1'b0;
+                end
+            end
+            if ((test_name == "sleep_resume") || (test_name == "gcc_power_active") ||
+                ((test_name == "gcc_random_workload") && power_event == "sleep")) begin
+                if (!sleep_applied &&
+                    (((test_name == "gcc_power_active") && dut.u_chiplet.u_die_a.u_dma.active_valid_q) ||
+                     ((test_name != "gcc_power_active") && doorbells_seen > 0))) begin
                     power_state = PWR_SLEEP;
                     sleep_applied = 1'b1;
                     sleep_hold = 24;
+                end else if (sleep_hold > 0) begin
+                    sleep_hold--;
+                    if (sleep_hold == 0) power_state = PWR_RUN;
+                end
+            end
+
+            if (test_name == "gcc_power_completion_pending") begin
+                if (!sleep_applied && completion_pushes > 0) begin
+                    power_state = PWR_SLEEP;
+                    sleep_applied = 1'b1;
+                    sleep_hold = 16;
                 end else if (sleep_hold > 0) begin
                     sleep_hold--;
                     if (sleep_hold == 0) power_state = PWR_RUN;
@@ -412,29 +584,117 @@ module tb_firmware_soc;
                     if (deep_sleep_hold == 0) power_state = PWR_RUN;
                 end
             end
+            if ((test_name == "gcc_random_workload") && power_event == "deep_sleep") begin
+                if (!deep_sleep_applied && cycles >= 12) begin
+                    power_state = PWR_DEEP_SLEEP;
+                    deep_sleep_applied = 1'b1;
+                    deep_sleep_hold = 24;
+                end else if (deep_sleep_hold > 0) begin
+                    deep_sleep_hold--;
+                    if (deep_sleep_hold == 0) power_state = PWR_RUN;
+                end
+            end
 
-            if ((test_name == "queue_full_reject") && !link_hold_active && submit_accepts > 0) begin
+            if ((test_name == "queue_full_reject") && !link_hold_active &&
+                (queue_full_rejects == 0) && submit_accepts > 0) begin
                 force dut.u_chiplet.u_die_a.tx_stream_ready = 1'b0;
                 link_hold_active = 1'b1;
             end
+`ifdef FIRMWARE_C_MODE
+            if ((test_name == "queue_full_reject") && link_hold_active &&
+                (queue_full_rejects > 0)) begin
+                release dut.u_chiplet.u_die_a.tx_stream_ready;
+                link_hold_active = 1'b0;
+            end
+`endif
 
             if ((test_name == "timeout_error") && !return_suppress_active && submit_accepts > 0) begin
                 force dut.u_chiplet.u_die_a.dma_rx_stream_valid = 1'b0;
                 return_suppress_active = 1'b1;
+            end
+            if ((test_name == "gcc_random_workload") && error_profile == "timeout" &&
+                !return_suppress_active && submit_accepts > 0 && completion_pushes == 0) begin
+                force dut.u_chiplet.u_die_a.dma_rx_stream_valid = 1'b0;
+                return_suppress_active = 1'b1;
+            end
+            if ((test_name == "gcc_random_workload") && return_suppress_active && completion_pushes > 0) begin
+                release dut.u_chiplet.u_die_a.dma_rx_stream_valid;
+                return_suppress_active = 1'b0;
             end
         end
     end
 
     always @(posedge clk) begin
         cycles++;
+`ifdef FIRMWARE_C_MODE
+        if ((test_name == "gcc_irq_trap_priority") && !forced_irq_active && !reset_applied &&
+            dut.u_cpu.pending_valid_q && (dut.u_cpu.pending_instr_q == 32'h0000_0073)) begin
+            dut.verification_irq_force = 1'b1;
+            forced_irq_active = 1'b1;
+        end
+        if ((test_name == "gcc_irq_level_mret") && !irq_force_started && cycles > 80) begin
+            dut.verification_irq_force = 1'b1;
+            forced_irq_active = 1'b1;
+            irq_force_started = 1'b1;
+        end
+        if ((test_name == "gcc_reset_irq_handler") && !forced_irq_active &&
+            ((!irq_force_started && !reset_applied && cycles > 80) ||
+             (reset_recovery_seen && forced_irq_entries == 1))) begin
+            dut.verification_irq_force = 1'b1;
+            forced_irq_active = 1'b1;
+            irq_force_started = 1'b1;
+        end
+        if (cpu_rvfi_valid && cpu_rvfi_intr) begin
+            forced_irq_entries++;
+            if (test_name == "gcc_irq_trap_priority") begin
+                dut.verification_irq_force = 1'b0;
+                forced_irq_active = 1'b0;
+                reset_applied = 1'b1;
+            end else if ((test_name == "gcc_irq_level_mret") && forced_irq_entries >= 2) begin
+                dut.verification_irq_force = 1'b0;
+                forced_irq_active = 1'b0;
+            end else if (test_name == "gcc_reset_irq_handler") begin
+                dut.verification_irq_force = 1'b0;
+                forced_irq_active = 1'b0;
+                if (!reset_applied) reset_on_irq_countdown = 4;
+            end
+        end
+`endif
+        if (rvfi_trace_fd != 0 && cpu_rvfi_valid) begin
+            $fwrite(rvfi_trace_fd,
+                    "%0d,%0d,%0d,%0d,%08x,%08x,%08x,%0d,%0d,%0d,%08x,%0d,%08x,%0d,%08x,%08x,%x,%x,%08x,%08x,%08x,%08x,%08x,%08x,%08x\n",
+                    cycles, reset_epoch, dut.cpu_irq_ext, cpu_rvfi_order, cpu_rvfi_insn, cpu_rvfi_pc_rdata,
+                    cpu_rvfi_pc_wdata, cpu_rvfi_trap, cpu_rvfi_intr,
+                    cpu_rvfi_rs1_addr, cpu_rvfi_rs1_rdata, cpu_rvfi_rs2_addr,
+                    cpu_rvfi_rs2_rdata, cpu_rvfi_rd_addr, cpu_rvfi_rd_wdata,
+                    cpu_rvfi_mem_addr, cpu_rvfi_mem_rmask, cpu_rvfi_mem_wmask,
+                    cpu_rvfi_mem_rdata, cpu_rvfi_mem_wdata, cpu_rvfi_mstatus,
+                    cpu_rvfi_mie, cpu_rvfi_mtvec, cpu_rvfi_mepc, cpu_rvfi_mcause);
+        end
         if (trace_fd != 0) begin
-            $fwrite(trace_fd, "%0d,%0h,%0h,%0d,%0d,%0d,%0d,%0h,%0d,%0d,%0d,%0d,%0d,%0d,%0d,%0d\n",
-                    cycles, cpu_commit_pc, cpu_commit_instr, cpu_commit_valid,
-                    cpu_psel, cpu_penable, cpu_pready, cpu_paddr, cpu_pwrite,
+            $fwrite(trace_fd, "%0d,%0d,%0d,%0d,%0h,%0h,%0d,%0d,%0d,%0d,%0h,%0d,%0h,%0d,%0d,%0d,%0h,%0h,%0d,%0d,%0d,%0h,%0d,%0h,%0h,%0h,%0d,%0d,%0d,%0d,%0d,%0d,%0h,%0d,%0d\n",
+                    cycles, reset_epoch, rst_n, reset_phase_observed,
+                    cpu_commit_pc, cpu_commit_instr, cpu_commit_valid,
+                    cpu_psel, cpu_penable, cpu_pready, cpu_paddr, cpu_pwrite, cpu_pwdata,
+                    cpu_pslverr, dut.u_apb_csr.cfg_valid,
                     dut.u_chiplet.u_die_a.u_dma.submit_accept_event_q,
-                    dut.u_chiplet.u_die_a.u_dma.comp_push_event_q, irq_done, cpu_halted,
-                    power_state, dut.u_chiplet.u_pwr_ctrl.restore_dma_sleep,
-                    dut.mmio_access_enable_q);
+                    dut.u_chiplet.u_die_a.u_dma.staged_tag_q,
+                    dut.u_chiplet.u_die_a.u_dma.staged_src_base_q,
+                    dut.u_chiplet.u_die_a.u_dma.staged_dst_base_q,
+                    dut.u_chiplet.u_die_a.u_dma.staged_len_words_q,
+                    dut.u_chiplet.u_die_a.u_dma.submit_count_q,
+                    dut.u_chiplet.u_die_a.u_dma.comp_push_tag_q,
+                    dut.u_chiplet.u_die_a.u_dma.comp_push_status_q,
+                    dut.u_chiplet.u_die_a.u_dma.comp_push_err_code_q,
+                    dut.u_chiplet.u_die_a.u_dma.comp_push_words_q,
+                    dut.u_chiplet.u_die_a.u_dma.comp_count_q,
+                    dut.u_chiplet.u_die_a.u_dma.comp_push_event_q,
+                    dut.u_chiplet.u_die_a.u_dma.comp_pop_event_q,
+                    irq_done, cpu_halted, power_state,
+                    dut.u_chiplet.u_pwr_ctrl.restore_dma_sleep,
+                    dut.u_chiplet.u_pwr_ctrl.iso_n_q,
+                    dut.u_chiplet.u_die_a.u_dma.active_valid_q,
+                    dut.u_chiplet.u_die_a.u_dma.state_q);
         end
     end
 
@@ -483,10 +743,20 @@ module tb_firmware_soc;
         coverage_path = "reports/firmware_coverage.csv";
         reference_path = "";
         trace_path = "";
+        rvfi_trace_path = "";
         void'($value$plusargs("TEST=%s", test_name));
         void'($value$plusargs("COVER_OUT=%s", coverage_path));
         void'($value$plusargs("REF_CSV=%s", reference_path));
         void'($value$plusargs("TRACE_OUT=%s", trace_path));
+        void'($value$plusargs("RVFI_TRACE_OUT=%s", rvfi_trace_path));
+        power_event = "run";
+        error_profile = "none";
+        requested_apb_wait = -1;
+        requested_backpressure = 0;
+        void'($value$plusargs("POWER_EVENT=%s", power_event));
+        void'($value$plusargs("ERROR_PROFILE=%s", error_profile));
+        void'($value$plusargs("APB_WAIT_CYCLES=%d", requested_apb_wait));
+        void'($value$plusargs("BACKPRESSURE_CYCLES=%d", requested_backpressure));
 
         errors = 0;
         cycles = 0;
@@ -517,6 +787,11 @@ module tb_firmware_soc;
         software_completion_reads = 0;
         completion_order_errors = 0;
         assertion_failures = 0;
+        first_doorbell_cycle = -1;
+        first_completion_cycle = -1;
+        first_irq_cycle = -1;
+        irq_entry_cycle = -1;
+        handler_cycles_seen = 0;
         sleep_hold = 0;
         deep_sleep_hold = 0;
         reset_hold = 0;
@@ -534,6 +809,13 @@ module tb_firmware_soc;
         wait_without_retire_seen = 1'b0;
         link_hold_active = 1'b0;
         return_suppress_active = 1'b0;
+        backpressure_hold = 0;
+        reset_epoch = 0;
+        forced_irq_entries = 0;
+        reset_on_irq_countdown = 0;
+        forced_irq_active = 1'b0;
+        irq_force_started = 1'b0;
+        reset_phase_observed = 0;
         accepted_tag_count = 0;
         accepted_completion_count = 0;
         submitted_tag_count = 0;
@@ -545,15 +827,23 @@ module tb_firmware_soc;
             submitted_tags[idx] = '0;
         end
         trace_fd = 0;
+        rvfi_trace_fd = 0;
         rst_n = 1'b0;
         power_state = (test_name == "crypto_only_reject") ? PWR_CRYPTO_ONLY : PWR_RUN;
         dma_mode_force = 1'b1;
         apb_wait_cycles = ((test_name == "apb_wait_error") ||
-                           (test_name == "apb_reset_mid_wait")) ? 4'd3 : 4'd0;
+                           (test_name == "apb_reset_mid_wait") ||
+                           (test_name == "gcc_interrupt_apb_wait")) ? 4'd3 : 4'd0;
+        if (requested_apb_wait >= 0) apb_wait_cycles = requested_apb_wait[3:0];
 
         if (trace_path != "") begin
             trace_fd = $fopen(trace_path, "w");
-            $fwrite(trace_fd, "cycle,commit_pc,commit_instr,commit_valid,psel,penable,pready,paddr,pwrite,submit_accept,completion_push,irq,halted,power_state,restore_dma_sleep,mmio_access_enable\n");
+            $fwrite(trace_fd, "cycle,epoch,rst_n,reset_phase,commit_pc,commit_instr,commit_valid,psel,penable,pready,paddr,pwrite,pwdata,pslverr,cfg_valid,submit_accept,submit_tag,submit_src,submit_dst,submit_len,submit_count,completion_tag,completion_status,completion_error,completion_words,completion_count,completion_push,completion_pop,irq,halted,power_state,restore_dma_sleep,isolation_n,dma_active,dma_state\n");
+        end
+        if (rvfi_trace_path != "") begin
+            rvfi_trace_fd = $fopen(rvfi_trace_path, "w");
+            $fwrite(rvfi_trace_fd,
+                    "cycle,epoch,irq_level,order,insn,pc_rdata,pc_wdata,trap,intr,rs1_addr,rs1_rdata,rs2_addr,rs2_rdata,rd_addr,rd_wdata,mem_addr,mem_rmask,mem_wmask,mem_rdata,mem_wdata,mstatus,mie,mtvec,mepc,mcause\n");
         end
         if (reference_path != "") u_ref.load_reference(reference_path); else u_ref.clear_reference();
 
@@ -561,6 +851,17 @@ module tb_firmware_soc;
         @(negedge clk);
         preload_source_memory();
         rst_n = 1'b1;
+
+        if (test_name == "gcc_apb_reset_phase") begin
+            repeat (40) @(negedge clk);
+            rst_n = 1'b0;
+            reset_applied = 1'b1;
+            reset_phase_observed = 1;
+            repeat (4) @(negedge clk);
+            preload_source_memory();
+            rst_n = 1'b1;
+            reset_recovery_seen = 1'b1;
+        end
 
         while (!cpu_halted && cycles < 100000) @(posedge clk);
         if (!cpu_halted) begin
@@ -594,8 +895,13 @@ module tb_firmware_soc;
                 if (submit_accepts != 0) errors++;
             end
             "apb_wait_error": begin
+`ifdef FIRMWARE_C_MODE
+                if (wait_cycles_seen == 0 || bus_errors_seen != 1 ||
+                    range_errors_seen != 1 || dut.u_cpu.mcause_q != 32'd4) errors++;
+`else
                 if (wait_cycles_seen == 0 || bus_errors_seen != 2 ||
                     range_errors_seen != 1 || unaligned_errors_seen != 1) errors++;
+`endif
             end
             "sleep_resume": begin
                 if (dut.u_cpu.data_mem_q[0] != 32'h177 || !sleep_applied || !restore_seen) errors++;
@@ -608,9 +914,18 @@ module tb_firmware_soc;
                 compare_destination(64, 4);
             end
             "queue_full_reject": begin
+`ifdef FIRMWARE_C_MODE
+                if (!dut.u_cpu.data_mem_q[0][1] || dut.u_cpu.data_mem_q[0][5:2] != 4'd3 ||
+                    dut.u_cpu.data_mem_q[1] != 32'h306 || dut.u_cpu.data_mem_q[2][5:0] != 6'h33 ||
+                    dut.u_cpu.data_mem_q[3] != 32'h301 || dut.u_cpu.data_mem_q[7] != 32'h305 ||
+                    dut.u_cpu.data_mem_q[8] != 32'h307 || dut.u_cpu.data_mem_q[9][5:4] != COMP_SUCCESS ||
+                    submit_accepts != 6 || (successful_completions + runtime_error_completions) != 6 ||
+                    queue_full_rejects != 1 || completion_pops != 7 || destination_writes < 2) errors++;
+`else
                 if (!dut.u_cpu.data_mem_q[0][1] || dut.u_cpu.data_mem_q[0][5:2] != 4'd3 ||
                     dut.u_cpu.data_mem_q[1] != 32'h306 || dut.u_cpu.data_mem_q[2][5:0] != 6'h33 ||
                     submit_accepts != 5 || queue_full_rejects != 1 || destination_writes != 0) errors++;
+`endif
             end
             "completion_fifo_stall": begin
                 if (!dut.u_cpu.data_mem_q[0][4] || dut.u_cpu.data_mem_q[0][2:0] != 3'd4 ||
@@ -640,6 +955,98 @@ module tb_firmware_soc;
                     bus_errors_seen != 0) errors++;
                 compare_destination(120, 4);
             end
+            "isa_matrix": begin
+                if (dut.u_cpu.data_mem_q[0] != 32'd12 ||
+                    dut.u_cpu.data_mem_q[1] != 32'd11 ||
+                    bus_errors_seen != 2 || range_errors_seen != 2 ||
+                    submit_accepts != 0 || completion_pushes != 0 ||
+                    destination_writes != 0) errors++;
+            end
+            "gcc_cpu_only": begin
+                if (submit_accepts != 0 || completion_pushes != 0 || destination_writes != 0) errors++;
+            end
+            "gcc_interrupt", "gcc_interrupt_apb_wait", "gcc_interrupt_masked": begin
+                if (dut.u_cpu.data_mem_q[0] != 1 || dut.u_cpu.data_mem_q[1] == 0 ||
+                    successful_completions != 1 || assertion_failures != 0) errors++;
+            end
+            "gcc_apb_matrix": begin
+                if (mmio_reads < 8 || mmio_writes < 8 || assertion_failures != 0) errors++;
+            end
+            "gcc_apb_reset_phase": begin
+                if (!reset_applied || !reset_recovery_seen || successful_completions != 1 ||
+                    doorbells_seen != 1 || assertion_failures != 0) errors++;
+            end
+            "gcc_apb_legality": begin
+                if (bus_errors_seen != 2 || dut.u_cpu.data_mem_q[0] != 4 ||
+                    submit_accepts != 0 || completion_pushes != 0) errors++;
+            end
+            "gcc_dma_matrix": begin
+                if (submit_accepts != 4 || (successful_completions + runtime_error_completions) != 4 || completion_pops != 4 ||
+                    completion_order_errors != 0) errors++;
+            end
+            "gcc_completion_pressure": begin
+                if (submit_accepts != 4 || (successful_completions + runtime_error_completions) != 4 || completion_pops != 4 ||
+                    irq_high_cycles == 0) errors++;
+            end
+            "gcc_tag_reuse": begin
+                if (submit_accepts != 2 || (successful_completions + runtime_error_completions) != 2 || completion_pops != 2 ||
+                    dut.u_cpu.data_mem_q[0] != 32'h933 || dut.u_cpu.data_mem_q[1] != 32'h933) errors++;
+            end
+            "gcc_power_active", "gcc_power_completion_pending": begin
+                if (!sleep_applied || !restore_seen || successful_completions != 1 || assertion_failures != 0) errors++;
+            end
+            "gcc_cpu_data": begin
+                if (dut.u_cpu.data_mem_q[0] != 0 || dut.u_cpu.data_mem_q[1] != 32'h1357_9bdf ||
+                    submit_accepts != 0 || assertion_failures != 0) errors++;
+            end
+            "gcc_cpu_abi": begin
+                if (dut.u_cpu.data_mem_q[0] == 0 || dut.u_cpu.data_mem_q[1] == 0 ||
+                    dut.u_cpu.data_mem_q[0] == dut.u_cpu.data_mem_q[1] || assertion_failures != 0) errors++;
+            end
+            "gcc_decode_legality": begin
+                if (dut.u_cpu.data_mem_q[0] != 4 || bus_errors_seen != 0 || assertion_failures != 0) errors++;
+            end
+            "gcc_control_boundary": begin
+                if (dut.u_cpu.data_mem_q[0] != 2 || dut.u_cpu.data_mem_q[1] == 0 || assertion_failures != 0) errors++;
+            end
+            "gcc_sram_boundary": begin
+                if (dut.u_cpu.data_mem_q[0] != 32'ha55a_a55a || dut.u_cpu.data_mem_q[1] != 2 ||
+                    assertion_failures != 0) errors++;
+            end
+            "gcc_csr_illegal": begin
+                if (dut.u_cpu.data_mem_q[0] != 0 || dut.u_cpu.data_mem_q[1] != 32'h120 ||
+                    dut.u_cpu.data_mem_q[2] != 32'h88 || dut.u_cpu.data_mem_q[3] != 32'h800 ||
+                    dut.u_cpu.data_mem_q[4] != 1 || assertion_failures != 0) errors++;
+            end
+            "gcc_irq_trap_priority": begin
+                if (forced_irq_entries != 1 || dut.u_cpu.data_mem_q[0] != 1 ||
+                    dut.u_cpu.data_mem_q[1] == 0 || assertion_failures != 0) errors++;
+            end
+            "gcc_irq_level_mret": begin
+                if (forced_irq_entries < 2 || dut.u_cpu.data_mem_q[0] != 1 || assertion_failures != 0) errors++;
+            end
+            "gcc_reset_irq_handler": begin
+                if (!reset_applied || !reset_recovery_seen || forced_irq_entries != 2 ||
+                    dut.u_cpu.data_mem_q[0] != 1 || assertion_failures != 0) errors++;
+            end
+            "gcc_apb_atomicity": begin
+                if (wait_cycles_seen == 0 || bus_errors_seen != 2 || dut.u_cpu.data_mem_q[1] != 2 ||
+                    assertion_failures != 0) errors++;
+            end
+            "gcc_completion_mode_matrix": begin
+                if (submit_accepts != 1 || successful_completions != 1 || completion_pops != 1 ||
+                    assertion_failures != 0) errors++;
+            end
+            "gcc_random_workload": begin
+                if (submit_accepts == 0 || completion_pushes != submit_accepts ||
+                    completion_pops != completion_pushes || assertion_failures != 0 ||
+                    completion_order_errors != 0) errors++;
+                if ((power_event == "sleep") && (!sleep_applied || !restore_seen)) errors++;
+                if ((power_event == "deep_sleep") && !deep_sleep_applied) errors++;
+                if ((error_profile == "timeout") && timeout_completions == 0) errors++;
+                if ((error_profile == "parity") && parity_completions == 0) errors++;
+                if ((error_profile == "invalid") && invalid_completions == 0) errors++;
+            end
             default: begin
                 errors++;
                 $error("Unknown firmware scenario %s", test_name);
@@ -650,9 +1057,14 @@ module tb_firmware_soc;
         pass = (errors == 0);
         write_coverage(pass);
         if (trace_fd != 0) $fclose(trace_fd);
-        $display("FIRMWARE_RESULT|test=%s|status=%s|cycles=%0d|mmio_reads=%0d|mmio_writes=%0d|wait=%0d|bus_errors=%0d|doorbells=%0d|accepts=%0d|rejects=%0d|completions=%0d|success=%0d|runtime_errors=%0d|assertion_failures=%0d|mem_mismatch=%0d",
+        if (rvfi_trace_fd != 0) $fclose(rvfi_trace_fd);
+        $display("FIRMWARE_RESULT|test=%s|status=%s|cycles=%0d|mmio_reads=%0d|mmio_writes=%0d|wait=%0d|poll_reads=%0d|irq_latency=%0d|handler_cycles=%0d|submit_latency=%0d|bus_errors=%0d|doorbells=%0d|accepts=%0d|rejects=%0d|completions=%0d|success=%0d|runtime_errors=%0d|assertion_failures=%0d|mem_mismatch=%0d",
                  test_name, pass ? "PASS" : "FAIL", cycles, mmio_reads, mmio_writes,
-                 wait_cycles_seen, bus_errors_seen, doorbells_seen, submit_accepts, submit_rejects,
+                 wait_cycles_seen, irq_poll_reads,
+                 (first_irq_cycle >= 0 && first_doorbell_cycle >= 0) ? first_irq_cycle - first_doorbell_cycle : 0,
+                 handler_cycles_seen,
+                 (first_completion_cycle >= 0 && first_doorbell_cycle >= 0) ? first_completion_cycle - first_doorbell_cycle : 0,
+                 bus_errors_seen, doorbells_seen, submit_accepts, submit_rejects,
                  completion_pushes, successful_completions, runtime_error_completions,
                  assertion_failures, ref_mismatch_count);
         $display("FIRMWARE_STATE|mem0=%08x|mem1=%08x|mem2=%08x|mem3=%08x|mem4=%08x|mem5=%08x|irq_masked=%0d|irq_enabled_pending=%0d|irq_cleared=%0d|irq_high_cycles=%0d|irq_en=%0d|irq_status=%0d|stall_seen=%0d|reset_recovered=%0d",

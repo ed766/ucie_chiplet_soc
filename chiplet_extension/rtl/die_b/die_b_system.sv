@@ -50,7 +50,7 @@ module die_b_system #(
     logic [CIPHER_FIFO_COUNT_WIDTH-1:0] cipher_fifo_count_q;
 
     assign aon_power_good  = 1'b1;
-    assign plaintext_ready = (!block_pending_q) && (int'(cipher_fifo_count_q) <= CIPHER_FIFO_THRESHOLD);
+    assign plaintext_ready = (!block_pending_q) && (cipher_fifo_count_q <= CIPHER_FIFO_THRESHOLD);
     assign ciphertext_valid = (cipher_fifo_count_q != '0);
     assign ciphertext_data  = ciphertext_valid ? cipher_fifo_mem[cipher_fifo_head_q] : '0;
     assign aes_start        = block_pending_q && aes_ready;
@@ -87,14 +87,14 @@ module die_b_system #(
 
             push_count = 0;
             pop_count  = 0;
-            fifo_count_int = int'(cipher_fifo_count_q);
-            head_int = int'(cipher_fifo_head_q);
-            tail_int = int'(cipher_fifo_tail_q);
+            fifo_count_int = cipher_fifo_count_q;
+            head_int = cipher_fifo_head_q;
+            tail_int = cipher_fifo_tail_q;
 
             // Phase 1: accept plaintext words and build AES blocks.
             if (plaintext_valid && plaintext_ready) begin
                 block_buffer_q[DATA_WIDTH*word_count_q +: DATA_WIDTH] <= plaintext_data;
-                if (int'(word_count_q) == (WORDS_PER_BLOCK-1)) begin
+                if (word_count_q == (WORDS_PER_BLOCK-1)) begin
                     word_count_q    <= '0;
                     block_pending_q <= 1'b1;
                 end else begin

@@ -239,7 +239,10 @@ def main() -> int:
     parser.add_argument("--info-out", default=str(REPORT_DIR / "code_coverage.info"))
     parser.add_argument("--focus-components", default="", help="Comma-separated component names to aggregate.")
     parser.add_argument("--minimum-focus-pct", type=float, default=0.0)
+    parser.add_argument("--minimum-focus-branch-pct", type=float, default=0.0)
     parser.add_argument("--holes-out", default="", help="Optional uncovered-point CSV output.")
+    parser.add_argument("--ranking-out", default=str(REPORT_DIR / "code_coverage_test_ranking.csv"))
+    parser.add_argument("--annotate-dir", default=str(ROOT / "build" / "code_coverage_annotated"))
     parser.add_argument("--enforce-release-targets", action="store_true")
     parser.add_argument("--minimum-line-pct", type=float, default=95.0)
     parser.add_argument("--minimum-branch-pct", type=float, default=85.0)
@@ -266,7 +269,7 @@ def main() -> int:
 
     merge_cmd = [tool, "--write-info", str(info_out), *[str(path) for path in dat_files]]
     merge = subprocess.run(merge_cmd, cwd=ROOT, capture_output=True, text=True)
-    annotate_dir = ROOT / "build" / "code_coverage_annotated"
+    annotate_dir = Path(args.annotate_dir).resolve()
     annotate_dir.mkdir(parents=True, exist_ok=True)
     annotate_cmd = [tool, "--annotate", str(annotate_dir), *[str(path) for path in dat_files]]
     annotate = subprocess.run(annotate_cmd, cwd=ROOT, capture_output=True, text=True)
@@ -286,7 +289,7 @@ def main() -> int:
         reason = reviewed_toggle_exclusion(key)
         if reason:
             reviewed_exclusion_counts[reason] = reviewed_exclusion_counts.get(reason, 0) + 1
-    ranking_out = REPORT_DIR / "code_coverage_test_ranking.csv"
+    ranking_out = Path(args.ranking_out).resolve()
     write_test_ranking(test_hits, ranking_out)
     pct = coverage_pct(hit, total)
     groups: dict[str, dict[str, int]] = {}
@@ -328,6 +331,16 @@ def main() -> int:
         status = "FAIL"
     native_line = native_points.get("line", {})
     native_branch = native_points.get("branch", {})
+    focus_native_line = {key: count for key, count in native_line.items()
+                         if file_component(point_metadata(key)[0]) in focus_names}
+    focus_native_branch = {key: count for key, count in native_branch.items()
+                           if file_component(point_metadata(key)[0]) in focus_names}
+    focus_native_line_pct = coverage_pct(sum(count > 0 for count in focus_native_line.values()), len(focus_native_line))
+    focus_native_branch_pct = coverage_pct(sum(count > 0 for count in focus_native_branch.values()), len(focus_native_branch))
+    if focus_names and args.minimum_focus_branch_pct and (
+        not focus_native_branch or focus_native_branch_pct < args.minimum_focus_branch_pct
+    ):
+        status = "FAIL"
     native_line_pct = coverage_pct(sum(count > 0 for count in native_line.values()), len(native_line))
     native_branch_pct = coverage_pct(sum(count > 0 for count in native_branch.values()), len(native_branch))
     reviewed_toggle_pct = coverage_pct(reviewed_toggle_hit, reviewed_toggle_total)
@@ -361,6 +374,8 @@ def main() -> int:
         f"focus_line_points_hit={focus['hit']}",
         f"focus_line_points_total={focus['total']}",
         f"focus_line_coverage_pct={focus_pct:.2f}",
+        f"focus_native_line_coverage_pct={focus_native_line_pct:.2f}",
+        f"focus_branch_expression_coverage_pct={focus_native_branch_pct:.2f}",
         "focus_exclusions=none",
         *[
             f"{name}_line_coverage_pct={coverage_pct(counts['hit'], counts['total']):.2f}"
@@ -401,7 +416,10 @@ def main() -> int:
         f"| Overall line coverage proxy | {pct:.2f}% |",
         f"| Design RTL line coverage proxy | {coverage_pct(design['hit'], design['total']):.2f}% |",
         f"| Focused component line coverage | {focus_pct:.2f}% |" if focus_names else "",
+        f"| Focused native branch/expression coverage | {focus_native_branch_pct:.2f}% |" if focus_names else "",
         f"| Focused minimum | {args.minimum_focus_pct:.2f}% |" if focus_names else "",
+        f"| Focused branch minimum | {args.minimum_focus_branch_pct:.2f}% |" if focus_names and args.minimum_focus_branch_pct else "",
+        f"| Focused target status | {'PASS' if focus['total'] > 0 and focus_pct >= args.minimum_focus_pct and (not args.minimum_focus_branch_pct or focus_native_branch_pct >= args.minimum_focus_branch_pct) else 'OPEN'} |" if focus_names else "",
         "| Focused exclusions | None |" if focus_names else "",
         "",
     ]
@@ -471,9 +489,11 @@ def main() -> int:
         lines.append(f"| `{reason}` | {count} |")
     lines.extend([
         "",
-        f"Release target status: **{'PASS' if not target_misses else 'OPEN'}** "
-        f"(line >= {args.minimum_line_pct:.0f}%, branch/expression >= {args.minimum_branch_pct:.0f}%, "
-        f"reviewed toggle >= {args.minimum_reviewed_toggle_pct:.0f}%).",
+        (f"Release target status: **{'PASS' if not target_misses else 'OPEN'}** "
+         f"(line >= {args.minimum_line_pct:.0f}%, branch/expression >= {args.minimum_branch_pct:.0f}%, "
+         f"reviewed toggle >= {args.minimum_reviewed_toggle_pct:.0f}%).")
+        if args.enforce_release_targets else
+        "Full-design release targets: **NOT ENFORCED** for this focused/diagnostic lane.",
         f"Threshold enforcement for this invocation: **{'enabled' if args.enforce_release_targets else 'disabled'}**.",
         "",
         "## Coverage By Source Group",

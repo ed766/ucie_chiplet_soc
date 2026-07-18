@@ -1,0 +1,5 @@
+evidence_source,required_items,covered_items,scenario_name_only_items,audit_status
+RVFI retirement trace,96,96,0,PASS
+APB transaction trace,20,20,0,PASS
+firmware/device event trace + checker,60,56,0,INCOMPLETE
+same-window interaction trace,88,86,0,INCOMPLETE

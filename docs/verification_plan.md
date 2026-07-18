@@ -25,6 +25,7 @@ closure, not replacing the stable gate:
 - bounded Verilator property collateral
 - CSR-programmable DMA offload verification with golden-image compare
 - firmware-driven RV32/APB MMIO verification through `make -C chiplet_extension firmware-soc-check`
+- GCC-built bare-metal C and RV32 architectural differential checking through `make -C chiplet_extension firmware-c-check`
 
 ## Benches
 
@@ -52,6 +53,16 @@ closure, not replacing the stable gate:
   - drives the existing DMA CSR map through APB MMIO rather than testbench CSR tasks
   - correlates CPU commit, APB transfer, descriptor acceptance, completion, IRQ, and destination-memory evidence
   - checks APB wait/reset/error handling, IRQ masking, queue/full-retire behavior, timeout/parity/invalid-memory errors, CRYPTO_ONLY rejection, and sleep/deep-sleep recovery
+  - optionally enables RV32I/Zicsr traps, machine external interrupts, split compiled code/data images, expanded ROM/SRAM, RVFI-style tracing, and twenty-four named architectural assertions for the compiled-C lane
+
+### Compiled-C and ISS lane
+
+- `chiplet_extension/firmware_c/` contains freestanding startup code, linker policy, MMIO helpers, interrupt/trap handling, 35 named GCC-built scenarios, generated CPU-stream/workload sources, and a checksum-pinned GCC/binutils lock.
+- `make -C chiplet_extension firmware-c-check` compares every normalized retirement event against an independent RV32I/Zicsr architectural checker while retaining the existing APB, DMA, IRQ, and destination-memory scoreboards.
+- The architectural checker is repository-local and decoder-independent; it is not Spike/Sail or an official RISC-V compliance suite.
+- The separate compiled closure runs 35 directed programs, 25 stratified generated CPU streams, and 25 firmware/DMA workload seeds. It targets `176 / 176` trace-derived points and `88 / 88` same-window crosses without inflating canonical chiplet closure; an evidence audit rejects scenario-name-only coverage credit.
+- `make -C chiplet_extension firmware-c-coverage` merges one native Verilator database per closure execution and enforces focused line and branch/expression thresholds across the RV32 core, APB bridge, ROM feeder, and integration top.
+- `firmware-c-mutation-check` checks one RTL `MRET` mutation and ten deliberately corrupted architectural traces covering PC, instruction, register, memory, CSR, cause, epoch, and retirement-order integrity.
 
 ### Proxy power benching
 
@@ -572,8 +583,9 @@ Current local milestone:
 - the stable regression and randomized sweeps are Verilator-based
 - optional seeded-random stress is supporting evidence and its current status is generated in `docs/project_metrics.md`
 - cross-coverage evidence groups are observed at `8 / 8`
-- assertion inventory documents `52` protocol/control invariants, including independent APB submission correlation, firmware-to-DMA ordering, and completion-stall stability checks
+- assertion inventory documents `65` protocol/control invariants, including twelve compiled-firmware architectural checks and software-reject correlation
 - firmware-driven integration passes `12 / 12` programs with `30 / 30` required points and `7 / 7` outcome/power crosses
+- GCC-built compiled firmware closes `85 / 85` directed/seeded executions with `176 / 176` detailed points and `88 / 88` same-window interaction crosses
 - expected bug-validation failures are observed at `5 / 5`
 - low-power proxy rows meet expectation at `26 / 26`
 - low-power functional coverage shows PST states `4 / 4`, legal transitions

@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "target": "rv32i_zicsr-ilp32",
+  "packages": [
+    {
+      "name": "binutils-riscv64-unknown-elf",
+      "version": "2.42-1ubuntu1+6",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/universe/b/binutils-riscv64-unknown-elf/binutils-riscv64-unknown-elf_2.42-1ubuntu1%2b6_amd64.deb",
+      "sha256": "d42d42efdaa0563155d0e1263675852255b20864cc525db9265247a5dec2ce30"
+    },
+    {
+      "name": "gcc-riscv64-unknown-elf",
+      "version": "13.2.0-11ubuntu1+12",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/universe/g/gcc-riscv64-unknown-elf/gcc-riscv64-unknown-elf_13.2.0-11ubuntu1%2b12_amd64.deb",
+      "sha256": "47d4670801c391c65513e2002a19280c6bbdba158f5a467ac5100bff813de0e3"
+    }
+  ]
+}

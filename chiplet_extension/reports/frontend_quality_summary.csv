@@ -1,0 +1,5 @@
+check,status,details,log
+verilator_lint,PASS,chiplet RTL lint,chiplet_extension/build/frontend_quality/verilator_lint.log
+yosys_synthesis,PASS,control/link synthesizable-subset proxy stat,chiplet_extension/build/frontend_quality/yosys_synthesis.log
+opensta_timing,SKIP,opensta_not_found,
+cdc_rdc_structural,PASS,"sync_2ff_defs=1; pulse_sync_defs=1; async_fifo_defs=1; clocks=clk,clk_dst,clk_src,lane_clk; resets=aresetn,rst_dst_n,rst_n,rst_src_n",

@@ -96,7 +96,7 @@ module phy_behavioral #(
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             jitter_toggle <= 1'b0;
-        end else if (JITTER_CYCLES > 0 && (int'(jitter_lfsr_q) % JITTER_MOD) == 0) begin
+        end else if (JITTER_CYCLES > 0 && ($unsigned(jitter_lfsr_q) % JITTER_MOD) == 0) begin
             jitter_toggle <= ~jitter_toggle;
         end
     end
@@ -109,9 +109,9 @@ module phy_behavioral #(
         end else begin
             inject_error_q <= 1'b0;
             if (rev_valid_pipe[PIPE_STAGES-1] && ERROR_THRESHOLD > 0 && LANES > 0) begin
-                if ((int'(err_lfsr_q) % ERROR_SCALE) < ERROR_THRESHOLD) begin
+                if (($unsigned(err_lfsr_q) % ERROR_SCALE) < ERROR_THRESHOLD) begin
                     inject_error_q <= 1'b1;
-                    err_lane_q     <= (LANES > 0) ? (int'(err_lfsr_q) % LANES) : 0;
+                    err_lane_q     <= (LANES > 0) ? ($unsigned(err_lfsr_q) % LANES) : 0;
                 end
             end
         end

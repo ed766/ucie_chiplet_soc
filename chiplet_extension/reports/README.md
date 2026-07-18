@@ -25,14 +25,38 @@ Keep checked in:
 - `perf_characterization.csv`
 - `dma_mem_characterization.csv`
 - `project_metrics.csv`
+- `frontend_quality_summary.csv`
+- `frontend_quality_summary.md`
+- `cdc_rdc_summary.csv`
 - `firmware_soc_summary.csv`
 - `firmware_coverage_summary.csv`
 - `firmware_cross_coverage_summary.csv`
 - `firmware_code_coverage_summary.txt`
 - `firmware_code_coverage_summary.md`
+- `firmware_c_summary.csv`
+- `firmware_c_coverage_summary.csv`
+- `firmware_c_cross_coverage_summary.csv`
+- `firmware_c_evidence_audit.csv`
+- `firmware_c_mutation_summary.csv`
+  - RTL and normalized-trace mutation sensitivity for the compiled-firmware lane.
+- `firmware_c_isa_random_summary.csv`
+  - Results and seeds for 25 generated RV32I/Zicsr instruction streams.
+- `firmware_c_workload_random_summary.csv`
+  - Applied knobs and outcomes for 25 generated firmware/DMA workloads.
+- `firmware_c_performance_summary.csv`
+  - Behavioral cycle, CPI, APB wait, interrupt, handler, and submit/completion statistics.
+- `firmware_c_code_coverage_summary.txt`
+- `firmware_c_code_coverage_summary.md`
+- `firmware_c_code_coverage_test_ranking.csv`
 
 The firmware flat/cross coverage summaries and focused code-coverage report
 are curated exceptions because they are the canonical firmware evidence.
+The compiled-C summaries are curated because they record architectural
+differential results, detailed ISA/firmware interactions, focused native code
+coverage, test contribution, and checker mutation sensitivity without retaining
+raw traces or machine-specific build products.
+The front-end summaries retain the bounded Yosys control/link proxy and
+structural CDC/RDC result while excluding tool logs and build trees.
 
 Do not check in other routine generated files matching `*_coverage.csv`,
 `*_scoreboard.csv`, `*_power.csv`, seed-specific summaries, smoke summaries,

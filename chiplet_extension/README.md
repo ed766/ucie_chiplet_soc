@@ -4,9 +4,11 @@
 original single-die RISC-V SoC into a dual-die system linked by a behavioral
 UCIe-style fabric, then verifies that link with a lightweight coverage-driven
 SystemVerilog flow built around Verilator, named tests, passive monitors,
-scoreboards, assertions, bug injection, and power-proxy checks. A ROM-backed
-RV32 program now controls the queued DMA through APB MMIO; cross-die payload
-traffic uses the UCIe-style link and AXI-Lite remains optional integration collateral.
+scoreboards, assertions, bug injection, and power-proxy checks. ROM-backed
+RV32 firmware controls the queued DMA through APB MMIO using either the original
+hand-assembled programs or GCC-built freestanding C with architectural trace
+comparison; cross-die payload traffic uses the UCIe-style link and AXI-Lite
+remains optional integration collateral.
 
 ## Regression Snapshot
 
@@ -28,8 +30,9 @@ reporting flows.
 - Solver-backed formal: `7 / 7` proofs, `7 / 7` covers, and `7 / 7` mutation counterexamples
 - Real UVM CI lane: `4 / 4` phase/TLM/RAL smoke tests with zero UVM errors or fatals
 - Design RTL code coverage: `96.25%` line, `89.24%` branch/expression, `75.21%` raw toggle, `90.26%` reviewed toggle
-- Assertion inventory: `52` protocol/control invariants
+- Assertion inventory: `76` protocol/control invariants
 - Firmware-driven RV32 integration: `12 / 12` scenarios, `30 / 30` MMIO/outcome points, and `7 / 7` required crosses
+- GCC-built C/architectural differential closure: `85 / 85` executions, `176 / 176` detailed points, `88 / 88` event-correlated crosses, and `11 / 11` mutation detections
 - Focused RV32/APB/ROM integration line coverage: `86.62%` Verilator proxy
 
 AXI-Lite is optional CSR/control-plane integration collateral around the
@@ -46,6 +49,8 @@ make code-coverage
 make coverage-edges-check
 make axi-lite-check
 make firmware-soc-check
+make firmware-c-check
+make rv32-isa-check
 make firmware-code-coverage
 make async-cdc-check
 make formal-prove       # requires OSS CAD Suite/SymbiYosys
@@ -58,8 +63,11 @@ inspect `../docs/reference/axi_lite_coverage_summary.md`. For UPF and low-power 
 inspect `reports/upf_intent_summary.md` and `../docs/power_verification_plan.md`.
 For open-source quality collateral, also inspect
 `../docs/open_source_flow_summary.md` and `../docs/reference/clock_reset_cdc_plan.md`.
-For CPU-driven subsystem evidence, inspect `../docs/firmware_soc_verification.md`.
+For CPU-driven subsystem evidence, inspect `../docs/firmware_soc_verification.md`
+and `../docs/reference/compiled_firmware_verification.md`.
 The trace walkthrough is in `../docs/reference/debug_case_study_firmware_dma.md`.
+The compiled-firmware mutation walkthrough is in
+`../docs/reference/debug_case_study_compiled_firmware.md`.
 
 Hiring-manager quick path: start with `../docs/project_metrics.md`, then
 `../docs/verification_traceability_matrix.md`, `../docs/coverage_closure_case_study.md`,
@@ -92,6 +100,13 @@ Current checked-in reports:
 - `reports/firmware_coverage_summary.csv`
 - `reports/firmware_cross_coverage_summary.csv`
 - `reports/firmware_code_coverage_summary.md`
+- `reports/firmware_c_summary.csv`
+- `reports/firmware_c_coverage_summary.csv`
+- `reports/firmware_c_cross_coverage_summary.csv`
+- `reports/firmware_c_mutation_summary.csv`
+- `reports/firmware_c_isa_random_summary.csv`
+- `reports/firmware_c_workload_random_summary.csv`
+- `reports/firmware_c_performance_summary.md`
 - `reports/protocol_characterization.md`
 - `../docs/performance_characterization.md`
 - `../docs/open_source_flow_summary.md`
@@ -105,13 +120,14 @@ Current checked-in reports:
 - `../docs/reference/axi_lite_coverage_summary.md`
 - `../docs/verification_traceability_matrix.md`
 - `../docs/firmware_soc_verification.md`
+- `../docs/reference/compiled_firmware_verification.md`
 
 ![UCIe chiplet verification architecture](../docs/images/chiplet_dv_architecture.svg)
 
 ## Layout
 
 - `rtl/`
-  - Dual-die RTL, APB/MMIO firmware integration, packetizer/depacketizer,
+  - Dual-die RTL, RV32I/Zicsr APB/MMIO firmware integration, packetizer/depacketizer,
     credit/retry logic, UCIe Tx/Rx, PHY/channel models, and DMA controller
 - `sim/`
   - `tb_ucie_prbs.sv` for link-level traffic
@@ -121,7 +137,10 @@ Current checked-in reports:
   - `tests/` for named directed and randomized scenarios
   - `checkers/` and `scoreboard/` for assertions, passive monitors, and checking
 - `scripts/`
-  - Verilator regression runner plus CSV/Markdown post-processing tools
+  - Verilator regression runner, GCC firmware build, architectural trace checker,
+    and CSV/Markdown post-processing tools
+- `firmware_c/`
+  - Freestanding C scenarios, startup/trap code, MMIO helpers, architectural matrices, and generated seeded workloads
 - `reports/`
   - Checked-in summary artifacts. Raw per-test/per-seed CSVs are generated
     locally and ignored by default.
@@ -426,6 +445,13 @@ make firmware-soc-smoke
 make firmware-soc-check
 make firmware-code-coverage
 make firmware-waveform
+make rv32-toolchain-check
+make firmware-c-build
+make firmware-c-smoke
+make firmware-c-check
+make rv32-isa-check
+make firmware-c-mutation-check
+make firmware-c-waveform
 
 # Optional full-UVM lane; requires VERILATOR_UVM and UVM_HOME
 make uvm-check-env

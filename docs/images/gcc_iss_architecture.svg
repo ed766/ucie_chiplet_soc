@@ -1,0 +1,125 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" role="img" aria-labelledby="title desc">
+  <title id="title">GCC firmware and ISS co-verification architecture</title>
+  <desc id="desc">Freestanding C firmware is compiled for RV32I Zicsr, executed on the RTL core, observed through RVFI and device traces, and checked by an independent instruction-set simulator and DMA golden models.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#071b26"/>
+      <stop offset="1" stop-color="#102f38"/>
+    </linearGradient>
+    <linearGradient id="build" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#194d5a"/>
+      <stop offset="1" stop-color="#123844"/>
+    </linearGradient>
+    <linearGradient id="rtl" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8d4b20"/>
+      <stop offset="1" stop-color="#63321b"/>
+    </linearGradient>
+    <linearGradient id="check" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1f5b48"/>
+      <stop offset="1" stop-color="#153e34"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#000000" flood-opacity="0.32"/>
+    </filter>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 z" fill="#f1c36a"/>
+    </marker>
+    <style>
+      .title { font: 700 40px 'DejaVu Sans', sans-serif; fill: #f4f0df; }
+      .subtitle { font: 400 19px 'DejaVu Sans', sans-serif; fill: #aac4c7; }
+      .stage { font: 700 15px 'DejaVu Sans', sans-serif; letter-spacing: 2px; fill: #f1c36a; }
+      .heading { font: 700 25px 'DejaVu Sans', sans-serif; fill: #ffffff; }
+      .body { font: 400 17px 'DejaVu Sans', sans-serif; fill: #d8e6e5; }
+      .small { font: 400 15px 'DejaVu Sans', sans-serif; fill: #b7cdce; }
+      .metric { font: 700 25px 'DejaVu Sans', sans-serif; fill: #f1c36a; }
+      .metric-label { font: 500 14px 'DejaVu Sans', sans-serif; fill: #d8e6e5; }
+      .chip { fill: #0b222b; stroke: #4f7b80; stroke-width: 1.5; }
+      .flow { fill: none; stroke: #f1c36a; stroke-width: 4; marker-end: url(#arrow); }
+      .trace { fill: none; stroke: #7fc6bd; stroke-width: 3; stroke-dasharray: 8 7; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <rect width="1440" height="900" rx="28" fill="url(#bg)"/>
+  <circle cx="1330" cy="90" r="150" fill="#1f6a70" opacity="0.11"/>
+  <circle cx="80" cy="820" r="180" fill="#bd6d2d" opacity="0.09"/>
+
+  <text x="720" y="66" text-anchor="middle" class="title">Compiled Firmware + Independent ISS Co-Verification</text>
+  <text x="720" y="100" text-anchor="middle" class="subtitle">The compiler creates the workload; RTL and independent models must agree on every architectural effect.</text>
+
+  <g filter="url(#shadow)">
+    <rect x="55" y="145" width="390" height="490" rx="22" fill="url(#build)" stroke="#4f8a92" stroke-width="2"/>
+    <rect x="525" y="145" width="390" height="490" rx="22" fill="url(#rtl)" stroke="#c77b43" stroke-width="2"/>
+    <rect x="995" y="145" width="390" height="490" rx="22" fill="url(#check)" stroke="#4e9b7e" stroke-width="2"/>
+  </g>
+
+  <text x="85" y="185" class="stage">01  BUILD</text>
+  <text x="85" y="222" class="heading">Freestanding firmware</text>
+  <rect x="85" y="253" width="330" height="78" rx="12" class="chip"/>
+  <text x="105" y="282" class="body">C scenarios + crt0.S</text>
+  <text x="105" y="308" class="small">linker script, IRQ/trap handlers, MMIO helpers</text>
+  <rect x="85" y="350" width="330" height="92" rx="12" class="chip"/>
+  <text x="105" y="381" class="body">Checksum-pinned GCC/binutils</text>
+  <text x="105" y="408" class="small">-march=rv32i_zicsr -mabi=ilp32</text>
+  <rect x="85" y="462" width="330" height="125" rx="12" class="chip"/>
+  <text x="105" y="493" class="body">Generated execution artifacts</text>
+  <text x="105" y="521" class="small">instruction ROM image</text>
+  <text x="105" y="547" class="small">initialized SRAM image</text>
+  <text x="105" y="573" class="small">scenario + seed manifest</text>
+
+  <text x="555" y="185" class="stage">02  EXECUTE</text>
+  <text x="555" y="222" class="heading">RV32 chiplet subsystem</text>
+  <rect x="555" y="253" width="330" height="78" rx="12" class="chip"/>
+  <text x="575" y="282" class="body">ROM feeder + RV32I/Zicsr RTL</text>
+  <text x="575" y="308" class="small">precise traps, interrupts, CSR state, MRET</text>
+  <rect x="555" y="350" width="330" height="92" rx="12" class="chip"/>
+  <text x="575" y="381" class="body">APB MMIO control path</text>
+  <text x="575" y="408" class="small">wait states, errors, DMA doorbell, completion</text>
+  <rect x="555" y="462" width="330" height="125" rx="12" class="chip"/>
+  <text x="575" y="493" class="body">DMA + chiplet payload path</text>
+  <text x="575" y="521" class="small">banked memory, retry link, AES service</text>
+  <text x="575" y="547" class="small">RUN / CRYPTO_ONLY / SLEEP / DEEP_SLEEP</text>
+  <text x="575" y="573" class="small">IRQ, timeout, parity, invalid-memory outcomes</text>
+
+  <text x="1025" y="185" class="stage">03  CHECK</text>
+  <text x="1025" y="222" class="heading">Independent prediction</text>
+  <rect x="1025" y="253" width="330" height="105" rx="12" class="chip"/>
+  <text x="1045" y="282" class="body">Repository-local RV32 ISS</text>
+  <text x="1045" y="309" class="small">PC, GPRs, SRAM, CSRs, traps, IRQ state</text>
+  <text x="1045" y="335" class="small">instruction-by-instruction retirement comparison</text>
+  <rect x="1025" y="377" width="330" height="92" rx="12" class="chip"/>
+  <text x="1045" y="408" class="body">DMA / AES golden models</text>
+  <text x="1045" y="435" class="small">device effects, ordering, final memory image</text>
+  <rect x="1025" y="488" width="330" height="99" rx="12" class="chip"/>
+  <text x="1045" y="519" class="body">Evidence and sensitivity</text>
+  <text x="1045" y="546" class="small">assertions, coverage, crosses, mutations</text>
+  <text x="1045" y="572" class="small">first-mismatch diagnostics and performance</text>
+
+  <path d="M445 390 C480 390, 490 390, 520 390" class="flow"/>
+  <path d="M915 390 C950 390, 960 390, 990 390" class="flow"/>
+  <text x="485" y="370" text-anchor="middle" class="small">ELF / hex</text>
+  <text x="955" y="370" text-anchor="middle" class="small">events</text>
+
+  <path d="M720 590 C720 660, 1110 655, 1110 615" class="trace"/>
+  <text x="820" y="665" class="small">RVFI retirement + APB/device traces</text>
+
+  <text x="55" y="700" class="stage">MEASURED CLOSURE EVIDENCE</text>
+  <g filter="url(#shadow)">
+    <rect x="55" y="727" width="246" height="112" rx="15" class="chip"/>
+    <rect x="323" y="727" width="246" height="112" rx="15" class="chip"/>
+    <rect x="591" y="727" width="246" height="112" rx="15" class="chip"/>
+    <rect x="859" y="727" width="246" height="112" rx="15" class="chip"/>
+    <rect x="1127" y="727" width="258" height="112" rx="15" class="chip"/>
+  </g>
+  <text x="178" y="773" text-anchor="middle" class="metric">85 / 85</text>
+  <text x="178" y="805" text-anchor="middle" class="metric-label">directed + seeded executions</text>
+  <text x="446" y="773" text-anchor="middle" class="metric">176 / 176</text>
+  <text x="446" y="805" text-anchor="middle" class="metric-label">trace-derived functional points</text>
+  <text x="714" y="773" text-anchor="middle" class="metric">88 / 88</text>
+  <text x="714" y="805" text-anchor="middle" class="metric-label">same-window interaction crosses</text>
+  <text x="982" y="773" text-anchor="middle" class="metric">11 / 11</text>
+  <text x="982" y="805" text-anchor="middle" class="metric-label">checker mutation detections</text>
+  <text x="1256" y="773" text-anchor="middle" class="metric">96.27% / 93.10%</text>
+  <text x="1256" y="805" text-anchor="middle" class="metric-label">focused line / branch coverage</text>
+
+  <text x="720" y="875" text-anchor="middle" class="small">Behavioral open-source verification evidence; not RISC-V compliance, production firmware, or silicon signoff.</text>
+</svg>

@@ -20,13 +20,22 @@ This is the single resume-facing metrics snapshot for the chiplet project. It is
 | `formal_mutation_sensitivity` | `7 / 7` | Expected counterexamples under property-specific mutations. |
 | `negative_tests` | `9 / 9` | Illegal-operation tests with explicit expected response. |
 | `optional_random_stress_subset` | `40 / 40` | Optional seeded-random execution subset; not part of default closure. |
-| `assertion_inventory` | `52` | Inventoried protocol/control invariants. |
+| `assertion_inventory` | `76` | Inventoried protocol/control invariants. |
 | `axi_lite_protocol_coverage` | `18 / 18` | Optional AXI-Lite CSR wrapper directed protocol coverage. |
 | `axi_lite_optional_bench` | `PASS` | AXI-Lite optional bench status. |
 | `firmware_soc_scenarios` | `12 / 12` | ROM-backed RV32 programs controlling DMA through APB MMIO. |
 | `firmware_mmio_coverage` | `30 / 30` | Firmware/MMIO protocol and scenario coverage points. |
 | `firmware_outcome_crosses` | `7 / 7` | Firmware outcome, power-state, and wait-state interaction crosses. |
 | `firmware_focused_code_coverage` | `86.62%` | Focused Verilator line coverage for RV32/APB/ROM integration RTL. |
+| `compiled_firmware_scenarios` | `85 / 85` | GCC-built directed and seeded executions checked against the repository-local independent RV32 ISS. |
+| `compiled_firmware_directed` | `35 / 35` | Named GCC-built firmware scenarios. |
+| `compiled_firmware_isa_random` | `25 / 25` | Deterministic generated CPU instruction streams. |
+| `compiled_firmware_workload_random` | `25 / 25` | Deterministic firmware/DMA workload seeds. |
+| `compiled_firmware_coverage` | `176 / 176` | RV32I/Zicsr, APB, interrupt, trap, and firmware outcome points. |
+| `compiled_firmware_crosses` | `88 / 88` | Compiled firmware, DMA outcome, power, reset, and interrupt interactions. |
+| `compiled_firmware_focused_code_coverage` | `96.27%` | Focused Verilator line coverage for the GCC-driven RV32/APB/ROM integration RTL. |
+| `compiled_firmware_focused_branch_coverage` | `93.10%` | Focused RV32/APB/ROM branch/expression coverage. |
+| `compiled_firmware_mutation_detection` | `11 / 11` | RTL and architectural-trace mutations detected by SVA/ISS checking. |
 | `optional_collateral_code_coverage` | `92.37%` | Verilator line coverage for optional AXI/CDC collateral RTL. |
 | `integrated_async_cdc` | `4 / 4` | Optional two-clock chiplet matrix across clock ratios and reset skew. |
 | `real_uvm_ci` | `4 / 4` | Pinned Verilator/UVM phase, TLM, coverage, and RAL smoke lane when executed. |

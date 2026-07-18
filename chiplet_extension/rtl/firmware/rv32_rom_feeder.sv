@@ -28,7 +28,7 @@ module rv32_rom_feeder #(
     end
 
     assign instr_valid = rst_n && !halted && !wait_commit_q;
-    assign instr = rom[fetch_pc_q[9:2]];
+    assign instr = rom[(fetch_pc_q >> 2) % ROM_WORDS];
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin

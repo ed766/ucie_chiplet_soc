@@ -2,7 +2,10 @@
 module soc_chiplet_rv32_top #(
     parameter int DATA_WIDTH = 64,
     parameter int FLIT_WIDTH = 264,
-    parameter int LANES = 16
+    parameter int LANES = 16,
+    parameter int ROM_WORDS = 256,
+    parameter int CPU_DATA_MEM_WORDS = 64,
+    parameter bit CPU_ENABLE_TRAPS = 1'b0
 ) (
     input  logic                  clk,
     input  logic                  rst_n,
@@ -21,6 +24,29 @@ module soc_chiplet_rv32_top #(
     output logic [31:0]           cpu_mem_addr,
     output logic [31:0]           cpu_mem_wdata,
     output logic [31:0]           cpu_mem_rdata,
+    output logic                  cpu_rvfi_valid,
+    output logic [63:0]           cpu_rvfi_order,
+    output logic [31:0]           cpu_rvfi_insn,
+    output logic                  cpu_rvfi_trap,
+    output logic                  cpu_rvfi_intr,
+    output logic [31:0]           cpu_rvfi_pc_rdata,
+    output logic [31:0]           cpu_rvfi_pc_wdata,
+    output logic [4:0]            cpu_rvfi_rs1_addr,
+    output logic [4:0]            cpu_rvfi_rs2_addr,
+    output logic [31:0]           cpu_rvfi_rs1_rdata,
+    output logic [31:0]           cpu_rvfi_rs2_rdata,
+    output logic [4:0]            cpu_rvfi_rd_addr,
+    output logic [31:0]           cpu_rvfi_rd_wdata,
+    output logic [31:0]           cpu_rvfi_mem_addr,
+    output logic [3:0]            cpu_rvfi_mem_rmask,
+    output logic [3:0]            cpu_rvfi_mem_wmask,
+    output logic [31:0]           cpu_rvfi_mem_rdata,
+    output logic [31:0]           cpu_rvfi_mem_wdata,
+    output logic [31:0]           cpu_rvfi_mstatus,
+    output logic [31:0]           cpu_rvfi_mie,
+    output logic [31:0]           cpu_rvfi_mtvec,
+    output logic [31:0]           cpu_rvfi_mepc,
+    output logic [31:0]           cpu_rvfi_mcause,
     output logic [31:0]           cpu_paddr,
     output logic                  cpu_psel,
     output logic                  cpu_penable,
@@ -57,6 +83,10 @@ module soc_chiplet_rv32_top #(
     logic mmio_access_enable_q;
     logic [1:0] mmio_wake_guard_q;
     logic [1:0] last_power_state_q;
+    logic verification_irq_force = 1'b0;
+    logic cpu_irq_ext;
+
+    assign cpu_irq_ext = irq_done | verification_irq_force;
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -80,7 +110,9 @@ module soc_chiplet_rv32_top #(
         end
     end
 
-    rv32_rom_feeder u_firmware (
+    rv32_rom_feeder #(
+        .ROM_WORDS(ROM_WORDS)
+    ) u_firmware (
         .clk(clk),
         .rst_n(rst_n),
         .instr_ready(instr_ready),
@@ -93,13 +125,16 @@ module soc_chiplet_rv32_top #(
 
     rv32_core #(
         .MMIO_BASE(32'h0000_0100),
-        .MMIO_END (32'h0000_01ff)
+        .MMIO_END (32'h0000_01ff),
+        .DATA_MEM_WORDS(CPU_DATA_MEM_WORDS),
+        .ENABLE_TRAPS(CPU_ENABLE_TRAPS)
     ) u_cpu (
         .clk(clk),
         .rst_n(rst_n),
         .instr_valid(instr_valid),
         .instr_ready(instr_ready),
         .instr(instr),
+        .irq_ext(cpu_irq_ext),
         .paddr(cpu_paddr),
         .psel(cpu_psel),
         .penable(cpu_penable),
@@ -124,7 +159,30 @@ module soc_chiplet_rv32_top #(
         .illegal_instr(illegal_instr),
         .bus_error(cpu_bus_error),
         .retire(cpu_retire),
-        .halted(cpu_halted)
+        .halted(cpu_halted),
+        .rvfi_valid(cpu_rvfi_valid),
+        .rvfi_order(cpu_rvfi_order),
+        .rvfi_insn(cpu_rvfi_insn),
+        .rvfi_trap(cpu_rvfi_trap),
+        .rvfi_intr(cpu_rvfi_intr),
+        .rvfi_pc_rdata(cpu_rvfi_pc_rdata),
+        .rvfi_pc_wdata(cpu_rvfi_pc_wdata),
+        .rvfi_rs1_addr(cpu_rvfi_rs1_addr),
+        .rvfi_rs2_addr(cpu_rvfi_rs2_addr),
+        .rvfi_rs1_rdata(cpu_rvfi_rs1_rdata),
+        .rvfi_rs2_rdata(cpu_rvfi_rs2_rdata),
+        .rvfi_rd_addr(cpu_rvfi_rd_addr),
+        .rvfi_rd_wdata(cpu_rvfi_rd_wdata),
+        .rvfi_mem_addr(cpu_rvfi_mem_addr),
+        .rvfi_mem_rmask(cpu_rvfi_mem_rmask),
+        .rvfi_mem_wmask(cpu_rvfi_mem_wmask),
+        .rvfi_mem_rdata(cpu_rvfi_mem_rdata),
+        .rvfi_mem_wdata(cpu_rvfi_mem_wdata),
+        .rvfi_mstatus(cpu_rvfi_mstatus),
+        .rvfi_mie(cpu_rvfi_mie),
+        .rvfi_mtvec(cpu_rvfi_mtvec),
+        .rvfi_mepc(cpu_rvfi_mepc),
+        .rvfi_mcause(cpu_rvfi_mcause)
     );
 
     apb_dma_csr_bridge u_apb_csr (

@@ -28,6 +28,10 @@ RENDER_FIRMWARE_WAVEFORM := $(ROOT_DIR)/scripts/render_firmware_waveform.py
 RUN_SOLVER_FORMAL := $(ROOT_DIR)/scripts/run_solver_formal.py
 RUN_ASYNC_CDC := $(ROOT_DIR)/scripts/run_async_cdc.py
 NORMALIZE_REPORT_PATHS := $(ROOT_DIR)/scripts/normalize_report_paths.py
+RUN_COMPILED_FIRMWARE := $(ROOT_DIR)/scripts/run_compiled_firmware.py
+BUILD_COMPILED_FIRMWARE := $(ROOT_DIR)/scripts/build_compiled_firmware.py
+CHECK_RV32_TOOLCHAIN := $(ROOT_DIR)/scripts/check_rv32_toolchain.py
+INSTALL_RV32_TOOLCHAIN := $(ROOT_DIR)/scripts/install_rv32_toolchain.py
 
 REPORT_ARTIFACTS := \
 	$(REPORTS_DIR)/regress_summary.csv \
@@ -60,6 +64,14 @@ REPORT_ARTIFACTS := \
 		$(REPORTS_DIR)/firmware_coverage_summary.csv \
 		$(REPORTS_DIR)/firmware_cross_coverage_summary.csv \
 		$(REPORTS_DIR)/firmware_code_coverage_summary.md \
+		$(REPORTS_DIR)/firmware_c_summary.csv \
+		$(REPORTS_DIR)/firmware_c_coverage_summary.csv \
+		$(REPORTS_DIR)/firmware_c_cross_coverage_summary.csv \
+		$(REPORTS_DIR)/firmware_c_mutation_summary.csv \
+		$(REPORTS_DIR)/firmware_c_code_coverage_summary.txt \
+		$(REPORTS_DIR)/firmware_c_code_coverage_summary.md \
+		$(REPORTS_DIR)/firmware_c_code_coverage_test_ranking.csv \
+		$(ROOT_DIR)/../docs/reference/compiled_firmware_verification.md \
 		$(ROOT_DIR)/../docs/performance_characterization.md \
 		$(ROOT_DIR)/../docs/reference/assertion_inventory.md \
 		$(ROOT_DIR)/../docs/reference/random_stress_summary.md \
@@ -71,7 +83,7 @@ REPORT_ARTIFACTS := \
 		$(ROOT_DIR)/../docs/reference/clock_reset_cdc_plan.md \
 		$(ROOT_DIR)/../docs/reference/c_reference_model_summary.md
 
-.PHONY: chiplet-sim chiplet-report project-check regress closure closure-equivalence power-regress stress negative-regress negative-summary bug-validate formal-check formal-prove assertion-inventory upf-check frontend-quality code-coverage coverage-edges-check axi-lite-check cdc-rdc-check async-cdc-check credit-edges-check c-reference-check firmware-soc-smoke firmware-soc-check firmware-code-coverage firmware-waveform uvm-check-env uvm-smoke uvm-ci uvm-ral-smoke uvm-closure uvm-regress characterize characterize-link characterize-dma-mem performance-report project-metrics readme-metrics docs-check normalize-report-paths random-smoke-25 stress-retry-50 power-dma-cross-25 random-stress-run random-stress-summary cross-coverage-summary dma-retry-waveform clean
+.PHONY: chiplet-sim chiplet-report project-check regress closure closure-equivalence power-regress stress negative-regress negative-summary bug-validate formal-check formal-prove assertion-inventory upf-check frontend-quality code-coverage coverage-edges-check axi-lite-check cdc-rdc-check async-cdc-check credit-edges-check c-reference-check firmware-soc-smoke firmware-soc-check firmware-code-coverage firmware-waveform rv32-toolchain-install rv32-toolchain-check rv32-isa-check firmware-c-build firmware-c-smoke firmware-c-check firmware-c-isa-random firmware-c-workload-random firmware-c-closure firmware-c-coverage firmware-c-waveform firmware-c-mutation-check uvm-check-env uvm-smoke uvm-ci uvm-ral-smoke uvm-closure uvm-regress characterize characterize-link characterize-dma-mem performance-report project-metrics readme-metrics docs-check normalize-report-paths random-smoke-25 stress-retry-50 power-dma-cross-25 random-stress-run random-stress-summary cross-coverage-summary dma-retry-waveform clean
 
 chiplet-sim:
 	$(PYTHON) $(RUN_REGRESSION) --tests prbs_smoke,soc_smoke --random-seeds 1 --seed $(SEED) --verilator $(VERILATOR) --report-prefix smoke --run-id-prefix smoke
@@ -89,6 +101,7 @@ project-check:
 	$(MAKE) assertion-inventory
 	$(MAKE) upf-check
 	$(MAKE) firmware-soc-check
+	$(MAKE) firmware-c-check
 	$(MAKE) performance-report
 	$(MAKE) project-metrics
 	$(MAKE) readme-metrics
@@ -235,6 +248,53 @@ firmware-code-coverage:
 firmware-waveform: firmware-soc-check
 	$(PYTHON) $(RENDER_FIRMWARE_WAVEFORM)
 
+rv32-toolchain-install:
+	$(PYTHON) $(INSTALL_RV32_TOOLCHAIN)
+
+rv32-toolchain-check:
+	$(PYTHON) $(CHECK_RV32_TOOLCHAIN)
+
+firmware-c-build: rv32-toolchain-check
+	$(PYTHON) $(BUILD_COMPILED_FIRMWARE)
+
+firmware-c-smoke: rv32-toolchain-check
+	$(PYTHON) $(RUN_COMPILED_FIRMWARE) --verilator $(VERILATOR) --smoke
+
+firmware-c-check: rv32-toolchain-check
+	$(PYTHON) $(RUN_COMPILED_FIRMWARE) --verilator $(VERILATOR)
+
+firmware-c-isa-random: rv32-toolchain-check
+	$(PYTHON) $(RUN_COMPILED_FIRMWARE) --verilator $(VERILATOR) --isa-random --count 25
+
+firmware-c-workload-random: rv32-toolchain-check
+	$(PYTHON) $(RUN_COMPILED_FIRMWARE) --verilator $(VERILATOR) --workload-random --count 25
+
+firmware-c-closure: rv32-toolchain-check
+	$(PYTHON) $(RUN_COMPILED_FIRMWARE) --verilator $(VERILATOR) --closure --count 25
+
+rv32-isa-check: firmware-c-check
+	@$(PYTHON) -c 'import csv; from pathlib import Path; p=Path("$(REPORTS_DIR)/firmware_c_coverage_summary.csv"); rows=list(csv.DictReader(p.open())); missing=[r["coverage_point"] for r in rows if r["coverage_point"].startswith("rv32_") and r["hit"]!="1"]; assert not missing, "missing RV32 ISA points: "+str(missing); print("RV32 ISA differential coverage PASS")'
+
+firmware-c-coverage: rv32-toolchain-check
+	$(PYTHON) $(RUN_COMPILED_FIRMWARE) --verilator $(VERILATOR) --coverage --closure --count 25
+	$(PYTHON) $(GEN_CODE_COVERAGE_REPORT) \
+		--dat-dir $(ROOT_DIR)/build/firmware_c/coverage_data --prefix firmware_c_ \
+		--output-txt $(REPORTS_DIR)/firmware_c_code_coverage_summary.txt \
+		--output-md $(REPORTS_DIR)/firmware_c_code_coverage_summary.md \
+		--info-out $(REPORTS_DIR)/firmware_c_code_coverage.info \
+		--ranking-out $(REPORTS_DIR)/firmware_c_code_coverage_test_ranking.csv \
+		--holes-out $(REPORTS_DIR)/firmware_c_code_coverage_holes.csv \
+		--annotate-dir $(ROOT_DIR)/build/firmware_c/code_coverage_annotated \
+		--focus-components rv32_core,apb_dma_csr_bridge,rv32_rom_feeder,soc_chiplet_rv32_top \
+		--minimum-focus-pct 96 \
+		--minimum-focus-branch-pct 85
+
+firmware-c-mutation-check: rv32-toolchain-check
+	$(PYTHON) $(RUN_COMPILED_FIRMWARE) --verilator $(VERILATOR) --mutation-check
+
+firmware-c-waveform: firmware-c-check
+	$(PYTHON) $(RENDER_FIRMWARE_WAVEFORM) --trace $(ROOT_DIR)/build/firmware_c/compiled_firmware_trace.csv --output $(ROOT_DIR)/../docs/images/compiled_firmware_waveform.png
+
 project-metrics:
 	$(PYTHON) $(GEN_PROJECT_METRICS)
 
@@ -251,7 +311,7 @@ random-stress-summary:
 	$(PYTHON) $(GEN_RANDOM_STRESS_SUMMARY)
 
 clean:
-	@rm -rf $(BUILD_DIR) $(ROOT_DIR)/build/firmware_soc $(ROOT_DIR)/build/characterization $(ROOT_DIR)/build/characterization_dma_mem $(ROOT_DIR)/build/formal_checks $(ROOT_DIR)/build/uvm_env_check $(ROOT_DIR)/build/uvm_regression
+	@rm -rf $(BUILD_DIR) $(ROOT_DIR)/build/firmware_soc $(ROOT_DIR)/build/firmware_c $(ROOT_DIR)/build/characterization $(ROOT_DIR)/build/characterization_dma_mem $(ROOT_DIR)/build/formal_checks $(ROOT_DIR)/build/uvm_env_check $(ROOT_DIR)/build/uvm_regression
 	@find $(REPORTS_DIR) -maxdepth 1 \( \
 		-name 'regress_summary.csv' -o \
 		-name 'coverage_summary.csv' -o \

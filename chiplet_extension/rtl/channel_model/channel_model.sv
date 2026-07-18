@@ -91,10 +91,10 @@ module channel_model #(
             induce_fwd_fault_q <= 1'b0;
             induce_rev_fault_q <= 1'b0;
             if (fwd_valid_pipe[PIPE_STAGES-1]) begin
-                induce_fwd_fault_q <= ((int'(fwd_lfsr_q) % FAULT_SCALE) == 0);
+                induce_fwd_fault_q <= (($unsigned(fwd_lfsr_q) % FAULT_SCALE) == 0);
             end
             if (rev_valid_pipe[PIPE_STAGES-1]) begin
-                induce_rev_fault_q <= ((int'(rev_lfsr_q) % FAULT_SCALE) == 0);
+                induce_rev_fault_q <= (($unsigned(rev_lfsr_q) % FAULT_SCALE) == 0);
             end
         end
     end

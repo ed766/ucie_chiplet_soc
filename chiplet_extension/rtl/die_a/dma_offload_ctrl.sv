@@ -254,27 +254,30 @@ module dma_offload_ctrl #(
 
     function automatic logic [15:0] sat_inc16(input logic [15:0] value);
         if (value == 16'hffff) begin
-            return value;
+            sat_inc16 = value;
+        end else begin
+            sat_inc16 = value + 16'd1;
         end
-        return value + 16'd1;
     endfunction
 
     function automatic logic [DATA_WIDTH-1:0] poison_word(input logic [7:0] addr);
-        poison_word = 64'hDEAD_0000_0000_0000 ^ DATA_WIDTH'(addr);
+        poison_word = 64'hDEAD_0000_0000_0000 ^ {{(DATA_WIDTH-8){1'b0}}, addr};
     endfunction
 
     function automatic logic bank_id_from_addr(input logic [7:0] addr);
         if (BANKS == 1) begin
-            return 1'b0;
+            bank_id_from_addr = 1'b0;
+        end else begin
+            bank_id_from_addr = addr[0];
         end
-        return addr[0];
     endfunction
 
     function automatic logic [BANK_ROW_W-1:0] bank_row_from_addr(input logic [7:0] addr);
         if (BANKS == 1) begin
-            return addr[BANK_ROW_W-1:0];
+            bank_row_from_addr = addr[BANK_ROW_W-1:0];
+        end else begin
+            bank_row_from_addr = addr[7:1];
         end
-        return addr[7:1];
     endfunction
 
     function automatic logic [7:0] bank_word_addr(input int row_idx, input int bank_id);

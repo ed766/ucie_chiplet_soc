@@ -133,7 +133,31 @@ module tb_rv32_core;
     .illegal_instr(rvif.illegal_instr),
     .bus_error   (bus_error),
     .retire      (rvif.retire),
-    .halted      (rvif.halted)
+    .halted      (rvif.halted),
+    .irq_ext     (1'b0),
+    .rvfi_valid  (),
+    .rvfi_order  (),
+    .rvfi_insn   (),
+    .rvfi_trap   (),
+    .rvfi_intr   (),
+    .rvfi_pc_rdata(),
+    .rvfi_pc_wdata(),
+    .rvfi_rs1_addr(),
+    .rvfi_rs2_addr(),
+    .rvfi_rs1_rdata(),
+    .rvfi_rs2_rdata(),
+    .rvfi_rd_addr(),
+    .rvfi_rd_wdata(),
+    .rvfi_mem_addr(),
+    .rvfi_mem_rmask(),
+    .rvfi_mem_wmask(),
+    .rvfi_mem_rdata(),
+    .rvfi_mem_wdata(),
+    .rvfi_mstatus(),
+    .rvfi_mie    (),
+    .rvfi_mtvec  (),
+    .rvfi_mepc   (),
+    .rvfi_mcause ()
   );
 
   task automatic wait_for_halt();

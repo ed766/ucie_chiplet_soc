@@ -130,6 +130,14 @@ def generate(csv_out: Path, md_out: Path) -> None:
     firmware_coverage = read_csv(REPORTS / "firmware_coverage_summary.csv")
     firmware_cross = read_csv(REPORTS / "firmware_cross_coverage_summary.csv")
     firmware_code_cov = key_value_file(REPORTS / "firmware_code_coverage_summary.txt")
+    firmware_c = read_csv(REPORTS / "firmware_c_summary.csv")
+    firmware_c_directed = read_csv(REPORTS / "firmware_c_directed_summary.csv")
+    firmware_c_coverage = read_csv(REPORTS / "firmware_c_coverage_summary.csv")
+    firmware_c_cross = read_csv(REPORTS / "firmware_c_cross_coverage_summary.csv")
+    firmware_c_code_cov = key_value_file(REPORTS / "firmware_c_code_coverage_summary.txt")
+    firmware_c_mutations = read_csv(REPORTS / "firmware_c_mutation_summary.csv")
+    firmware_c_isa_random = read_csv(REPORTS / "firmware_c_isa_random_summary.csv")
+    firmware_c_workload_random = read_csv(REPORTS / "firmware_c_workload_random_summary.csv")
     code_cov = key_value_file(REPORTS / "code_coverage_summary.txt")
     solver_formal = read_csv(REPORTS / "formal_proof_summary.csv")
     async_cdc = read_csv(REPORTS / "async_cdc_summary.csv")
@@ -162,6 +170,13 @@ def generate(csv_out: Path, md_out: Path) -> None:
     firmware_cov_hit = sum(1 for row in firmware_coverage if row.get("hit") == "1")
     firmware_cross_hit = sum(1 for row in firmware_cross if row.get("hit") == "1")
     firmware_code_pct = firmware_code_cov.get("focus_line_coverage_pct", "NA")
+    firmware_c_all = firmware_c if any(row.get("family") != "directed" for row in firmware_c) else firmware_c + firmware_c_isa_random + firmware_c_workload_random
+    firmware_c_pass = sum(1 for row in firmware_c_all if row.get("status") == "PASS")
+    firmware_c_directed_rows = firmware_c_directed or [row for row in firmware_c if row.get("family") == "directed"]
+    firmware_c_cov_hit = sum(1 for row in firmware_c_coverage if row.get("hit") == "1")
+    firmware_c_code_pct = firmware_c_code_cov.get("focus_line_coverage_pct", "NA")
+    firmware_c_branch_pct = firmware_c_code_cov.get("focus_branch_expression_coverage_pct", "NA")
+    firmware_c_cross_hit = sum(1 for row in firmware_c_cross if row.get("hit") == "1")
     solver_proves = [row for row in solver_formal if row.get("task") == "prove"]
     solver_covers = [row for row in solver_formal if row.get("task") == "cover"]
     solver_mutations = [row for row in solver_formal if row.get("task") == "mutation"]
@@ -192,6 +207,15 @@ def generate(csv_out: Path, md_out: Path) -> None:
         ("firmware_mmio_coverage", metric_pair(firmware_cov_hit, len(firmware_coverage)), "Firmware/MMIO protocol and scenario coverage points."),
         ("firmware_outcome_crosses", metric_pair(firmware_cross_hit, len(firmware_cross)), "Firmware outcome, power-state, and wait-state interaction crosses."),
         ("firmware_focused_code_coverage", f"{firmware_code_pct}%" if firmware_code_pct != "NA" else "NA", "Focused Verilator line coverage for RV32/APB/ROM integration RTL."),
+        ("compiled_firmware_scenarios", metric_pair(firmware_c_pass, len(firmware_c_all)), "GCC-built directed and seeded executions checked against the repository-local independent RV32 ISS."),
+        ("compiled_firmware_directed", metric_pair(sum(1 for row in firmware_c_directed_rows if row.get("status") == "PASS"), len(firmware_c_directed_rows)), "Named GCC-built firmware scenarios."),
+        ("compiled_firmware_isa_random", metric_pair(sum(1 for row in firmware_c_isa_random if row.get("status") == "PASS"), len(firmware_c_isa_random)), "Deterministic generated CPU instruction streams."),
+        ("compiled_firmware_workload_random", metric_pair(sum(1 for row in firmware_c_workload_random if row.get("status") == "PASS"), len(firmware_c_workload_random)), "Deterministic firmware/DMA workload seeds."),
+        ("compiled_firmware_coverage", metric_pair(firmware_c_cov_hit, len(firmware_c_coverage)), "RV32I/Zicsr, APB, interrupt, trap, and firmware outcome points."),
+        ("compiled_firmware_crosses", metric_pair(firmware_c_cross_hit, len(firmware_c_cross)), "Compiled firmware, DMA outcome, power, reset, and interrupt interactions."),
+        ("compiled_firmware_focused_code_coverage", f"{firmware_c_code_pct}%" if firmware_c_code_pct != "NA" else "NA", "Focused Verilator line coverage for the GCC-driven RV32/APB/ROM integration RTL."),
+        ("compiled_firmware_focused_branch_coverage", f"{firmware_c_branch_pct}%" if firmware_c_branch_pct != "NA" else "NA", "Focused RV32/APB/ROM branch/expression coverage."),
+        ("compiled_firmware_mutation_detection", metric_pair(sum(1 for row in firmware_c_mutations if row.get("status") == "PASS"), len(firmware_c_mutations)), "RTL and architectural-trace mutations detected by SVA/ISS checking."),
         ("optional_collateral_code_coverage", f"{optional_cov}%" if optional_cov != "NA" else "NA", "Verilator line coverage for optional AXI/CDC collateral RTL."),
         ("integrated_async_cdc", metric_pair(async_pass, len(async_cdc)), "Optional two-clock chiplet matrix across clock ratios and reset skew."),
         ("real_uvm_ci", metric_pair(uvm_pass, len(uvm_ci)), "Pinned Verilator/UVM phase, TLM, coverage, and RAL smoke lane when executed."),
@@ -230,6 +254,17 @@ def generate(csv_out: Path, md_out: Path) -> None:
     )
     md_out.parent.mkdir(parents=True, exist_ok=True)
     md_out.write_text("\n".join(lines))
+
+    compiled_doc = DOCS / "reference" / "compiled_firmware_verification.md"
+    if compiled_doc.exists() and firmware_c_code_pct != "NA":
+        text = compiled_doc.read_text()
+        replacement = (
+            f"- Focused RV32/APB/ROM line coverage: **{firmware_c_code_pct}%** "
+            f"(`rv32_core`: **{firmware_c_code_cov.get('rv32_core_line_coverage_pct', 'NA')}%**); "
+            f"branch/expression: **{firmware_c_branch_pct}%**"
+        )
+        text = re.sub(r"- Focused RV32/APB/ROM line coverage:.*", replacement, text)
+        compiled_doc.write_text(text)
 
 
 def main() -> int:

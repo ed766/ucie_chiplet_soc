@@ -1,0 +1,7 @@
+crossing,strategy,evidence,status
+single_bit_control,cdc_sync_2ff,rtl/cdc/cdc_sync_2ff.sv,PASS
+event_pulse,cdc_pulse_sync,rtl/cdc/cdc_pulse_sync.sv,PASS
+reset_release,per-domain active-low reset release tested under clock-ratio variation,sim/tb_cdc_reset.sv,PASS
+direct_async_scan,pattern scan for known CDC collateral and clock/reset naming,frontend_quality_summary.md plus cdc_rdc_summary.csv,PASS
+chiplet_datapath,single_clock_proxy_model,soc_chiplet_top uses one behavioral clock in default simulation,PASS
+chiplet_datapath_waiver,documented waiver: no asynchronous die-to-die clock crossing in this behavioral proxy,docs/reference/clock_reset_cdc_plan.md,WAIVED

@@ -14,6 +14,7 @@ REPO = ROOT.parent
 FORMAL_SUMMARY = ROOT / "reports" / "formal_summary.csv"
 OPTIONAL_BENCH_SUMMARY = ROOT / "reports" / "optional_bench_summary.csv"
 FIRMWARE_SUMMARY = ROOT / "reports" / "firmware_soc_summary.csv"
+FIRMWARE_C_SUMMARY = ROOT / "reports" / "firmware_c_summary.csv"
 OUTPUT = REPO / "docs" / "reference" / "assertion_inventory.md"
 
 
@@ -28,6 +29,21 @@ class AssertionEntry:
     evidence_type: str
     evidence_case: str
     source: Path
+
+
+RV32_EXTRA_ASSERTIONS = (
+    ("a_rv32_load_mask_matches_width", "data-integrity invariant", "A retired load exposes the exact byte mask implied by its width and address offset.", "A load uses the wrong byte lanes.", "operand_corner_matrix / CPU seeds"),
+    ("a_rv32_store_mask_matches_width", "data-integrity invariant", "A retired store exposes the exact byte mask implied by its width and address offset.", "A store corrupts adjacent byte lanes.", "operand_corner_matrix / CPU seeds"),
+    ("a_rv32_trap_suppresses_register_write", "precise-exception invariant", "A trapping instruction cannot update its destination register.", "A faulting operation leaves a partial register side effect.", "decode/access legality matrices"),
+    ("a_rv32_interrupt_suppresses_instruction_effect", "interrupt sequencing invariant", "An interrupt-boundary record has no register or memory side effect.", "The interrupted instruction partially retires.", "interrupt timing matrices"),
+    ("a_rv32_apb_wait_blocks_architectural_event", "interface ordering invariant", "Neither retirement nor interrupt entry occurs during an unresolved APB transfer.", "An MMIO instruction or interrupt crosses an incomplete bus operation.", "interrupt_during_apb_wait / APB wait matrix"),
+    ("a_rv32_zero_destination_has_zero_data", "architectural safety invariant", "RVFI reports zero write data when the destination is x0.", "A discarded x0 write appears architecturally visible.", "CPU seeds / operand matrix"),
+    ("a_rv32_csr_state_is_implemented_subset", "CSR-state invariant", "Machine status and interrupt-enable snapshots contain only implemented bits.", "Unsupported CSR bits become observable.", "csr_state_matrix / illegal CSR matrix"),
+    ("a_rv32_mmio_completion_cannot_repeat", "control-bus transaction invariant", "A completed MMIO transfer cannot repeat on the following cycle.", "One instruction causes duplicate peripheral side effects.", "APB atomicity matrix"),
+    ("a_rv32_mmio_error_retires_precise_trap", "fault-containment invariant", "An APB error retires as a precise trap without destination writeback.", "A failed MMIO operation appears successful.", "APB legality and atomicity matrices"),
+    ("a_rv32_mret_has_saved_interrupt_state", "trap-return invariant", "MRET observes a saved machine interrupt-enable state before returning.", "Interrupt enable state is lost across a handler.", "IRQ level/MRET matrix"),
+    ("a_rv32_reset_clears_architectural_event", "reset safety invariant", "Reset suppresses retirement, writeback, and RVFI events.", "A reset-aborted instruction creates a ghost architectural event.", "APB/reset and handler-reset matrices"),
+)
 
 
 ENTRIES = (
@@ -603,6 +619,156 @@ ENTRIES = (
         "firmware_soc_integration",
         ROOT / "sim" / "tb_firmware_soc.sv",
     ),
+    AssertionEntry(
+        "APB/firmware",
+        "firmware_reject_matches_submitted_tag",
+        "end-to-end rejection invariant",
+        "A rejected software doorbell consumes the matching submitted tag without entering the accepted stream.",
+        "A queue-full or blocked rejection corrupts later submission-to-accept correlation.",
+        "queue_full_reject / queue_full_recovery / crypto_only_reject",
+        "simulation monitor + compiled firmware",
+        "compiled_firmware_integration",
+        ROOT / "sim" / "tb_firmware_soc.sv",
+    ),
+    AssertionEntry(
+        "RV32/compiled firmware",
+        "a_rv32_x0_constant",
+        "architectural safety invariant",
+        "Architectural register x0 remains hardwired to zero.",
+        "An instruction or trap path corrupts the architectural zero register.",
+        "all compiled-C scenarios",
+        "simulation SVA + differential ISS",
+        "compiled_firmware_integration",
+        ROOT / "sim" / "assertions" / "rv32_firmware_assertions.sv",
+    ),
+    AssertionEntry(
+        "RV32/compiled firmware",
+        "a_rv32_retire_pc_aligned",
+        "architectural safety invariant",
+        "Retired source and destination PCs remain instruction aligned.",
+        "A branch, jump, or trap retires an unaligned architectural PC.",
+        "branch/load-store differential programs",
+        "simulation SVA + differential ISS",
+        "compiled_firmware_integration",
+        ROOT / "sim" / "assertions" / "rv32_firmware_assertions.sv",
+    ),
+    AssertionEntry(
+        "RV32/compiled firmware",
+        "a_rv32_trap_target_aligned",
+        "trap sequencing invariant",
+        "Trap entry transfers control to an aligned machine-mode vector.",
+        "An exception or interrupt enters an invalid trap address.",
+        "misalignment / illegal access / interrupt scenarios",
+        "simulation SVA + differential ISS",
+        "compiled_firmware_integration",
+        ROOT / "sim" / "assertions" / "rv32_firmware_assertions.sv",
+    ),
+    AssertionEntry(
+        "RV32/compiled firmware",
+        "a_rv32_no_retire_while_apb_wait",
+        "interface ordering invariant",
+        "An MMIO instruction cannot retire while its APB transfer is wait-stated.",
+        "Firmware advances before the device-side operation completes.",
+        "apb_wait_error / reset_mid_wait",
+        "simulation SVA + APB monitor",
+        "compiled_firmware_integration",
+        ROOT / "sim" / "assertions" / "rv32_firmware_assertions.sv",
+    ),
+    AssertionEntry(
+        "RV32/compiled firmware",
+        "a_rv32_mmio_error_no_writeback",
+        "fault-containment invariant",
+        "An APB error response cannot silently update an architectural destination register.",
+        "A failed MMIO load appears successful to firmware.",
+        "apb_wait_error",
+        "simulation SVA + differential ISS",
+        "compiled_firmware_integration",
+        ROOT / "sim" / "assertions" / "rv32_firmware_assertions.sv",
+    ),
+    AssertionEntry(
+        "RV32/compiled firmware",
+        "a_rv32_interrupt_at_boundary",
+        "interrupt sequencing invariant",
+        "External interrupts are represented only on architectural retirement boundaries.",
+        "An asynchronous interrupt creates a partial or duplicate instruction retirement.",
+        "interrupt_dma",
+        "simulation SVA + differential ISS",
+        "compiled_firmware_integration",
+        ROOT / "sim" / "assertions" / "rv32_firmware_assertions.sv",
+    ),
+    AssertionEntry(
+        "RV32/compiled firmware",
+        "a_rv32_order_increments",
+        "retirement ordering invariant",
+        "Consecutive retirement records have strictly increasing architectural order.",
+        "An instruction retires twice or a retirement record is dropped.",
+        "all compiled-C scenarios",
+        "simulation SVA + differential ISS",
+        "compiled_firmware_integration",
+        ROOT / "sim" / "assertions" / "rv32_firmware_assertions.sv",
+    ),
+    AssertionEntry(
+        "RV32/compiled firmware",
+        "a_rv32_mret_returns_mepc",
+        "trap-return ordering invariant",
+        "MRET resumes exactly at the saved machine exception PC.",
+        "Trap return skips or replays an interrupted instruction.",
+        "interrupt_dma / RV32_BUG_MRET_SKIP",
+        "simulation SVA + mutation + differential ISS",
+        "compiled_firmware_integration",
+        ROOT / "sim" / "assertions" / "rv32_firmware_assertions.sv",
+    ),
+    AssertionEntry(
+        "RV32/compiled firmware",
+        "a_rv32_apb_completion_is_single_pulse",
+        "control-bus transaction invariant",
+        "A completed APB transfer exits the access phase before another operation can complete.",
+        "One MMIO instruction generates duplicate device operations.",
+        "apb_wait_error / polling_dma",
+        "simulation SVA + APB monitor",
+        "compiled_firmware_integration",
+        ROOT / "sim" / "assertions" / "rv32_firmware_assertions.sv",
+    ),
+    AssertionEntry(
+        "RV32/compiled firmware",
+        "a_rv32_interrupt_cause_external",
+        "interrupt-state invariant",
+        "A retired external interrupt records the machine-external interrupt cause.",
+        "Interrupt entry records a stale or incorrect machine cause.",
+        "interrupt_dma",
+        "simulation SVA + differential ISS",
+        "compiled_firmware_integration",
+        ROOT / "sim" / "assertions" / "rv32_firmware_assertions.sv",
+    ),
+    AssertionEntry(
+        "RV32/compiled firmware",
+        "a_rv32_sync_trap_cause_supported",
+        "precise-exception invariant",
+        "Synchronous traps report the supported illegal, misalignment, access-fault, or ECALL cause.",
+        "Firmware enters a handler with an incorrect or stale cause code.",
+        "apb_wait_trap / isa_matrix",
+        "simulation SVA + differential ISS",
+        "compiled_firmware_integration",
+        ROOT / "sim" / "assertions" / "rv32_firmware_assertions.sv",
+    ),
+    AssertionEntry(
+        "RV32/compiled firmware",
+        "a_rv32_trap_records_fault_pc",
+        "precise-exception invariant",
+        "Synchronous trap state records the exact faulting instruction PC in mepc.",
+        "Trap recovery skips or replays the wrong architectural instruction.",
+        "apb_wait_trap / isa_matrix / RV32_BUG_MRET_SKIP",
+        "simulation SVA + mutation + differential ISS",
+        "compiled_firmware_integration",
+        ROOT / "sim" / "assertions" / "rv32_firmware_assertions.sv",
+    ),
+) + tuple(
+    AssertionEntry(
+        "RV32/compiled firmware", name, assertion_class, invariant, failure_mode,
+        test, "simulation SVA + differential ISS", "compiled_firmware_integration",
+        ROOT / "sim" / "assertions" / "rv32_firmware_assertions.sv",
+    )
+    for name, assertion_class, invariant, failure_mode, test in RV32_EXTRA_ASSERTIONS
 )
 
 
@@ -652,6 +818,26 @@ def read_firmware_status() -> dict[str, str]:
     }
 
 
+def read_compiled_firmware_status() -> dict[str, str]:
+    if not FIRMWARE_C_SUMMARY.exists():
+        return {}
+    with FIRMWARE_C_SUMMARY.open(newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    if not rows:
+        return {"compiled_firmware_integration": "not run"}
+    passed = all(
+        row.get("status") == "PASS"
+        and row.get("assertion_failures") == "0"
+        and not row.get("first_mismatch")
+        for row in rows
+    )
+    return {
+        "compiled_firmware_integration": (
+            "meets expectation" if passed else "unexpected scenario or architectural mismatch"
+        )
+    }
+
+
 def source_has_assertion(entry: AssertionEntry) -> bool:
     if not entry.source.exists():
         return False
@@ -669,6 +855,7 @@ def main() -> int:
     status_by_case = read_formal_status()
     status_by_case.update(read_optional_bench_status())
     status_by_case.update(read_firmware_status())
+    status_by_case.update(read_compiled_firmware_status())
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 
     lines = [
@@ -695,7 +882,7 @@ def main() -> int:
             "## Summary",
             "",
             f"- Total inventoried assertions/invariants: {len(ENTRIES)}",
-            "- Assertion categories: DMA, link/retry/credit, memory/parity, power/retention, AXI-Lite, and APB/firmware.",
+            "- Assertion categories: DMA, link/retry/credit, memory/parity, power/retention, AXI-Lite, APB/firmware, and RV32/compiled firmware.",
             "- Assertion classes include safety, ordering, interface-stability, bounded-progress, integrity, and low-power sequencing checks.",
             "- Simulation scoreboards remain the end-to-end data-integrity oracle; these assertions protect local protocol/control invariants.",
             "- Expected-fail bug demonstrations are consolidated in `docs/bug_diary.md`.",

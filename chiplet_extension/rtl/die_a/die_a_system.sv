@@ -97,13 +97,13 @@ module die_a_system #(
             accept_word = tx_stream_valid && tx_stream_ready;
             push_count = 0;
             pop_count  = 0;
-            fifo_count_int = int'(expected_fifo_count_q);
-            head_int = int'(expected_fifo_head_q);
-            tail_int = int'(expected_fifo_tail_q);
+            fifo_count_int = expected_fifo_count_q;
+            head_int = expected_fifo_head_q;
+            tail_int = expected_fifo_tail_q;
 
             if (accept_word) begin
                 sb_block_buffer_q[DATA_WIDTH*sb_word_count_q +: DATA_WIDTH] <= counter_q;
-                if (int'(sb_word_count_q) == (WORDS_PER_BLOCK-1)) begin
+                if (sb_word_count_q == (WORDS_PER_BLOCK-1)) begin
                     sb_word_count_q   <= '0;
                     sb_block_pending_q<= 1'b1;
                 end else begin

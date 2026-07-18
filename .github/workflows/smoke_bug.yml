@@ -3,6 +3,9 @@ name: open-source-dv-gates
 on:
   push:
   pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 9 * * 1"
 
 jobs:
   documentation-consistency:
@@ -34,6 +37,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y verilator
 
+      - name: Restore checksum-pinned RV32 toolchain
+        run: make -C chiplet_extension rv32-toolchain-install rv32-toolchain-check
+
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
@@ -51,6 +57,9 @@ jobs:
       - name: Run firmware-driven RV32 integration suite
         run: make -C chiplet_extension firmware-soc-check
 
+      - name: Run compiled-C and ISS co-verification suite
+        run: make -C chiplet_extension firmware-c-check rv32-isa-check firmware-c-mutation-check
+
       - name: Upload verification reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -59,3 +68,30 @@ jobs:
           path: |
             chiplet_extension/reports/*.csv
             chiplet_extension/reports/*.md
+
+  compiled-firmware-closure:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Verilator and restore pinned RV32 toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y verilator
+          make -C chiplet_extension rv32-toolchain-install rv32-toolchain-check
+      - name: Run 35 directed and 50 seeded GCC/ISS executions
+        run: make -C chiplet_extension firmware-c-closure firmware-c-mutation-check
+      - name: Run focused native code coverage
+        run: make -C chiplet_extension firmware-c-coverage
+      - name: Upload compiled-firmware evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compiled-firmware-closure
+          path: |
+            chiplet_extension/reports/firmware_c_*.csv
+            chiplet_extension/reports/firmware_c_*.md
+            chiplet_extension/reports/firmware_c_*.txt

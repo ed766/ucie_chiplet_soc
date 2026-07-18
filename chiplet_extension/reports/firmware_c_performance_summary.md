@@ -1,0 +1,24 @@
+# Compiled-Firmware Performance Evidence
+
+These cycle counts are behavioral Verilator measurements, not silicon timing or performance signoff.
+
+| Family | Metric | Samples | Mean | p50 | p95 | Max |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| `cpu_stream` | `cycles` | 25 | 1552.04 | 1553 | 1553 | 1553 |
+| `cpu_stream` | `rtl_instructions` | 25 | 511.68 | 512 | 512 | 512 |
+| `cpu_stream` | `apb_wait_cycles` | 0 | NA | NA | NA | NA |
+| `cpu_stream` | `irq_latency_cycles` | 0 | NA | NA | NA | NA |
+| `cpu_stream` | `handler_cycles` | 0 | NA | NA | NA | NA |
+| `cpu_stream` | `submit_to_completion_cycles` | 0 | NA | NA | NA | NA |
+| `directed` | `cycles` | 35 | 922.54 | 611 | 2802 | 3740 |
+| `directed` | `rtl_instructions` | 35 | 272.23 | 184 | 787 | 957 |
+| `directed` | `apb_wait_cycles` | 7 | 45.71 | 51 | 112 | 112 |
+| `directed` | `irq_latency_cycles` | 13 | 177.38 | 90 | 1112 | 1112 |
+| `directed` | `handler_cycles` | 11 | 158.18 | 134 | 393 | 393 |
+| `directed` | `submit_to_completion_cycles` | 19 | 287.74 | 90 | 1027 | 1027 |
+| `firmware_workload` | `cycles` | 25 | 1327.44 | 1340 | 2489 | 2654 |
+| `firmware_workload` | `rtl_instructions` | 25 | 310.88 | 284 | 522 | 608 |
+| `firmware_workload` | `apb_wait_cycles` | 24 | 254.96 | 215 | 460 | 833 |
+| `firmware_workload` | `irq_latency_cycles` | 16 | 304.31 | 28 | 1051 | 1051 |
+| `firmware_workload` | `handler_cycles` | 16 | 138.50 | 138 | 141 | 141 |
+| `firmware_workload` | `submit_to_completion_cycles` | 25 | 422.48 | 136 | 1051 | 1051 |
