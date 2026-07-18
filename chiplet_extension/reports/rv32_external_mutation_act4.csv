@@ -1,0 +1,7 @@
+suite,status,applicable_tests,detail,failure_kind,mailbox_status,failing_address,register,expected,observed,trace
+Zicsr-csrrc-00,FAIL,1,rtl_failure,rtl_failure,,,NA,PASS_MAILBOX=00000001,,chiplet_extension/build/act4/act4_0000_Zicsr-csrrc-00.rvfi.csv
+Zicsr-csrrci-00,FAIL,1,rtl_failure,rtl_failure,,,NA,PASS_MAILBOX=00000001,,chiplet_extension/build/act4/act4_0001_Zicsr-csrrci-00.rvfi.csv
+Zicsr-csrrs-00,FAIL,1,rtl_failure,rtl_failure,,,NA,PASS_MAILBOX=00000001,,chiplet_extension/build/act4/act4_0002_Zicsr-csrrs-00.rvfi.csv
+Zicsr-csrrsi-00,FAIL,1,rtl_failure,rtl_failure,,,NA,PASS_MAILBOX=00000001,,chiplet_extension/build/act4/act4_0003_Zicsr-csrrsi-00.rvfi.csv
+Zicsr-csrrw-00,FAIL,1,rtl_failure,rtl_failure,,,NA,PASS_MAILBOX=00000001,,chiplet_extension/build/act4/act4_0004_Zicsr-csrrw-00.rvfi.csv
+Zicsr-csrrwi-00,FAIL,1,rtl_failure,rtl_failure,,,NA,PASS_MAILBOX=00000001,,chiplet_extension/build/act4/act4_0005_Zicsr-csrrwi-00.rvfi.csv

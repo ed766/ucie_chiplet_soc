@@ -1,0 +1,53 @@
+{
+  "schema": 1,
+  "architectural_boundary": "RV32I_Zicsr_machine_subset",
+  "tools": [
+    {
+      "name": "spike",
+      "repository": "https://github.com/riscv-software-src/riscv-isa-sim.git",
+      "revision": "907862288f7b2af1afe533a4c74a5f33cc851830",
+      "verification": "git_commit_sha"
+    },
+    {
+      "name": "riscv-act",
+      "repository": "https://github.com/riscv-non-isa/riscv-arch-test.git",
+      "version": "ACT4-v4.0.0",
+      "revision": "a7c99303516f4e668f7488f172043392e23b9dfd",
+      "verification": "git_commit_sha"
+    },
+    {
+      "name": "sail-riscv",
+      "repository": "https://github.com/riscv/sail-riscv.git",
+      "version": "0.10",
+      "url": "https://github.com/riscv/sail-riscv/releases/download/0.10/sail-riscv-Linux-x86_64.tar.gz",
+      "sha256": "cb66af6efb5d1ebb812cf19ca2156c2b1020881f08f16c40136da7e84af299ca",
+      "verification": "release_archive_sha256"
+    },
+    {
+      "name": "mise",
+      "version": "2026.7.7",
+      "url": "https://github.com/jdx/mise/releases/download/v2026.7.7/mise-v2026.7.7-linux-x64.tar.gz",
+      "sha256": "0953810c2785eb4a75159f67f8b5721c4f3c80b8a6a812015d5af7d7fbd1b8a4",
+      "verification": "release_archive_sha256"
+    },
+    {
+      "name": "act4-gcc",
+      "version": "15.2.0-1",
+      "url": "https://github.com/xpack-dev-tools/riscv-none-elf-gcc-xpack/releases/download/v15.2.0-1/xpack-riscv-none-elf-gcc-15.2.0-1-linux-x64.tar.gz",
+      "sha256": "aaaa8060c914851a3e5ee1ba82cc3d6f80972f90638a05c6e823a37557a33758",
+      "verification": "release_archive_sha256"
+    },
+    {
+      "name": "riscv-formal",
+      "repository": "https://github.com/SymbioticEDA/riscv-formal.git",
+      "revision": "4f29e83a8387a81467716548f165fd97045af617",
+      "verification": "git_commit_sha"
+    },
+    {
+      "name": "oss-cad-suite",
+      "version": "2026-07-01",
+      "url": "https://github.com/YosysHQ/oss-cad-suite-build/releases/download/2026-07-01/oss-cad-suite-linux-x64-20260701.tgz",
+      "sha256": "bc9799358a843e854f60ebbee1834573a9f7db9c1dcbed3ea7a32a36520612dc"
+    }
+  ]
+}

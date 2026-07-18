@@ -51,6 +51,16 @@ SCENARIOS = {
     "reset_irq_handler_matrix": 34,
     "apb_atomicity_wait_error_matrix": 35,
     "firmware_completion_mode_error_power_matrix": 36,
+    "timer_compare_future": 37,
+    "timer_mask_pending_enable": 38,
+    "timer_during_apb_wait": 39,
+    "external_timer_priority": 40,
+    "wfi_timer_wake": 41,
+    "wfi_external_wake": 42,
+    "wfi_sleep_wake": 43,
+    "counter_rollover": 44,
+    "firmware_latency_counters": 45,
+    "timer_counter_arch_edges": 46,
 }
 
 
@@ -68,6 +78,22 @@ def binary_to_sparse_word_hex(binary: Path, output: Path, base_address: int) -> 
     if len(data) % 4:
         data += bytes(4 - len(data) % 4)
     lines = [f"@{base_address // 4:08x}"]
+    lines.extend(f"{int.from_bytes(data[i:i+4], 'little'):08x}" for i in range(0, len(data), 4))
+    output.write_text("\n".join(lines) + "\n")
+
+
+def binary_to_relocated_rom_hex(binary: Path, output: Path, base_address: int) -> None:
+    """Emit a reset trampoline followed by a sparse relocated text image."""
+    if base_address <= 0 or base_address >= (1 << 20) or (base_address & 3):
+        raise ValueError("reset JAL target must be aligned and within the positive JAL range")
+    data = binary.read_bytes()
+    if len(data) % 4:
+        data += bytes(4 - len(data) % 4)
+    # Encode jal x0,+base_address so the reset vector can reach relocated ELFs.
+    imm = base_address
+    jal = ((((imm >> 20) & 1) << 31) | (((imm >> 1) & 0x3ff) << 21) |
+           (((imm >> 11) & 1) << 20) | (((imm >> 12) & 0xff) << 12) | 0x6f)
+    lines = [f"{jal:08x}", f"@{base_address // 4:08x}"]
     lines.extend(f"{int.from_bytes(data[i:i+4], 'little'):08x}" for i in range(0, len(data), 4))
     output.write_text("\n".join(lines) + "\n")
 
@@ -94,6 +120,10 @@ def build_one(
     *,
     defines: dict[str, int] | None = None,
     extra_sources: list[Path] | None = None,
+    optimization: str = "-Os",
+    linker_script: Path | None = None,
+    text_base_address: int = 0,
+    data_base_address: int = 0x2000,
 ) -> dict[str, Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
     elf = output_dir / f"{name}.elf"
@@ -111,7 +141,8 @@ def build_one(
         gcc,
         "-march=rv32i_zicsr",
         "-mabi=ilp32",
-        "-Os",
+        optimization,
+        "-g",
         "-ffreestanding",
         "-nostdlib",
         "-fno-builtin",
@@ -125,9 +156,10 @@ def build_one(
         str(SOURCE / "crt0.S"),
         str(SOURCE / "isa_matrix.S"),
         str(SOURCE / "extended_matrix.S"),
+        str(SOURCE / "abi_support.c"),
         *(str(path) for path in (extra_sources or [])),
         str(SOURCE / "scenario.c"),
-        f"-T{SOURCE / 'link.ld'}",
+        f"-T{linker_script or (SOURCE / 'link.ld')}",
         f"-Wl,-Map={map_file}",
         "-Wl,--build-id=none",
         "-o",
@@ -137,8 +169,11 @@ def build_one(
     subprocess.run([objcopy, "-O", "binary", "--only-section=.text", str(elf), str(binary)], check=True)
     subprocess.run([objcopy, "-O", "binary", "--only-section=.rodata", "--only-section=.data",
                     str(elf), str(data_binary)], check=True)
-    binary_to_word_hex(binary, hex_file)
-    binary_to_sparse_word_hex(data_binary, data_hex, 0x2000)
+    if text_base_address:
+        binary_to_relocated_rom_hex(binary, hex_file, text_base_address)
+    else:
+        binary_to_word_hex(binary, hex_file)
+    binary_to_sparse_word_hex(data_binary, data_hex, data_base_address)
     disassembly_text = subprocess.run(
         [objdump, "-d", "-M", "no-aliases", str(elf)], check=True,
         capture_output=True, text=True).stdout

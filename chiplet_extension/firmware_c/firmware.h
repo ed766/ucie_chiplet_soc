@@ -22,7 +22,14 @@
 #define DMA_INJECT_ADDR   0x7cu
 #define DMA_INJECT_CMD    0x80u
 
+#define TIMER_BASE        0x000001a0u
+#define TIMER_MTIME_LO    0x00u
+#define TIMER_MTIME_HI    0x04u
+#define TIMER_MTIMECMP_LO 0x08u
+#define TIMER_MTIMECMP_HI 0x0cu
+
 extern volatile uint32_t irq_seen;
+extern volatile uint32_t timer_irq_seen;
 extern volatile uint32_t trap_count;
 
 static inline void mmio_write(uint32_t offset, uint32_t value)
@@ -70,6 +77,83 @@ static inline void enable_machine_external_irq(void)
     __asm__ volatile ("csrw mie, %0" :: "r"(value));
     value = 0x8u;
     __asm__ volatile ("csrs mstatus, %0" :: "r"(value));
+}
+
+static inline void timer_write(uint32_t offset, uint32_t value)
+{
+    *(volatile uint32_t *)(uintptr_t)(TIMER_BASE + offset) = value;
+}
+
+static inline uint32_t timer_read(uint32_t offset)
+{
+    return *(volatile uint32_t *)(uintptr_t)(TIMER_BASE + offset);
+}
+
+static inline uint64_t read_mtime(void)
+{
+    uint32_t high0, low, high1;
+    do {
+        high0 = timer_read(TIMER_MTIME_HI);
+        low = timer_read(TIMER_MTIME_LO);
+        high1 = timer_read(TIMER_MTIME_HI);
+    } while (high0 != high1);
+    return ((uint64_t)high1 << 32) | low;
+}
+
+static inline void set_mtimecmp(uint64_t value)
+{
+    timer_write(TIMER_MTIMECMP_HI, 0xffffffffu);
+    timer_write(TIMER_MTIMECMP_LO, (uint32_t)value);
+    timer_write(TIMER_MTIMECMP_HI, (uint32_t)(value >> 32));
+}
+
+static inline void enable_machine_timer_irq(void)
+{
+    uint32_t value = 0x80u;
+    __asm__ volatile ("csrs mie, %0" :: "r"(value));
+    value = 0x8u;
+    __asm__ volatile ("csrs mstatus, %0" :: "r"(value));
+}
+
+static inline void disable_global_irq(void)
+{
+    uint32_t value = 0x8u;
+    __asm__ volatile ("csrc mstatus, %0" :: "r"(value));
+}
+
+static inline void enable_global_irq(void)
+{
+    uint32_t value = 0x8u;
+    __asm__ volatile ("csrs mstatus, %0" :: "r"(value));
+}
+
+static inline uint32_t read_mcycle(void)
+{
+    uint32_t value;
+    __asm__ volatile ("csrr %0, mcycle" : "=r"(value));
+    return value;
+}
+
+static inline uint32_t read_minstret(void)
+{
+    uint32_t value;
+    __asm__ volatile ("csrr %0, minstret" : "=r"(value));
+    return value;
+}
+
+static inline void write_mcycle(uint32_t value)
+{
+    __asm__ volatile ("csrw mcycle, %0" :: "r"(value));
+}
+
+static inline void write_minstret(uint32_t value)
+{
+    __asm__ volatile ("csrw minstret, %0" :: "r"(value));
+}
+
+static inline void wait_for_interrupt(void)
+{
+    __asm__ volatile ("wfi" ::: "memory");
 }
 
 #endif

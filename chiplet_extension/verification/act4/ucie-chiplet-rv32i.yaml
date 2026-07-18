@@ -1,0 +1,57 @@
+# ACT4/UDB configuration for the implemented architectural boundary.
+---
+$schema: config_schema.json#
+kind: architecture configuration
+type: fully configured
+name: ucie-chiplet-rv32i
+description: Lightweight RV32I/Zicsr machine-mode core used by the chiplet firmware lane
+implemented_extensions:
+  - { name: I, version: "= 2.1" }
+  - { name: Zicsr, version: "= 2.0" }
+  - { name: Sm, version: "= 1.12.0" }
+params:
+  MXLEN: 32
+  PHYS_ADDR_WIDTH: 32
+  M_MODE_ENDIANNESS: little
+  TRAP_ON_ECALL_FROM_M: true
+  TRAP_ON_EBREAK: true
+  TRAP_ON_UNIMPLEMENTED_INSTRUCTION: true
+  TRAP_ON_RESERVED_INSTRUCTION: true
+  MISALIGNED_LDST: false
+  PRECISE_SYNCHRONOUS_EXCEPTIONS: true
+  MTVEC_MODES: [0]
+  MTVEC_ACCESS: rw
+  MTVEC_BASE_ALIGNMENT_DIRECT: 4
+  MTVEC_ILLEGAL_WRITE_BEHAVIOR: retain
+  TRAP_ON_UNIMPLEMENTED_CSR: true
+  TRAP_ON_ILLEGAL_WLRL: false
+  MARCHID_IMPLEMENTED: false
+  MIMPID_IMPLEMENTED: false
+  VENDOR_ID_BANK: 0
+  VENDOR_ID_OFFSET: 0
+  MISALIGNED_LDST_EXCEPTION_PRIORITY: low
+  REPORT_VA_IN_MTVAL_ON_BREAKPOINT: false
+  REPORT_VA_IN_MTVAL_ON_LOAD_MISALIGNED: false
+  REPORT_VA_IN_MTVAL_ON_STORE_AMO_MISALIGNED: false
+  REPORT_VA_IN_MTVAL_ON_INSTRUCTION_MISALIGNED: false
+  REPORT_VA_IN_MTVAL_ON_LOAD_ACCESS_FAULT: false
+  REPORT_VA_IN_MTVAL_ON_STORE_AMO_ACCESS_FAULT: false
+  REPORT_VA_IN_MTVAL_ON_INSTRUCTION_ACCESS_FAULT: false
+  REPORT_ENCODING_IN_MTVAL_ON_ILLEGAL_INSTRUCTION: false
+  MTVAL_WIDTH: 32
+  CONFIG_PTR_ADDRESS: 0
+  PMA_GRANULARITY: 4
+  NUM_PMP_ENTRIES: 0
+  HPM_COUNTER_EN: [false, false, false, false, false, false, false, false,
+                   false, false, false, false, false, false, false, false,
+                   false, false, false, false, false, false, false, false,
+                   false, false, false, false, false, false, false, false]
+  COUNTINHIBIT_EN: [false, false, false, false, false, false, false, false,
+                    false, false, false, false, false, false, false, false,
+                    false, false, false, false, false, false, false, false,
+                    false, false, false, false, false, false, false, false]
+  MCOUNTENABLE_EN: [false, false, false, false, false, false, false, false,
+                    false, false, false, false, false, false, false, false,
+                    false, false, false, false, false, false, false, false,
+                    false, false, false, false, false, false, false, false]
+  MISA_CSR_IMPLEMENTED: false

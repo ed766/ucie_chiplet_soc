@@ -20,7 +20,7 @@ This is the single resume-facing metrics snapshot for the chiplet project. It is
 | `formal_mutation_sensitivity` | `7 / 7` | Expected counterexamples under property-specific mutations. |
 | `negative_tests` | `9 / 9` | Illegal-operation tests with explicit expected response. |
 | `optional_random_stress_subset` | `40 / 40` | Optional seeded-random execution subset; not part of default closure. |
-| `assertion_inventory` | `76` | Inventoried protocol/control invariants. |
+| `assertion_inventory` | `83` | Inventoried protocol/control invariants. |
 | `axi_lite_protocol_coverage` | `18 / 18` | Optional AXI-Lite CSR wrapper directed protocol coverage. |
 | `axi_lite_optional_bench` | `PASS` | AXI-Lite optional bench status. |
 | `firmware_soc_scenarios` | `12 / 12` | ROM-backed RV32 programs controlling DMA through APB MMIO. |
@@ -31,11 +31,28 @@ This is the single resume-facing metrics snapshot for the chiplet project. It is
 | `compiled_firmware_directed` | `35 / 35` | Named GCC-built firmware scenarios. |
 | `compiled_firmware_isa_random` | `25 / 25` | Deterministic generated CPU instruction streams. |
 | `compiled_firmware_workload_random` | `25 / 25` | Deterministic firmware/DMA workload seeds. |
-| `compiled_firmware_coverage` | `176 / 176` | RV32I/Zicsr, APB, interrupt, trap, and firmware outcome points. |
-| `compiled_firmware_crosses` | `88 / 88` | Compiled firmware, DMA outcome, power, reset, and interrupt interactions. |
-| `compiled_firmware_focused_code_coverage` | `96.27%` | Focused Verilator line coverage for the GCC-driven RV32/APB/ROM integration RTL. |
-| `compiled_firmware_focused_branch_coverage` | `93.10%` | Focused RV32/APB/ROM branch/expression coverage. |
-| `compiled_firmware_mutation_detection` | `11 / 11` | RTL and architectural-trace mutations detected by SVA/ISS checking. |
+| `compiled_firmware_coverage` | `178 / 178` | RV32I/Zicsr, APB, interrupt, trap, and firmware outcome points. |
+| `compiled_firmware_crosses` | `94 / 94` | Compiled firmware, DMA outcome, power, reset, and interrupt interactions. |
+| `compiled_firmware_focused_code_coverage` | `96.90%` | Focused Verilator line coverage for the GCC-driven RV32/APB/ROM integration RTL. |
+| `compiled_firmware_focused_branch_coverage` | `91.18%` | Focused RV32/APB/ROM branch/expression coverage. |
+| `compiled_firmware_mutation_detection` | `11 / 11` | Legacy combined mutation report retained for release compatibility. |
+| `compiled_firmware_trace_mutations` | `10 / 10` | Trace-checker self-tests; reported separately from true RTL mutations. |
+| `compiled_firmware_generated_c` | `25 / 25` | Seeded generated-C programs checked by signatures and RVFI/ISS replay. |
+| `compiled_firmware_compiler_matrix` | `34 / 34` | Optimization and focused ABI/control re-executions. |
+| `compiled_firmware_abi_coverage` | `16 / 16` | Compiler optimization and multi-translation-unit ABI points. |
+| `timer_wfi_scenarios` | `10 / 10` | Machine timer, WFI, priority, sleep, and counter scenarios. |
+| `timer_wfi_coverage` | `16 / 16` | Trace-derived timer/WFI/counter coverage points. |
+| `timer_wfi_crosses` | `22 / 22` | Timer, WFI, APB, interrupt, power, and counter crosses. |
+| `timer_counter_semantics` | `10 / 10` | Independent cycle/retirement-delta counter replay. |
+| `architectural_ebreak_trap` | `1 / 1` | EBREAK cause/target check with legacy halt disabled. |
+| `compiled_firmware_rtl_mutations` | `10 / 10` | True RV32 RTL mutations detected independently of trace-file self-tests. |
+| `compiled_firmware_robust_points` | `118 / 118` | Architectural points with at least two independent contributors. |
+| `compiled_firmware_robust_crosses` | `58 / 58` | High-risk crosses with at least two independent contributors. |
+| `rv32_external_tool_status` | `7 PASS / 0 SKIP / 0 FAIL` | Pinned external dependency status; missing or unverified tools are SKIP. |
+| `rv32_spike_differential` | `12 PASS / 0 SKIP / 0 FAIL` | Pinned Spike CPU-only differential status. |
+| `rv32_act4` | `45 PASS / 0 SKIP / 0 FAIL` | ACT4/Sail self-checking ELF execution on RTL; generation alone is not a pass. |
+| `rv32_standard_custom_formal` | `3 PASS / 0 SKIP / 0 FAIL` | Standard riscv-formal and project-specific solver status. |
+| `rv32_external_mutation_matrix` | `4 / 4` | Independent Spike, ACT4/Sail, local ISS/SVA, and solver mutation sensitivity. |
 | `optional_collateral_code_coverage` | `92.37%` | Verilator line coverage for optional AXI/CDC collateral RTL. |
 | `integrated_async_cdc` | `4 / 4` | Optional two-clock chiplet matrix across clock ratios and reset skew. |
 | `real_uvm_ci` | `4 / 4` | Pinned Verilator/UVM phase, TLM, coverage, and RAL smoke lane when executed. |

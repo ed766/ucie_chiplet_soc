@@ -22,6 +22,11 @@ operand_corner_matrix:
     xor t4, t2, t3
     or t4, t0, t1
     and t4, t2, t3
+    li t0, -1
+    li t1, 1
+    blt t0, t1, 1f
+    li a0, 0
+1:
     sw t1, 0(sp)
     lb t4, 0(sp)
     lbu t4, 1(sp)
@@ -52,5 +57,14 @@ csr_state_matrix:
     csrrwi zero, mcause, 0
     csrrsi zero, mcause, 0
     csrrci zero, mcause, 0
+    li t0, 0x13579bdf
+    csrrw t1, mscratch, t0
+    li t2, 0x000000f0
+    csrrs t3, mscratch, t2
+    li t4, 0x0000000f
+    csrrc t5, mscratch, t4
+    csrrwi t1, mscratch, 3
+    csrrsi t2, mscratch, 4
+    csrrci t3, mscratch, 1
     li a0, 0x43535253
     ret

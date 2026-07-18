@@ -70,10 +70,10 @@
   <text x="555" y="222" class="heading">RV32 chiplet subsystem</text>
   <rect x="555" y="253" width="330" height="78" rx="12" class="chip"/>
   <text x="575" y="282" class="body">ROM feeder + RV32I/Zicsr RTL</text>
-  <text x="575" y="308" class="small">precise traps, interrupts, CSR state, MRET</text>
+  <text x="575" y="308" class="small">traps, external/timer IRQ, WFI, counters, MRET</text>
   <rect x="555" y="350" width="330" height="92" rx="12" class="chip"/>
-  <text x="575" y="381" class="body">APB MMIO control path</text>
-  <text x="575" y="408" class="small">wait states, errors, DMA doorbell, completion</text>
+  <text x="575" y="381" class="body">APB MMIO + machine timer</text>
+  <text x="575" y="408" class="small">DMA CSRs, wait/errors, explicit result mailbox</text>
   <rect x="555" y="462" width="330" height="125" rx="12" class="chip"/>
   <text x="575" y="493" class="body">DMA + chiplet payload path</text>
   <text x="575" y="521" class="small">banked memory, retry link, AES service</text>
@@ -112,13 +112,13 @@
   </g>
   <text x="178" y="773" text-anchor="middle" class="metric">85 / 85</text>
   <text x="178" y="805" text-anchor="middle" class="metric-label">directed + seeded executions</text>
-  <text x="446" y="773" text-anchor="middle" class="metric">176 / 176</text>
+  <text x="446" y="773" text-anchor="middle" class="metric">178 / 178</text>
   <text x="446" y="805" text-anchor="middle" class="metric-label">trace-derived functional points</text>
-  <text x="714" y="773" text-anchor="middle" class="metric">88 / 88</text>
+  <text x="714" y="773" text-anchor="middle" class="metric">94 / 94</text>
   <text x="714" y="805" text-anchor="middle" class="metric-label">same-window interaction crosses</text>
-  <text x="982" y="773" text-anchor="middle" class="metric">11 / 11</text>
-  <text x="982" y="805" text-anchor="middle" class="metric-label">checker mutation detections</text>
-  <text x="1256" y="773" text-anchor="middle" class="metric">96.27% / 93.10%</text>
+  <text x="982" y="773" text-anchor="middle" class="metric">10 / 10</text>
+  <text x="982" y="805" text-anchor="middle" class="metric-label">true RTL mutation detections</text>
+  <text x="1256" y="773" text-anchor="middle" class="metric">96.90% / 91.18%</text>
   <text x="1256" y="805" text-anchor="middle" class="metric-label">focused line / branch coverage</text>
 
   <text x="720" y="875" text-anchor="middle" class="small">Behavioral open-source verification evidence; not RISC-V compliance, production firmware, or silicon signoff.</text>

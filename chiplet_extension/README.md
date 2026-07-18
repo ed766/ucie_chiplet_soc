@@ -32,7 +32,9 @@ reporting flows.
 - Design RTL code coverage: `96.25%` line, `89.24%` branch/expression, `75.21%` raw toggle, `90.26%` reviewed toggle
 - Assertion inventory: `76` protocol/control invariants
 - Firmware-driven RV32 integration: `12 / 12` scenarios, `30 / 30` MMIO/outcome points, and `7 / 7` required crosses
-- GCC-built C/architectural differential closure: `85 / 85` executions, `176 / 176` detailed points, `88 / 88` event-correlated crosses, and `11 / 11` mutation detections
+- GCC-built C/architectural differential closure: `85 / 85` executions, `178 / 178` detailed points, `94 / 94` event-correlated crosses, `10 / 10` RTL mutations, and `10 / 10` trace-checker self-tests
+- Compiler/timer trust evidence: `34 / 34` optimizer/ABI executions, `25 / 25` generated-C programs, `10 / 10` timer/WFI scenarios, `10 / 10` true RTL mutations, and two-source robustness at `118 / 118` points plus `58 / 58` crosses
+- Independent RV32 evidence: Spike `12 / 12`, ACT4/Sail `45 / 45`, standard/custom formal `3 / 3`, and external-oracle mutation sensitivity `4 / 4`
 - Focused RV32/APB/ROM integration line coverage: `86.62%` Verilator proxy
 
 AXI-Lite is optional CSR/control-plane integration collateral around the

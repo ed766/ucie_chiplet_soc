@@ -1,0 +1,2 @@
+test,status,expected_cause,expected_target,evidence
+architectural_ebreak_trap,PASS,3,0x00000300,EBREAK_TEST_HALT=0 RTL smoke

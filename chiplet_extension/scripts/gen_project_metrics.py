@@ -115,6 +115,15 @@ def optional_bench_summary(rows: list[dict[str, str]], bench: str) -> str:
     return row.get("status", "NA")
 
 
+def pass_skip_fail(rows: list[dict[str, str]]) -> str:
+    if not rows:
+        return "NA"
+    passed = sum(row.get("status") == "PASS" for row in rows)
+    skipped = sum(row.get("status") in {"SKIP", "GENERATED"} for row in rows)
+    failed = sum(row.get("status") == "FAIL" for row in rows)
+    return f"{passed} PASS / {skipped} SKIP / {failed} FAIL"
+
+
 def generate(csv_out: Path, md_out: Path) -> None:
     regress = read_csv(REPORTS / "regress_summary.csv")
     coverage = read_csv(REPORTS / "coverage_summary.csv")
@@ -136,8 +145,24 @@ def generate(csv_out: Path, md_out: Path) -> None:
     firmware_c_cross = read_csv(REPORTS / "firmware_c_cross_coverage_summary.csv")
     firmware_c_code_cov = key_value_file(REPORTS / "firmware_c_code_coverage_summary.txt")
     firmware_c_mutations = read_csv(REPORTS / "firmware_c_mutation_summary.csv")
+    firmware_c_trace_mutations = read_csv(REPORTS / "firmware_c_trace_mutation_summary.csv")
     firmware_c_isa_random = read_csv(REPORTS / "firmware_c_isa_random_summary.csv")
     firmware_c_workload_random = read_csv(REPORTS / "firmware_c_workload_random_summary.csv")
+    firmware_c_generated = read_csv(REPORTS / "firmware_c_generated_c_summary.csv")
+    firmware_c_compiler = read_csv(REPORTS / "firmware_c_compiler_matrix_summary.csv")
+    firmware_c_abi_cov = read_csv(REPORTS / "firmware_c_compiler_abi_coverage.csv")
+    timer_wfi = read_csv(REPORTS / "timer_wfi_summary.csv")
+    timer_wfi_cov = read_csv(REPORTS / "timer_wfi_coverage_summary.csv")
+    timer_wfi_cross = read_csv(REPORTS / "timer_wfi_cross_coverage_summary.csv")
+    firmware_c_rtl_mutations = read_csv(REPORTS / "firmware_c_rtl_mutation_summary.csv")
+    firmware_c_robustness = read_csv(REPORTS / "firmware_c_coverage_robustness.csv")
+    timer_counter_semantics = read_csv(REPORTS / "timer_counter_semantics.csv")
+    rv32_ebreak = read_csv(REPORTS / "rv32_ebreak_summary.csv")
+    rv32_external_tools = read_csv(REPORTS / "rv32_external_tool_status.csv")
+    rv32_external_iss = read_csv(REPORTS / "rv32_external_iss_summary.csv")
+    rv32_act = read_csv(REPORTS / "rv32_act_summary.csv")
+    rv32_formal = read_csv(REPORTS / "rv32_formal_summary.csv")
+    rv32_external_mutations = read_csv(REPORTS / "rv32_external_mutation_matrix.csv")
     code_cov = key_value_file(REPORTS / "code_coverage_summary.txt")
     solver_formal = read_csv(REPORTS / "formal_proof_summary.csv")
     async_cdc = read_csv(REPORTS / "async_cdc_summary.csv")
@@ -215,7 +240,24 @@ def generate(csv_out: Path, md_out: Path) -> None:
         ("compiled_firmware_crosses", metric_pair(firmware_c_cross_hit, len(firmware_c_cross)), "Compiled firmware, DMA outcome, power, reset, and interrupt interactions."),
         ("compiled_firmware_focused_code_coverage", f"{firmware_c_code_pct}%" if firmware_c_code_pct != "NA" else "NA", "Focused Verilator line coverage for the GCC-driven RV32/APB/ROM integration RTL."),
         ("compiled_firmware_focused_branch_coverage", f"{firmware_c_branch_pct}%" if firmware_c_branch_pct != "NA" else "NA", "Focused RV32/APB/ROM branch/expression coverage."),
-        ("compiled_firmware_mutation_detection", metric_pair(sum(1 for row in firmware_c_mutations if row.get("status") == "PASS"), len(firmware_c_mutations)), "RTL and architectural-trace mutations detected by SVA/ISS checking."),
+        ("compiled_firmware_mutation_detection", metric_pair(sum(1 for row in firmware_c_mutations if row.get("status") == "PASS"), len(firmware_c_mutations)), "Legacy combined mutation report retained for release compatibility."),
+        ("compiled_firmware_trace_mutations", metric_pair(sum(1 for row in firmware_c_trace_mutations if row.get("status") == "PASS"), len(firmware_c_trace_mutations)), "Trace-checker self-tests; reported separately from true RTL mutations."),
+        ("compiled_firmware_generated_c", metric_pair(sum(1 for row in firmware_c_generated if row.get("status") == "PASS"), len(firmware_c_generated)), "Seeded generated-C programs checked by signatures and RVFI/ISS replay."),
+        ("compiled_firmware_compiler_matrix", metric_pair(sum(1 for row in firmware_c_compiler if row.get("status") == "PASS"), len(firmware_c_compiler)), "Optimization and focused ABI/control re-executions."),
+        ("compiled_firmware_abi_coverage", metric_pair(sum(1 for row in firmware_c_abi_cov if row.get("hit") == "1"), len(firmware_c_abi_cov)), "Compiler optimization and multi-translation-unit ABI points."),
+        ("timer_wfi_scenarios", metric_pair(sum(1 for row in timer_wfi if row.get("status") == "PASS"), len(timer_wfi)), "Machine timer, WFI, priority, sleep, and counter scenarios."),
+        ("timer_wfi_coverage", metric_pair(sum(1 for row in timer_wfi_cov if row.get("hit") == "1"), len(timer_wfi_cov)), "Trace-derived timer/WFI/counter coverage points."),
+        ("timer_wfi_crosses", metric_pair(sum(1 for row in timer_wfi_cross if row.get("hit") == "1"), len(timer_wfi_cross)), "Timer, WFI, APB, interrupt, power, and counter crosses."),
+        ("timer_counter_semantics", metric_pair(sum(1 for row in timer_counter_semantics if row.get("status") == "PASS"), len(timer_counter_semantics)), "Independent cycle/retirement-delta counter replay."),
+        ("architectural_ebreak_trap", metric_pair(sum(1 for row in rv32_ebreak if row.get("status") == "PASS"), len(rv32_ebreak)), "EBREAK cause/target check with legacy halt disabled."),
+        ("compiled_firmware_rtl_mutations", metric_pair(sum(1 for row in firmware_c_rtl_mutations if row.get("status") == "PASS"), len(firmware_c_rtl_mutations)), "True RV32 RTL mutations detected independently of trace-file self-tests."),
+        ("compiled_firmware_robust_points", metric_pair(sum(1 for row in firmware_c_robustness if row.get("kind") == "architectural_point" and row.get("status") == "PASS"), sum(1 for row in firmware_c_robustness if row.get("kind") == "architectural_point")), "Architectural points with at least two independent contributors."),
+        ("compiled_firmware_robust_crosses", metric_pair(sum(1 for row in firmware_c_robustness if row.get("kind") == "high_risk_cross" and row.get("status") == "PASS"), sum(1 for row in firmware_c_robustness if row.get("kind") == "high_risk_cross")), "High-risk crosses with at least two independent contributors."),
+        ("rv32_external_tool_status", pass_skip_fail(rv32_external_tools), "Pinned external dependency status; missing or unverified tools are SKIP."),
+        ("rv32_spike_differential", pass_skip_fail(rv32_external_iss), "Pinned Spike CPU-only differential status."),
+        ("rv32_act4", pass_skip_fail(rv32_act), "ACT4/Sail self-checking ELF execution on RTL; generation alone is not a pass."),
+        ("rv32_standard_custom_formal", pass_skip_fail(rv32_formal), "Standard riscv-formal and project-specific solver status."),
+        ("rv32_external_mutation_matrix", metric_pair(sum(1 for row in rv32_external_mutations if row.get("status") == "PASS"), len(rv32_external_mutations)), "Independent Spike, ACT4/Sail, local ISS/SVA, and solver mutation sensitivity."),
         ("optional_collateral_code_coverage", f"{optional_cov}%" if optional_cov != "NA" else "NA", "Verilator line coverage for optional AXI/CDC collateral RTL."),
         ("integrated_async_cdc", metric_pair(async_pass, len(async_cdc)), "Optional two-clock chiplet matrix across clock ratios and reset skew."),
         ("real_uvm_ci", metric_pair(uvm_pass, len(uvm_ci)), "Pinned Verilator/UVM phase, TLM, coverage, and RAL smoke lane when executed."),

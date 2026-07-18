@@ -43,6 +43,13 @@ RV32_EXTRA_ASSERTIONS = (
     ("a_rv32_mmio_error_retires_precise_trap", "fault-containment invariant", "An APB error retires as a precise trap without destination writeback.", "A failed MMIO operation appears successful.", "APB legality and atomicity matrices"),
     ("a_rv32_mret_has_saved_interrupt_state", "trap-return invariant", "MRET observes a saved machine interrupt-enable state before returning.", "Interrupt enable state is lost across a handler.", "IRQ level/MRET matrix"),
     ("a_rv32_reset_clears_architectural_event", "reset safety invariant", "Reset suppresses retirement, writeback, and RVFI events.", "A reset-aborted instruction creates a ghost architectural event.", "APB/reset and handler-reset matrices"),
+    ("a_rv32_timer_interrupt_has_pending_source", "interrupt-source invariant", "A retired machine-timer interrupt corresponds to an asserted MTIP source.", "A stale timer cause enters the handler without a pending timer.", "timer compare and masked-pending scenarios"),
+    ("a_rv32_external_interrupt_priority", "interrupt-priority invariant", "A simultaneous enabled external and timer interrupt selects the external cause.", "Timer service incorrectly preempts the documented external priority.", "external_timer_priority"),
+    ("a_rv32_wfi_blocks_retirement", "low-power retirement invariant", "After the WFI instruction retires, no later instruction retires until a wake source is pending.", "The sleeping core continues executing architecturally visible instructions.", "WFI timer/external/SLEEP wake scenarios"),
+    ("a_rv32_wfi_retire_precedes_sleep", "low-power ordering invariant", "WFI retires exactly once before the core enters its sleeping state.", "The core sleeps without an architectural WFI boundary or retires WFI twice.", "WFI timer/external/SLEEP wake scenarios"),
+    ("a_mscratch_reset_zero", "CSR reset invariant", "The machine scratch CSR resets to zero.", "Stale trap-handler context survives reset.", "csr_state_matrix / reset scenarios"),
+    ("a_mscratch_read_returns_old_value", "CSR read-modify-write invariant", "A Zicsr instruction returns the pre-update mscratch value.", "The destination receives new or stale-unrelated CSR state.", "csr_state_matrix / ACT4 Zicsr"),
+    ("a_mscratch_write_semantics", "CSR state-transition invariant", "All six Zicsr forms update mscratch according to register/immediate and zero-source rules.", "A legal mscratch write is dropped or applies the wrong set/clear mask.", "csr_state_matrix / RV32_BUG_MSCRATCH_WRITE_DROP"),
 )
 
 
@@ -731,11 +738,11 @@ ENTRIES = (
     ),
     AssertionEntry(
         "RV32/compiled firmware",
-        "a_rv32_interrupt_cause_external",
+        "a_rv32_interrupt_cause_implemented",
         "interrupt-state invariant",
-        "A retired external interrupt records the machine-external interrupt cause.",
-        "Interrupt entry records a stale or incorrect machine cause.",
-        "interrupt_dma",
+        "A retired interrupt records either the implemented machine-external or machine-timer cause.",
+        "Interrupt entry records a stale, unsupported, or incorrect machine cause.",
+        "interrupt_dma / timer compare scenarios",
         "simulation SVA + differential ISS",
         "compiled_firmware_integration",
         ROOT / "sim" / "assertions" / "rv32_firmware_assertions.sv",

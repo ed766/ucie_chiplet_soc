@@ -27,7 +27,10 @@ module rv32_rom_feeder #(
         $readmemh(firmware_hex, rom);
     end
 
-    assign instr_valid = rst_n && !halted && !wait_commit_q;
+    // A redirecting commit (trap, interrupt, branch, or MRET) updates fetch_pc_q
+    // on the next edge. Suppress the pre-redirect word during that cycle so a
+    // WFI wakeup cannot accept a stale sequential instruction.
+    assign instr_valid = rst_n && !halted && !wait_commit_q && !commit_valid;
     assign instr = rom[(fetch_pc_q >> 2) % ROM_WORDS];
 
     always_ff @(posedge clk or negedge rst_n) begin

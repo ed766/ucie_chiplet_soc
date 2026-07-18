@@ -6,6 +6,8 @@
 /chiplet_extension/build/
 /chiplet_extension/logs/
 /chiplet_extension/openlane/chiplet/runs/
+/chiplet_extension/formal/rv32/rv32_custom/
+/chiplet_extension/formal/rv32/.rv32_custom_mutation/
 
 # Chiplet report policy:
 # keep curated summaries and docs under version control, but ignore raw
@@ -57,6 +59,26 @@
 !/chiplet_extension/reports/firmware_c_code_coverage_summary.md
 !/chiplet_extension/reports/firmware_c_code_coverage_test_ranking.csv
 !/chiplet_extension/reports/firmware_c_code_coverage_holes.csv
+!/chiplet_extension/reports/firmware_c_generated_c_summary.csv
+!/chiplet_extension/reports/firmware_c_compiler_matrix_summary.csv
+!/chiplet_extension/reports/firmware_c_compiler_abi_coverage.csv
+!/chiplet_extension/reports/firmware_c_rtl_mutation_summary.csv
+!/chiplet_extension/reports/firmware_c_trace_mutation_summary.csv
+!/chiplet_extension/reports/firmware_c_coverage_robustness.csv
+!/chiplet_extension/reports/timer_wfi_summary.csv
+!/chiplet_extension/reports/timer_wfi_coverage_summary.csv
+!/chiplet_extension/reports/timer_wfi_cross_coverage_summary.csv
+!/chiplet_extension/reports/timer_counter_semantics.csv
+!/chiplet_extension/reports/rv32_external_tool_status.csv
+!/chiplet_extension/reports/rv32_external_iss_summary.csv
+!/chiplet_extension/reports/rv32_act_summary.csv
+!/chiplet_extension/reports/rv32_formal_summary.csv
+!/chiplet_extension/reports/rv32_ebreak_summary.csv
+!/chiplet_extension/reports/rv32_external_mutation_matrix.csv
+!/chiplet_extension/reports/rv32_external_mutation_local_iss.csv
+!/chiplet_extension/reports/rv32_external_mutation_spike.csv
+!/chiplet_extension/reports/rv32_external_mutation_act4.csv
+!/chiplet_extension/reports/rv32_external_mutation_formal.csv
 !/chiplet_extension/reports/formal_proof_summary.csv
 !/chiplet_extension/reports/async_cdc_summary.csv
 !/chiplet_extension/reports/uvm_ci_regress_summary.csv

@@ -109,6 +109,8 @@ module tb_rv32_core;
     .instr_valid (rvif.instr_valid),
     .instr_ready (rvif.instr_ready),
     .instr       (rvif.instr),
+    .irq_ext     (1'b0),
+    .irq_timer   (1'b0),
     .paddr       (paddr),
     .psel        (psel),
     .penable     (penable),
@@ -134,7 +136,6 @@ module tb_rv32_core;
     .bus_error   (bus_error),
     .retire      (rvif.retire),
     .halted      (rvif.halted),
-    .irq_ext     (1'b0),
     .rvfi_valid  (),
     .rvfi_order  (),
     .rvfi_insn   (),
@@ -156,6 +157,8 @@ module tb_rv32_core;
     .rvfi_mstatus(),
     .rvfi_mie    (),
     .rvfi_mtvec  (),
+    .rvfi_mscratch(),
+    .rvfi_mscratch_state(),
     .rvfi_mepc   (),
     .rvfi_mcause ()
   );

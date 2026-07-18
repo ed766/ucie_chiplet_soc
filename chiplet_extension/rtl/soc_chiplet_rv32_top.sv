@@ -5,7 +5,8 @@ module soc_chiplet_rv32_top #(
     parameter int LANES = 16,
     parameter int ROM_WORDS = 256,
     parameter int CPU_DATA_MEM_WORDS = 64,
-    parameter bit CPU_ENABLE_TRAPS = 1'b0
+    parameter bit CPU_ENABLE_TRAPS = 1'b0,
+    parameter bit CPU_EBREAK_TEST_HALT = 1'b1
 ) (
     input  logic                  clk,
     input  logic                  rst_n,
@@ -45,6 +46,7 @@ module soc_chiplet_rv32_top #(
     output logic [31:0]           cpu_rvfi_mstatus,
     output logic [31:0]           cpu_rvfi_mie,
     output logic [31:0]           cpu_rvfi_mtvec,
+    output logic [31:0]           cpu_rvfi_mscratch,
     output logic [31:0]           cpu_rvfi_mepc,
     output logic [31:0]           cpu_rvfi_mcause,
     output logic [31:0]           cpu_paddr,
@@ -85,8 +87,50 @@ module soc_chiplet_rv32_top #(
     logic [1:0] last_power_state_q;
     logic verification_irq_force = 1'b0;
     logic cpu_irq_ext;
+    logic cpu_irq_timer;
+    logic timer_apb_select;
+    logic result_apb_select;
+    logic [31:0] dma_apb_prdata;
+    logic dma_apb_pready;
+    logic dma_apb_pslverr;
+    logic [31:0] timer_apb_prdata;
+    logic timer_apb_pready;
+    logic timer_apb_pslverr;
+    logic [63:0] timer_mtime;
+    logic [63:0] timer_mtimecmp;
+    logic [31:0] result_apb_prdata;
+    logic result_apb_pready;
+    logic result_apb_pslverr;
+    logic firmware_result_valid_q;
+    logic [31:0] firmware_result_status_q;
 
     assign cpu_irq_ext = irq_done | verification_irq_force;
+    assign timer_apb_select = (cpu_paddr >= 32'h0000_01a0) &&
+                              (cpu_paddr <= 32'h0000_01ac);
+    assign result_apb_select = (cpu_paddr >= 32'h0000_01e0) &&
+                               (cpu_paddr <= 32'h0000_01ec);
+    assign cpu_mem_rdata = timer_apb_select ? timer_apb_prdata :
+                           result_apb_select ? result_apb_prdata : dma_apb_prdata;
+    assign cpu_pready = timer_apb_select ? timer_apb_pready :
+                        result_apb_select ? result_apb_pready : dma_apb_pready;
+    assign cpu_pslverr = timer_apb_select ? timer_apb_pslverr :
+                         result_apb_select ? result_apb_pslverr : dma_apb_pslverr;
+
+    assign result_apb_pready = cpu_psel && result_apb_select && cpu_penable;
+    assign result_apb_pslverr = result_apb_pready && (cpu_paddr[1:0] != 2'b00);
+    assign result_apb_prdata = (cpu_paddr[3:2] == 2'b00) ? firmware_result_status_q :
+                               (cpu_paddr[3:2] == 2'b01) ? {31'b0, firmware_result_valid_q} : 32'b0;
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            firmware_result_valid_q <= 1'b0;
+            firmware_result_status_q <= '0;
+        end else if (result_apb_pready && cpu_pwrite && !result_apb_pslverr &&
+                     (cpu_paddr[3:2] == 2'b00)) begin
+            firmware_result_status_q <= cpu_pwdata;
+            firmware_result_valid_q <= 1'b1;
+        end
+    end
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -127,7 +171,8 @@ module soc_chiplet_rv32_top #(
         .MMIO_BASE(32'h0000_0100),
         .MMIO_END (32'h0000_01ff),
         .DATA_MEM_WORDS(CPU_DATA_MEM_WORDS),
-        .ENABLE_TRAPS(CPU_ENABLE_TRAPS)
+        .ENABLE_TRAPS(CPU_ENABLE_TRAPS),
+        .EBREAK_TEST_HALT(CPU_EBREAK_TEST_HALT)
     ) u_cpu (
         .clk(clk),
         .rst_n(rst_n),
@@ -135,6 +180,7 @@ module soc_chiplet_rv32_top #(
         .instr_ready(instr_ready),
         .instr(instr),
         .irq_ext(cpu_irq_ext),
+        .irq_timer(cpu_irq_timer),
         .paddr(cpu_paddr),
         .psel(cpu_psel),
         .penable(cpu_penable),
@@ -181,6 +227,8 @@ module soc_chiplet_rv32_top #(
         .rvfi_mstatus(cpu_rvfi_mstatus),
         .rvfi_mie(cpu_rvfi_mie),
         .rvfi_mtvec(cpu_rvfi_mtvec),
+        .rvfi_mscratch(cpu_rvfi_mscratch),
+        .rvfi_mscratch_state(),
         .rvfi_mepc(cpu_rvfi_mepc),
         .rvfi_mcause(cpu_rvfi_mcause)
     );
@@ -189,13 +237,13 @@ module soc_chiplet_rv32_top #(
         .pclk(clk),
         .presetn(rst_n),
         .paddr(cpu_paddr),
-        .psel(cpu_psel),
+        .psel(cpu_psel && !timer_apb_select && !result_apb_select),
         .penable(cpu_penable),
         .pwrite(cpu_pwrite),
         .pwdata(cpu_pwdata),
-        .prdata(cpu_mem_rdata),
-        .pready(cpu_pready),
-        .pslverr(cpu_pslverr),
+        .prdata(dma_apb_prdata),
+        .pready(dma_apb_pready),
+        .pslverr(dma_apb_pslverr),
         .wait_cycles(apb_wait_cycles),
         .access_enable(mmio_access_enable_q),
         .cfg_valid(cfg_valid),
@@ -204,6 +252,22 @@ module soc_chiplet_rv32_top #(
         .cfg_wdata(cfg_wdata),
         .cfg_rdata(cfg_rdata),
         .cfg_ready(cfg_ready)
+    );
+
+    apb_machine_timer u_machine_timer (
+        .pclk(clk),
+        .presetn(rst_n),
+        .paddr(cpu_paddr),
+        .psel(cpu_psel && timer_apb_select),
+        .penable(cpu_penable),
+        .pwrite(cpu_pwrite),
+        .pwdata(cpu_pwdata),
+        .prdata(timer_apb_prdata),
+        .pready(timer_apb_pready),
+        .pslverr(timer_apb_pslverr),
+        .irq_timer(cpu_irq_timer),
+        .mtime(timer_mtime),
+        .mtimecmp(timer_mtimecmp)
     );
 
     soc_chiplet_top #(

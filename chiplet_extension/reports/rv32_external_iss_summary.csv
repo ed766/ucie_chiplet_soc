@@ -1,0 +1,13 @@
+program,source,optimizer,mutation,detected,status,rtl_status,rtl_retires,spike_retires,matched_retires,rtl_suffix_retires,first_mismatch
+operand_corner_matrix_O0,operand_corner_matrix,-O0,nominal,0,PASS,PASS,228,225,225,3,
+operand_corner_matrix_O1,operand_corner_matrix,-O1,nominal,0,PASS,PASS,143,140,140,3,
+operand_corner_matrix_O2,operand_corner_matrix,-O2,nominal,0,PASS,PASS,145,142,142,3,
+operand_corner_matrix_Os,operand_corner_matrix,-Os,nominal,0,PASS,PASS,144,141,141,3,
+c_abi_stack_call_matrix_O0,c_abi_stack_call_matrix,-O0,nominal,0,PASS,PASS,658,655,655,3,
+c_abi_stack_call_matrix_O1,c_abi_stack_call_matrix,-O1,nominal,0,PASS,PASS,328,325,325,3,
+c_abi_stack_call_matrix_O2,c_abi_stack_call_matrix,-O2,nominal,0,PASS,PASS,326,323,323,3,
+c_abi_stack_call_matrix_Os,c_abi_stack_call_matrix,-Os,nominal,0,PASS,PASS,328,325,325,3,
+c_initialized_data_sections_Os,c_initialized_data_sections,-Os,nominal,0,PASS,PASS,177,158,158,19,
+csr_state_matrix_Os,csr_state_matrix,-Os,nominal,0,PASS,PASS,139,136,136,3,
+rv32_control_flow_boundary_matrix_O0,rv32_control_flow_boundary_matrix,-O0,nominal,0,PASS,PASS,400,158,158,242,
+rv32_control_flow_boundary_matrix_Os,rv32_control_flow_boundary_matrix,-Os,nominal,0,PASS,PASS,241,95,95,146,

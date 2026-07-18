@@ -1,0 +1,11 @@
+test,status,mismatches,first_mismatch
+timer_compare_future,PASS,0,
+timer_mask_pending_enable,PASS,0,
+timer_during_apb_wait,PASS,0,
+external_timer_priority,PASS,0,
+wfi_timer_wake,PASS,0,
+wfi_external_wake,PASS,0,
+wfi_sleep_wake,PASS,0,
+counter_rollover,PASS,0,
+firmware_latency_counters,PASS,0,
+timer_counter_arch_edges,PASS,0,

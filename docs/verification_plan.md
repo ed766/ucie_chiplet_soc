@@ -60,9 +60,10 @@ closure, not replacing the stable gate:
 - `chiplet_extension/firmware_c/` contains freestanding startup code, linker policy, MMIO helpers, interrupt/trap handling, 35 named GCC-built scenarios, generated CPU-stream/workload sources, and a checksum-pinned GCC/binutils lock.
 - `make -C chiplet_extension firmware-c-check` compares every normalized retirement event against an independent RV32I/Zicsr architectural checker while retaining the existing APB, DMA, IRQ, and destination-memory scoreboards.
 - The architectural checker is repository-local and decoder-independent; it is not Spike/Sail or an official RISC-V compliance suite.
-- The separate compiled closure runs 35 directed programs, 25 stratified generated CPU streams, and 25 firmware/DMA workload seeds. It targets `176 / 176` trace-derived points and `88 / 88` same-window crosses without inflating canonical chiplet closure; an evidence audit rejects scenario-name-only coverage credit.
+- Compiled programs terminate through an explicit APB result mailbox at `0x1E0`; architectural EBREAK behavior is verified separately with `EBREAK_TEST_HALT=0`, while legacy assembly tests retain the parameterized halt shortcut.
+- The separate compiled closure runs 35 directed programs, 25 stratified generated CPU streams, and 25 firmware/DMA workload seeds. It targets `178 / 178` trace-derived points and `94 / 94` same-window crosses, including `mscratch` read/write semantics and all six Zicsr forms, without inflating canonical chiplet closure; an evidence audit rejects scenario-name-only coverage credit.
 - `make -C chiplet_extension firmware-c-coverage` merges one native Verilator database per closure execution and enforces focused line and branch/expression thresholds across the RV32 core, APB bridge, ROM feeder, and integration top.
-- `firmware-c-mutation-check` checks one RTL `MRET` mutation and ten deliberately corrupted architectural traces covering PC, instruction, register, memory, CSR, cause, epoch, and retirement-order integrity.
+- `firmware-c-rtl-mutation-check` checks nine true RTL mutations. `firmware-c-mutation-check` separately runs ten deliberately corrupted architectural traces covering PC, instruction, register, memory, CSR, cause, epoch, and retirement-order integrity; its legacy combined CSV is retained only for release compatibility.
 
 ### Proxy power benching
 
@@ -585,7 +586,8 @@ Current local milestone:
 - cross-coverage evidence groups are observed at `8 / 8`
 - assertion inventory documents `65` protocol/control invariants, including twelve compiled-firmware architectural checks and software-reject correlation
 - firmware-driven integration passes `12 / 12` programs with `30 / 30` required points and `7 / 7` outcome/power crosses
-- GCC-built compiled firmware closes `85 / 85` directed/seeded executions with `176 / 176` detailed points and `88 / 88` same-window interaction crosses
+- GCC-built compiled firmware closes `85 / 85` directed/seeded executions with `178 / 178` detailed points and `94 / 94` same-window interaction crosses
+- independent architectural release evidence closes Spike `12 / 12`, ACT4/Sail `45 / 45`, standard/custom RVFI formal `3 / 3`, and external-oracle mutation sensitivity `4 / 4`
 - expected bug-validation failures are observed at `5 / 5`
 - low-power proxy rows meet expectation at `26 / 26`
 - low-power functional coverage shows PST states `4 / 4`, legal transitions

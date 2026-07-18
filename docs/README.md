@@ -27,6 +27,8 @@ The primary reviewer path is intentionally limited to twelve documents. Generate
 - [DMA retry debug case](reference/debug_case_study_dma_retry.md)
 - [Firmware DMA waveform case](reference/debug_case_study_firmware_dma.md)
 - [Compiled-C and ISS verification](reference/compiled_firmware_verification.md)
+- [Machine timer, WFI, and counters](reference/timer_wfi_verification.md)
+- [External RV32 validation status](reference/rv32_external_validation.md)
 - [GCC/ISS co-verification architecture](images/gcc_iss_architecture.svg)
 - [Compiled-firmware mutation debug case](reference/debug_case_study_compiled_firmware.md)
 - [Negative-test summary](reference/negative_test_summary.md)

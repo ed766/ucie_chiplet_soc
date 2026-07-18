@@ -91,6 +91,8 @@ module soc_top (
     .instr_valid(1'b0),
     .instr_ready(pd1_instr_ready_unused),
     .instr  (32'h0000_0013),
+    .irq_ext(1'b0),
+    .irq_timer(1'b0),
     .paddr  (pd1_paddr_unused),
     .psel   (pd1_psel_unused),
     .penable(pd1_penable_unused),
@@ -116,7 +118,6 @@ module soc_top (
     .bus_error(pd1_bus_error_unused),
     .retire (pd1_retire),
     .halted (pd1_halted_unused),
-    .irq_ext     (1'b0),
     .rvfi_valid  (),
     .rvfi_order  (),
     .rvfi_insn   (),
@@ -138,6 +139,8 @@ module soc_top (
     .rvfi_mstatus(),
     .rvfi_mie    (),
     .rvfi_mtvec  (),
+    .rvfi_mscratch(),
+    .rvfi_mscratch_state(),
     .rvfi_mepc   (),
     .rvfi_mcause ()
   );

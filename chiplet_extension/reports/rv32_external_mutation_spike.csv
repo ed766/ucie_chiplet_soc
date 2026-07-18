@@ -1,0 +1,2 @@
+program,source,optimizer,mutation,detected,status,rtl_status,rtl_retires,spike_retires,matched_retires,rtl_suffix_retires,first_mismatch
+operand_corner_matrix_Os,operand_corner_matrix,-Os,RV32_BUG_ALU_RESULT,1,PASS,FAIL,33317,141,141,33176,"index=11:rtl=(4176, 4227924243):spike=(4140, 4358803)"

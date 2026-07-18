@@ -1,0 +1,5 @@
+oracle,mutation,expected_detection,observed_detection,status,evidence
+repository_local_iss_and_sva,RV32_BUG_MSCRATCH_WRITE_DROP,architectural_state_or_assertion_mismatch,ISS/SVA,PASS,chiplet_extension/reports/rv32_external_mutation_local_iss.csv
+Spike,RV32_BUG_ALU_RESULT,PC/instruction_stream_divergence,"index=11:rtl=(4176, 4227924243):spike=(4140, 4358803)",PASS,chiplet_extension/reports/rv32_external_mutation_spike.csv
+ACT4/Sail,RV32_BUG_MSCRATCH_WRITE_DROP,self_checking_Zicsr_mailbox_failure,6 failing Zicsr tests,PASS,chiplet_extension/reports/rv32_external_mutation_act4.csv
+SymbiYosys_custom_RVFI,RV32_BUG_MSCRATCH_WRITE_DROP,bounded_counterexample,expected_counterexample:RV32_BUG_MSCRATCH_WRITE_DROP,PASS,chiplet_extension/reports/rv32_external_mutation_formal.csv

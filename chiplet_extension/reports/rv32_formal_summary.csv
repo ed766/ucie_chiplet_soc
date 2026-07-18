@@ -1,0 +1,4 @@
+group,mode,status,depth,detail
+rv32i_instruction_semantics,riscv-formal,PASS,20-30,pinned_riscv_formal_checks
+register_pc_ordering,riscv-formal,PASS,20-30,pinned_riscv_formal_checks
+custom_csr_trap_apb,bounded_solver,PASS,12,precise_trap_mret_csr_zero_source_mscratch_apb_interrupt_boundary

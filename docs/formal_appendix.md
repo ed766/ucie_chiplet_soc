@@ -72,6 +72,10 @@ Current checked-in evidence:
 - `7 / 7` solver-backed safety proofs
 - `7 / 7` reachability covers paired with those proofs
 - `7 / 7` expected mutation counterexamples
+- `3 / 3` RV32 architectural groups: two pinned `riscv-formal` groups and one
+  custom bounded CSR/trap/APB/interrupt group
+- the custom RV32 group includes `mscratch` read/write next-state semantics and
+  produces an expected counterexample for `RV32_BUG_MSCRATCH_WRITE_DROP`
 - DMA completion, timeout, memory-integrity, and power-control invariants now
   have bounded harness coverage in addition to regression coverage
 

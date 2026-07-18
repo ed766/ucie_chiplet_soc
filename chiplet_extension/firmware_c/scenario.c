@@ -1,6 +1,8 @@
 #include "firmware.h"
+#include "abi_support.h"
 
 volatile uint32_t irq_seen;
+volatile uint32_t timer_irq_seen;
 volatile uint32_t trap_count;
 volatile uint32_t initialized_data_word = 0x13579bdfu;
 const uint8_t initialized_const_table[8] = {0x11u, 0x22u, 0x33u, 0x44u, 0x55u, 0x66u, 0x77u, 0x88u};
@@ -262,16 +264,26 @@ int main(void)
     if (initialized_const_table[3] != 0x44u || initialized_const_table[7] != 0x88u) failures++;
     for (uint32_t i = 0; i < 4u; ++i) if (zero_bss_words[i] != 0u) failures++;
     if (record.lane0 != 0x11u || record.lane1 != 0x88u || record.half != 0x5aa5u) failures++;
+    if (abi_external_data != 0x2468ace0u || abi_rodata_table[3] != 0x89abcdefu) failures++;
+    for (uint32_t i = 0; i < 3u; ++i) if (abi_external_bss[i] != 0u) failures++;
     volatile int8_t *signed_bytes = (volatile int8_t *)(uintptr_t)0x2140u;
     signed_bytes[3] = -7;
-    if (signed_bytes[3] != -7) failures++;
+    int32_t signed_observed;
+    __asm__ volatile ("lb %0, 0(%1)" : "=r"(signed_observed) : "r"(&signed_bytes[3]));
+    if (signed_observed != -7) failures++;
     *(volatile uint8_t *)(uintptr_t)0x2141u = 0xa5u;
+    mmio_write(DMA_IRQ_ENABLE, 0u);
+    if (mmio_read(DMA_IRQ_ENABLE) != 0u) failures++;
     local_write(0u, failures);
     local_write(1u, record.word);
+    local_write(3u, (uint32_t)signed_observed);
 #elif SCENARIO_ID == 27
     uint32_t abi_value = abi_nested(0x10203040u);
+    abi_packet_t packet = {0x13579bdfu, 0x2468u, 0x35u, 0xcau};
+    abi_packet_t transformed = abi_struct_transform(packet, 2u);
     local_write(0u, abi_value);
-    local_write(1u, abi_nested(abi_value));
+    local_write(1u, abi_nested(abi_value) ^ abi_nested_external(abi_value, 5u));
+    local_write(2u, abi_struct_checksum(transformed));
 #elif SCENARIO_ID == 28
     __asm__ volatile (".word 0x00003003"); /* Reserved load funct3. */
     __asm__ volatile (".word 0x00003023"); /* Reserved store funct3. */
@@ -335,6 +347,106 @@ int main(void)
     while (irq_seen == 0u) { }
     local_write(0u, mmio_read(DMA_COMP_TAG));
     mmio_write(DMA_COMP_POP, 1u);
+#elif SCENARIO_ID == 37
+    enable_machine_timer_irq();
+    uint64_t now = read_mtime();
+    set_mtimecmp(now + 200u);
+    while (timer_irq_seen == 0u) { }
+    local_write(0u, timer_irq_seen);
+    local_write(1u, (uint32_t)now);
+    local_write(2u, timer_read(TIMER_MTIME_LO));
+    set_mtimecmp(read_mtime() - 1u);
+    enable_global_irq();
+    while (timer_irq_seen < 2u) { }
+    local_write(3u, timer_irq_seen);
+#elif SCENARIO_ID == 38
+    disable_global_irq();
+    uint32_t mtie = 0x80u;
+    __asm__ volatile ("csrs mie, %0" :: "r"(mtie));
+    set_mtimecmp(read_mtime() + 80u);
+    for (volatile uint32_t delay = 0; delay < 160u; ++delay) { }
+    local_write(0u, timer_irq_seen);
+    enable_global_irq();
+    while (timer_irq_seen == 0u) { }
+    local_write(1u, timer_irq_seen);
+#elif SCENARIO_ID == 39
+    enable_machine_timer_irq();
+    set_mtimecmp(read_mtime() + 120u);
+    local_write(0u, mmio_read(DMA_IRQ_ENABLE));
+    while (timer_irq_seen == 0u) { }
+    local_write(1u, timer_irq_seen);
+#elif SCENARIO_ID == 40
+    enable_machine_external_irq();
+    enable_machine_timer_irq();
+    mmio_write(DMA_IRQ_ENABLE, 1u);
+    set_mtimecmp(read_mtime() + 180u);
+    submit(0u, 32u, 4u, 0xc040u);
+    while (irq_seen == 0u || timer_irq_seen == 0u) { }
+    local_write(0u, irq_seen);
+    local_write(1u, timer_irq_seen);
+    local_write(2u, mmio_read(DMA_COMP_TAG));
+    mmio_write(DMA_COMP_POP, 1u);
+#elif SCENARIO_ID == 41
+    enable_machine_timer_irq();
+    set_mtimecmp(read_mtime() + 240u);
+    uint32_t before = read_minstret();
+    wait_for_interrupt();
+    uint32_t after = read_minstret();
+    local_write(0u, timer_irq_seen);
+    local_write(1u, after - before);
+#elif SCENARIO_ID == 42
+    enable_machine_external_irq();
+    mmio_write(DMA_IRQ_ENABLE, 1u);
+    submit(0u, 48u, 8u, 0xc042u);
+    wait_for_interrupt();
+    local_write(0u, irq_seen);
+    local_write(1u, mmio_read(DMA_COMP_TAG));
+    mmio_write(DMA_COMP_POP, 1u);
+#elif SCENARIO_ID == 43
+    enable_machine_timer_irq();
+    set_mtimecmp(read_mtime() + 500u);
+    wait_for_interrupt();
+    local_write(0u, timer_irq_seen);
+    local_write(1u, timer_read(TIMER_MTIME_LO));
+#elif SCENARIO_ID == 44
+    write_mcycle(0xfffffffcu);
+    uint32_t cycle_before = read_mcycle();
+    for (volatile uint32_t delay = 0; delay < 8u; ++delay) { }
+    uint32_t cycle_after = read_mcycle();
+    write_minstret(0xfffffffcu);
+    uint32_t instret_before = read_minstret();
+    __asm__ volatile ("addi zero, zero, 0\naddi zero, zero, 0\naddi zero, zero, 0\naddi zero, zero, 0");
+    uint32_t instret_after = read_minstret();
+    local_write(0u, cycle_before);
+    local_write(1u, cycle_after);
+    local_write(2u, instret_before);
+    local_write(3u, instret_after);
+#elif SCENARIO_ID == 45
+    enable_machine_external_irq();
+    mmio_write(DMA_IRQ_ENABLE, 1u);
+    uint32_t start_cycle = read_mcycle();
+    uint32_t start_instret = read_minstret();
+    submit(0u, 64u, 8u, 0xc045u);
+    while (irq_seen == 0u) { }
+    local_write(0u, read_mcycle() - start_cycle);
+    local_write(1u, read_minstret() - start_instret);
+    local_write(2u, mmio_read(DMA_COMP_TAG));
+    mmio_write(DMA_COMP_POP, 1u);
+#elif SCENARIO_ID == 46
+    uint32_t mip_value, cycle_high, instret_high;
+    timer_write(TIMER_MTIME_HI, 0u);
+    timer_write(TIMER_MTIME_LO, 0x100u);
+    __asm__ volatile ("csrr %0, mip" : "=r"(mip_value));
+    __asm__ volatile ("csrw mip, zero");
+    __asm__ volatile ("csrw mcycleh, %0" :: "r"(0x1234u));
+    __asm__ volatile ("csrr %0, mcycleh" : "=r"(cycle_high));
+    __asm__ volatile ("csrw minstreth, %0" :: "r"(0x5678u));
+    __asm__ volatile ("csrr %0, minstreth" : "=r"(instret_high));
+    __asm__ volatile ("ebreak");
+    local_write(0u, mip_value);
+    local_write(1u, cycle_high);
+    local_write(2u, instret_high);
+    local_write(3u, trap_count);
 #else
 #error Unsupported SCENARIO_ID
 #endif

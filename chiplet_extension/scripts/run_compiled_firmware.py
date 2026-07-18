@@ -18,6 +18,7 @@ from pathlib import Path
 
 from build_compiled_firmware import SCENARIOS as BUILD_SCENARIOS, build_one
 from rv32_iss import check_trace
+from rv32_toolchain import tool
 
 ROOT = Path(__file__).resolve().parent.parent
 REPO = ROOT.parent
@@ -72,7 +73,21 @@ SCENARIOS = (
     Scenario("firmware_completion_mode_error_power_matrix", "gcc_completion_mode_matrix"),
 )
 
+TIMER_WFI_SCENARIOS = (
+    Scenario("timer_compare_future", "gcc_timer_future"),
+    Scenario("timer_mask_pending_enable", "gcc_timer_masked"),
+    Scenario("timer_during_apb_wait", "gcc_timer_apb_wait", plusargs=("+APB_WAIT_CYCLES=7",)),
+    Scenario("external_timer_priority", "gcc_timer_priority"),
+    Scenario("wfi_timer_wake", "gcc_wfi_timer"),
+    Scenario("wfi_external_wake", "gcc_wfi_external"),
+    Scenario("wfi_sleep_wake", "gcc_wfi_sleep"),
+    Scenario("counter_rollover", "gcc_counter_rollover"),
+    Scenario("firmware_latency_counters", "gcc_counter_latency"),
+    Scenario("timer_counter_arch_edges", "gcc_timer_arch_edges"),
+)
+
 RESULT_RE = re.compile(r"FIRMWARE_RESULT\|(?P<fields>[^\n]+)")
+STATE_RE = re.compile(r"FIRMWARE_STATE\|(?P<fields>[^\n]+)")
 BRANCHES = ("beq", "bne", "blt", "bge", "bltu", "bgeu")
 OP_IMM = ("addi", "slti", "sltiu", "xori", "ori", "andi", "slli", "srli", "srai")
 OP_REG = ("add", "sub", "sll", "slt", "sltu", "xor", "srl", "sra", "or", "and")
@@ -99,8 +114,8 @@ OPERAND_POINTS = tuple(f"rv32_operand_{name}" for name in (
 ))
 CSR_TRAP_POINTS = (
     *(f"rv32_csr_{name}" for name in CSR_FORMS),
-    *(f"rv32_csr_read_{name}" for name in ("mstatus", "mie", "mtvec", "mepc", "mcause")),
-    *(f"rv32_csr_write_{name}" for name in ("mstatus", "mie", "mtvec", "mepc", "mcause")),
+    *(f"rv32_csr_read_{name}" for name in ("mstatus", "mie", "mtvec", "mscratch", "mepc", "mcause")),
+    *(f"rv32_csr_write_{name}" for name in ("mstatus", "mie", "mtvec", "mscratch", "mepc", "mcause")),
     "rv32_mret", "rv32_trap_illegal", "rv32_trap_ecall", "rv32_trap_load_misaligned",
     "rv32_trap_store_misaligned", "rv32_trap_load_access_fault",
     "rv32_trap_store_access_fault", "rv32_interrupt_entry",
@@ -151,6 +166,7 @@ CROSS_GROUPS = {
     "csr_form_source": tuple(f"{name}_{source}" for name, source in (
         ("csrrw", "nonzero"), ("csrrs", "nonzero"), ("csrrc", "nonzero"),
         ("csrrwi", "immediate"), ("csrrsi", "zero"), ("csrrci", "zero"))),
+    "mscratch_form": CSR_FORMS,
     "trap_side_effect": ("illegal_suppressed", "ecall_suppressed", "load_misaligned_suppressed",
                          "store_misaligned_suppressed", "load_fault_suppressed", "store_fault_suppressed"),
     "apb_wait_response": ("read_zero_ok", "write_zero_ok", "read_one_ok", "write_one_ok",
@@ -172,11 +188,11 @@ REQUIRED_CROSSES = tuple(f"{group}__{name}" for group, names in CROSS_GROUPS.ite
 
 assert len(ISA_BASE_POINTS) == 44
 assert len(OPERAND_POINTS) == 28
-assert len(CSR_TRAP_POINTS) == 24
+assert len(CSR_TRAP_POINTS) == 26
 assert len(APB_POINTS) == 20
 assert len(FIRMWARE_POINTS) == 24
-assert len(REQUIRED_COVERAGE) == 176
-assert len(REQUIRED_CROSSES) == 88
+assert len(REQUIRED_COVERAGE) == 178
+assert len(REQUIRED_CROSSES) == 94
 
 
 def rtl_sources() -> list[str]:
@@ -190,10 +206,16 @@ def compile_sim(
     coverage: bool,
     mutation: bool = False,
     assertions: bool = True,
+    mutation_define: str | None = None,
+    variant_tag: str = "",
+    extra_defines: tuple[str, ...] = (),
 ) -> Path:
     variant = "cov" if coverage else "nominal"
-    if mutation:
-        variant = "mutation_sva" if assertions else "mutation_iss"
+    if mutation or mutation_define:
+        label = mutation_define.lower() if mutation_define else "mret_skip"
+        variant = f"mutation_{label}_{'sva' if assertions else 'iss'}"
+    if variant_tag:
+        variant = f"{variant}_{variant_tag}"
     obj_dir = BUILD / f"obj_{variant}"
     shutil.rmtree(obj_dir, ignore_errors=True)
     obj_dir.mkdir(parents=True)
@@ -227,6 +249,7 @@ int main(int argc, char** argv) {
         "--sv", "--timing", "-Wall", "-Wno-fatal",
         "-Wno-DECLFILENAME", "-Wno-PINCONNECTEMPTY", "-Wno-UNUSEDSIGNAL",
         "-Wno-UNUSEDPARAM", "-Wno-BLKSEQ", "+define+FIRMWARE_C_MODE",
+        *(f"+define+{define}" for define in extra_defines),
         f"-I{ROOT / 'sim'}", *rtl_sources(),
         str(ROOT / "sim" / "assertions" / "rv32_firmware_assertions.sv"),
         str(ROOT / "sim" / "tb_firmware_soc.sv"),
@@ -237,8 +260,8 @@ int main(int argc, char** argv) {
     if coverage:
         command.extend(["--coverage-line", "--coverage-user"])
         command.append(str(coverage_main))
-    if mutation:
-        command.append("+define+RV32_BUG_MRET_SKIP")
+    if mutation or mutation_define:
+        command.append(f"+define+{mutation_define or 'RV32_BUG_MRET_SKIP'}")
     result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
     (BUILD / "compile.log").write_text(" ".join(command) + "\n\n" + result.stdout + result.stderr)
     if result.returncode:
@@ -251,6 +274,11 @@ def parse_result(output: str) -> dict[str, str]:
     if not match:
         return {}
     return dict(item.split("=", 1) for item in match.group("fields").split("|") if "=" in item)
+
+
+def parse_state(output: str) -> dict[str, str]:
+    match = STATE_RE.search(output)
+    return {} if not match else dict(item.split("=", 1) for item in match.group("fields").split("|") if "=" in item)
 
 
 def s32(value: int) -> int:
@@ -361,7 +389,8 @@ def decode_points(trace: Path) -> set[str]:
             name = {1: "csrrw", 2: "csrrs", 3: "csrrc", 5: "csrrwi", 6: "csrrsi", 7: "csrrci"}.get(funct3)
             if name: hit.add(f"rv32_csr_{name}")
             csr = (insn >> 20) & 0xfff
-            csr_name = {0x300: "mstatus", 0x304: "mie", 0x305: "mtvec", 0x341: "mepc", 0x342: "mcause"}.get(csr)
+            csr_name = {0x300: "mstatus", 0x304: "mie", 0x305: "mtvec", 0x340: "mscratch",
+                        0x341: "mepc", 0x342: "mcause"}.get(csr)
             if csr_name and not trapped:
                 if rd_field: hit.add(f"rv32_csr_read_{csr_name}")
                 source = ((insn >> 15) & 31) if funct3 & 4 else rs1
@@ -403,6 +432,33 @@ def trace_timing(trace: Path) -> dict[str, int]:
     return {"handler_cycles": handler}
 
 
+def mismatch_context(trace: Path, elf: Path, disassembly: Path, mismatch: str) -> dict[str, str]:
+    context = {"mismatch_pc": "", "mismatch_function": "", "mismatch_source": "",
+               "mismatch_disassembly": "", "waveform_timestamp": ""}
+    match = re.search(r"order (\d+)", mismatch)
+    if not match or not trace.exists(): return context
+    order = int(match.group(1))
+    with trace.open(newline="") as handle:
+        row = next((item for item in csv.DictReader(handle) if int(item["order"]) == order), None)
+    if not row: return context
+    pc = int(row["pc_rdata"], 16)
+    context["mismatch_pc"] = f"0x{pc:08x}"
+    context["waveform_timestamp"] = row["cycle"]
+    if elf.exists():
+        result = subprocess.run([tool("addr2line"), "-e", str(elf), "-f", "-C", f"0x{pc:x}"],
+                                capture_output=True, text=True)
+        lines = result.stdout.strip().splitlines()
+        if lines: context["mismatch_function"] = lines[0]
+        if len(lines) > 1: context["mismatch_source"] = lines[1].replace(str(REPO) + "/", "")
+    if disassembly.exists():
+        lines = disassembly.read_text().splitlines()
+        token = f" {pc:x}:"
+        index = next((i for i, line in enumerate(lines) if token in line), None)
+        if index is not None:
+            context["mismatch_disassembly"] = " | ".join(line.strip() for line in lines[max(0, index-1):index+2])
+    return context
+
+
 def run_one(
     binary: Path,
     scenario: Scenario,
@@ -436,9 +492,12 @@ def run_one(
     output = result.stdout + result.stderr
     log.write_text(" ".join(command) + "\n\n" + output)
     fields = parse_result(output)
+    state = parse_state(output)
     iss = check_trace(trace, instruction_manifest, data_image) if trace.exists() else None
     timing = trace_timing(trace) if trace.exists() else {"handler_cycles": 0}
     status = result.returncode == 0 and fields.get("status") == "PASS" and iss is not None and not iss.mismatches
+    first_mismatch = "" if not iss or not iss.mismatches else iss.mismatches[0]
+    source_context = mismatch_context(trace, image.with_suffix(".elf"), image.with_suffix(".dis"), first_mismatch)
     row = {
         "test": scenario.name,
         "family": (metadata or {}).get("family", "directed"),
@@ -449,7 +508,8 @@ def run_one(
         "rtl_instructions": str(iss.instructions if iss else 0),
         "iss_instructions": str(iss.instructions if iss else 0),
         "cpi": f"{int(fields.get('cycles', '0')) / max(1, iss.instructions if iss else 0):.3f}",
-        "first_mismatch": "" if not iss or not iss.mismatches else iss.mismatches[0],
+        "first_mismatch": first_mismatch,
+        **source_context,
         "checker_failure": "1" if ("Assertion failed" in output or "FIRMWARE_ASSERTION_FAILED" in output) else "0",
         "mmio_reads": fields.get("mmio_reads", "0"),
         "mmio_writes": fields.get("mmio_writes", "0"),
@@ -461,6 +521,7 @@ def run_one(
         "runtime_errors": fields.get("runtime_errors", "0"),
         "assertion_failures": fields.get("assertion_failures", "0"),
         "memory_mismatches": fields.get("mem_mismatch", "0"),
+        "mailbox0": state.get("mem0", ""),
         "apb_wait_cycles": fields.get("wait", "0"),
         "poll_reads": fields.get("poll_reads", "0"),
         "irq_latency_cycles": fields.get("irq_latency", "0"),
@@ -793,6 +854,8 @@ def observed_crosses(row: dict[str, str]) -> set[str]:
             if name:
                 source_name = "immediate" if name == "csrrwi" else "zero" if source == 0 else "nonzero"
                 hit.add(f"csr_form_source__{name}_{source_name}")
+                if ((insn >> 20) & 0xfff) == 0x340:
+                    hit.add(f"mscratch_form__{name}")
         if trapped and int(item["rd_addr"]) == 0 and rd == 0:
             cause = int(item["mcause"], 16)
             label = {2:"illegal",11:"ecall",4:"load_misaligned",6:"store_misaligned",
@@ -998,10 +1061,15 @@ def main() -> int:
     parser.add_argument("--isa-random", action="store_true")
     parser.add_argument("--workload-random", action="store_true")
     parser.add_argument("--closure", action="store_true")
+    parser.add_argument("--timer-wfi", action="store_true")
+    parser.add_argument("--append-coverage", action="store_true",
+                        help="retain existing per-test coverage data before this family")
     parser.add_argument("--count", type=int, default=25)
     args = parser.parse_args()
     images = BUILD / "images"
-    selected = (SCENARIOS[8],) if args.mutation_check else (SCENARIOS[:2] if args.smoke else SCENARIOS)
+    selected = (TIMER_WFI_SCENARIOS if args.timer_wfi else
+                (SCENARIOS[8],) if args.mutation_check else
+                (SCENARIOS[:2] if args.smoke else SCENARIOS))
     jobs: list[tuple[Scenario, Path, int, dict[str, str]]] = []
     if not (args.isa_random or args.workload_random):
         for scenario in selected:
@@ -1012,7 +1080,7 @@ def main() -> int:
     if args.workload_random or args.closure:
         jobs.extend(build_workload_images(args.count, images))
     binary = compile_sim(args.verilator, args.coverage, args.mutation_check)
-    if args.coverage:
+    if args.coverage and not args.append_coverage:
         shutil.rmtree(BUILD / "coverage_data", ignore_errors=True)
     rows: list[dict[str, str]] = []
     points_by_test: dict[str, set[str]] = {}
@@ -1048,9 +1116,20 @@ def main() -> int:
             ))
             for name, caught, mismatch in trace_mutations:
                 writer.writerow((name, "ISS_MISMATCH", "NA", int(caught), "PASS" if caught else "FAIL", mismatch))
+        with (REPORTS / "firmware_c_trace_mutation_summary.csv").open("w", newline="") as handle:
+            writer = csv.writer(handle, lineterminator="\n")
+            writer.writerow(("mutation", "kind", "expected", "iss_detected", "status", "first_mismatch"))
+            for name, caught, mismatch in trace_mutations:
+                writer.writerow((name, "TRACE_CHECKER_SELF_TEST", "ISS_MISMATCH", int(caught),
+                                 "PASS" if caught else "FAIL", mismatch))
         total_mutations = len(trace_mutations) + 1
         print(f"Compiled firmware mutation detection: {sum(item[1] for item in trace_mutations) + int(assertion_detected and iss_detected)}/{total_mutations}")
         if not detected: raise SystemExit(1)
+    elif args.timer_wfi:
+        write_family_summary(REPORTS / "timer_wfi_summary.csv", rows)
+        passed = sum(row["status"] == "PASS" for row in rows)
+        print(f"Timer/WFI/counter scenarios: {passed}/{len(rows)}")
+        if passed != len(rows): raise SystemExit(1)
     elif args.smoke:
         print(f"Compiled firmware smoke: {sum(row['status'] == 'PASS' for row in rows)}/{len(rows)}")
         if any(row["status"] != "PASS" for row in rows): raise SystemExit(1)

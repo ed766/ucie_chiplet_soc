@@ -19,7 +19,7 @@ def main() -> int:
     prefix = str(ROOT) + "/"
     changed = 0
     for path in sorted(report_root.rglob("*")):
-        if path.suffix not in {".csv", ".md", ".txt"} or not path.is_file():
+        if path.suffix not in {".csv", ".md", ".txt", ".info"} or not path.is_file():
             continue
         text = path.read_text(errors="replace")
         normalized = text.replace(prefix, "")

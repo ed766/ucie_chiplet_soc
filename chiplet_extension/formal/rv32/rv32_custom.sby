@@ -1,0 +1,15 @@
+[options]
+mode bmc
+depth 12
+multiclock on
+
+[engines]
+smtbmc
+
+[script]
+read -formal -D FORMAL -sv rv32_core.sv rv32_custom_formal.sv
+prep -top rv32_custom_formal
+
+[files]
+../../../base_soc/rtl/pd1_rv32/rv32_core.sv
+rv32_custom_formal.sv

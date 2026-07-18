@@ -51,7 +51,10 @@ class RV32ISS:
         self.traps = 0
         self.interrupts = 0
         self.mismatches: list[str] = []
-        self.csrs = {0x300: 0, 0x304: 0, 0x305: 0x300, 0x341: 0, 0x342: 0}
+        self.csrs = {
+            0x300: 0, 0x304: 0, 0x305: 0x300, 0x340: 0, 0x341: 0, 0x342: 0,
+            0x344: 0, 0xB00: 0, 0xB80: 0, 0xB02: 0, 0xB82: 0,
+        }
         self.instructions_by_pc: dict[int, int] = {}
         self.initial_memory = self.load_data_image(data_image)
         self.memory.update(self.initial_memory)
@@ -80,14 +83,18 @@ class RV32ISS:
     def reset_epoch(self) -> None:
         self.regs = [0] * 32
         self.memory = dict(self.initial_memory)
-        self.csrs = {0x300: 0, 0x304: 0, 0x305: 0x300, 0x341: 0, 0x342: 0}
+        self.csrs = {
+            0x300: 0, 0x304: 0, 0x305: 0x300, 0x340: 0, 0x341: 0, 0x342: 0,
+            0x344: 0, 0xB00: 0, 0xB80: 0, 0xB02: 0, 0xB82: 0,
+        }
         self.expected_order = 0
         self.expected_pc = 0
 
     def check_csr_snapshot(self, order: int, row: dict[str, str], *, trap_override: bool = False) -> None:
         observed = {
             0x300: parse_hex(row["mstatus"]), 0x304: parse_hex(row["mie"]),
-            0x305: parse_hex(row["mtvec"]), 0x341: parse_hex(row["mepc"]),
+            0x305: parse_hex(row["mtvec"]), 0x340: parse_hex(row["mscratch"]),
+            0x341: parse_hex(row["mepc"]),
             0x342: parse_hex(row["mcause"]),
         }
         for csr, value in observed.items():
@@ -145,12 +152,17 @@ class RV32ISS:
             self.interrupts += 1
             if observed_next_pc != (parse_hex(row["mtvec"]) & ~3):
                 self.mismatch(order, "interrupt target does not match mtvec")
-            if parse_hex(row["mcause"]) != 0x8000_000B:
-                self.mismatch(order, "interrupt mcause is not machine external interrupt")
+            irq_external = int(row.get("irq_level", "0")) != 0
+            irq_timer = int(row.get("irq_timer_level", "0")) != 0
+            expected_interrupt_cause = 0x8000_000B if irq_external else 0x8000_0007
+            if not (irq_external or irq_timer):
+                self.mismatch(order, "interrupt entry has no pending implemented source")
+            if parse_hex(row["mcause"]) != expected_interrupt_cause:
+                self.mismatch(order, f"interrupt mcause is 0x{parse_hex(row['mcause']):08x}, expected 0x{expected_interrupt_cause:08x}")
             if parse_hex(row["mepc"]) != pc:
                 self.mismatch(order, "interrupt mepc does not identify the interrupted instruction")
             self.csrs[0x341] = pc
-            self.csrs[0x342] = 0x8000_000B
+            self.csrs[0x342] = expected_interrupt_cause
             old_mie = bool(self.csrs[0x300] & 0x8)
             self.csrs[0x300] = (self.csrs[0x300] & ~0x88) | (0x80 if old_mie else 0)
             self.expected_order = order + 1
@@ -167,6 +179,8 @@ class RV32ISS:
             funct3 = field(insn, 14, 12)
             if insn == 0x0000_0073:
                 expected_cause = 11
+            elif insn == 0x0010_0073:
+                expected_cause = 3
             elif opcode in (0x6F, 0x67, 0x63):
                 imm_i = sext(field(insn, 31, 20), 12)
                 imm_b = sext((field(insn, 31, 31) << 12) | (field(insn, 7, 7) << 11) |
@@ -303,7 +317,7 @@ class RV32ISS:
         elif opcode == 0x0F:
             legal = funct3 == 0
         elif opcode == 0x73:
-            if insn in (0x00100073, 0x30200073):
+            if insn in (0x00100073, 0x30200073, 0x10500073):
                 if insn == 0x30200073:
                     next_pc = self.csrs[0x341]
                     mpie = bool(self.csrs[0x300] & 0x80)
@@ -312,6 +326,16 @@ class RV32ISS:
             elif funct3:
                 csr = field(insn, 31, 20)
                 legal = csr in self.csrs
+                if csr == 0x344:
+                    external = int(row.get("irq_level", "0")) != 0
+                    timer = int(row.get("irq_timer_level", "0")) != 0
+                    self.csrs[csr] = (int(external) << 11) | (int(timer) << 7)
+                # Counter reads are independently constrained by monotonic and
+                # write-precedence checks in the timer/counter report. They are
+                # asynchronous to retirement, so the retirement trace supplies
+                # the sampled value for instruction-level replay.
+                if csr in (0xB00, 0xB80, 0xB02, 0xB82):
+                    self.csrs[csr] = observed_rd_value
                 expected_rd, expected_value = rd, self.csrs.get(csr, 0)
                 source = rs1 if funct3 & 4 else self.regs[rs1]
                 mode = funct3 & 3
@@ -321,9 +345,10 @@ class RV32ISS:
                 else: new_value = expected_value; legal = False
                 if legal and (mode == 1 or source != 0):
                     if csr == 0x300: new_value &= 0x88
-                    if csr == 0x304: new_value &= 0x800
+                    if csr == 0x304: new_value &= 0x880
                     if csr in (0x305, 0x341): new_value &= ~3
-                    self.csrs[csr] = u32(new_value)
+                    if csr != 0x344:
+                        self.csrs[csr] = u32(new_value)
             else:
                 legal = False
         else:

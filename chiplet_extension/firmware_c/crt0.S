@@ -13,7 +13,12 @@ _start:
     j 1b
 2:
     call main
-    ebreak
+    li t0, 0x1e0
+    lui t1, 0xc0de0
+    or t1, t1, a0
+    sw t1, 0(t0)
+1:
+    j 1b
 
     .align 2
     .globl trap_entry
@@ -47,12 +52,24 @@ trap_entry:
     csrw mepc, t1
     j 4f
 3:
+    li t1, 0x80000007
+    beq t0, t1, 5f
     la t1, irq_seen
     li t2, 1
     sw t2, 0(t1)
     li t1, 0x11c
     li t2, 3
     sw t2, 0(t1)
+    j 4f
+5:
+    la t1, timer_irq_seen
+    lw t2, 0(t1)
+    addi t2, t2, 1
+    sw t2, 0(t1)
+    li t1, 0x1a8
+    li t2, -1
+    sw t2, 0(t1)
+    sw t2, 4(t1)
 4:
     lw ra, 0(sp)
     lw t0, 4(sp)

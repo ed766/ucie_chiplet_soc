@@ -1,0 +1,2 @@
+mutation,kind,scenario,status,iss_detected,assertion_detected,first_mismatch,retirement_order,mismatch_pc,function,source,surrounding_disassembly,waveform_timestamp
+RV32_BUG_MSCRATCH_WRITE_DROP,RTL_MUTATION,csr_state_matrix,PASS,1,1,"order 117: CSR 0x340=0x00000000, expected 0x13579bdf",117,0x00000374,csr_state_matrix,chiplet_extension/firmware_c/extended_matrix.S:62,"370:	34029373          	csrrw	t1,mscratch,t0 | 374:	0f000393          	addi	t2,zero,240 | 378:	3403ae73          	csrrs	t3,mscratch,t2",364

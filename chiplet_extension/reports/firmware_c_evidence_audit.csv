@@ -1,5 +1,5 @@
 evidence_source,required_items,covered_items,scenario_name_only_items,audit_status
-RVFI retirement trace,96,96,0,PASS
+RVFI retirement trace,98,98,0,PASS
 APB transaction trace,20,20,0,PASS
 firmware/device event trace + checker,60,60,0,PASS
-same-window interaction trace,88,88,0,PASS
+same-window interaction trace,94,94,0,PASS

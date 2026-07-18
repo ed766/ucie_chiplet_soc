@@ -58,7 +58,7 @@ jobs:
         run: make -C chiplet_extension firmware-soc-check
 
       - name: Run compiled-C and ISS co-verification suite
-        run: make -C chiplet_extension firmware-c-check rv32-isa-check firmware-c-mutation-check
+        run: make -C chiplet_extension firmware-c-check rv32-isa-check rv32-ebreak-check firmware-c-mutation-check timer-wfi-check firmware-c-compiler-matrix
 
       - name: Upload verification reports
         if: always()
@@ -80,10 +80,29 @@ jobs:
       - name: Install Verilator and restore pinned RV32 toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y verilator
+          sudo apt-get install -y verilator autoconf automake device-tree-compiler \
+            libboost-program-options-dev libboost-regex-dev libboost-system-dev \
+            libexpat1-dev libtool zlib1g-dev
           make -C chiplet_extension rv32-toolchain-install rv32-toolchain-check
-      - name: Run 35 directed and 50 seeded GCC/ISS executions
-        run: make -C chiplet_extension firmware-c-closure firmware-c-mutation-check
+      - name: Cache pinned external RISC-V tools
+        uses: actions/cache@v4
+        with:
+          path: chiplet_extension/build/external_riscv_tools
+          key: rv32-external-${{ runner.os }}-${{ hashFiles('chiplet_extension/verification/external_riscv_tools.lock.json') }}
+      - name: Restore Spike, ACT4/Sail, riscv-formal, and OSS CAD Suite
+        run: |
+          python3 chiplet_extension/scripts/install_external_riscv_tools.py \
+            --github-env "$GITHUB_ENV" --github-path "$GITHUB_PATH"
+      - name: Verify pinned external revisions and archive checksums
+        run: python3 chiplet_extension/scripts/check_external_riscv_tools.py --require
+      - name: Run GCC/ISS closure, generated C, robustness, and RTL mutations
+        run: make -C chiplet_extension firmware-c-closure firmware-c-generated-c-random firmware-c-compiler-matrix timer-wfi-check firmware-c-mutation-check firmware-c-rtl-mutation-check firmware-c-robustness-check
+      - name: Require pinned external architectural lanes
+        run: |
+          python3 chiplet_extension/scripts/run_external_iss.py --require
+          python3 chiplet_extension/scripts/run_act4.py --require
+          python3 chiplet_extension/scripts/run_rv32_formal.py --require
+          python3 chiplet_extension/scripts/run_external_mutation_matrix.py
       - name: Run focused native code coverage
         run: make -C chiplet_extension firmware-c-coverage
       - name: Upload compiled-firmware evidence
@@ -95,3 +114,4 @@ jobs:
             chiplet_extension/reports/firmware_c_*.csv
             chiplet_extension/reports/firmware_c_*.md
             chiplet_extension/reports/firmware_c_*.txt
+            chiplet_extension/reports/rv32_*.csv

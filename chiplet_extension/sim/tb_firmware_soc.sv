@@ -49,6 +49,7 @@ module tb_firmware_soc;
     logic [31:0] cpu_rvfi_mstatus;
     logic [31:0] cpu_rvfi_mie;
     logic [31:0] cpu_rvfi_mtvec;
+    logic [31:0] cpu_rvfi_mscratch;
     logic [31:0] cpu_rvfi_mepc;
     logic [31:0] cpu_rvfi_mcause;
     logic [31:0] cpu_paddr;
@@ -172,11 +173,19 @@ module tb_firmware_soc;
         if (cycles > 0) reset_epoch++;
     end
 
-`ifdef FIRMWARE_C_MODE
+`ifdef ACT4_MODE
+    soc_chiplet_rv32_top #(
+        .ROM_WORDS(131072),
+        .CPU_DATA_MEM_WORDS(262144),
+        .CPU_ENABLE_TRAPS(1'b1),
+        .CPU_EBREAK_TEST_HALT(1'b0)
+    ) dut (
+`elsif FIRMWARE_C_MODE
     soc_chiplet_rv32_top #(
         .ROM_WORDS(2048),
         .CPU_DATA_MEM_WORDS(4096),
-        .CPU_ENABLE_TRAPS(1'b1)
+        .CPU_ENABLE_TRAPS(1'b1),
+        .CPU_EBREAK_TEST_HALT(1'b0)
     ) dut (
 `else
     soc_chiplet_rv32_top dut (
@@ -219,6 +228,7 @@ module tb_firmware_soc;
         .cpu_rvfi_mstatus(cpu_rvfi_mstatus),
         .cpu_rvfi_mie(cpu_rvfi_mie),
         .cpu_rvfi_mtvec(cpu_rvfi_mtvec),
+        .cpu_rvfi_mscratch(cpu_rvfi_mscratch),
         .cpu_rvfi_mepc(cpu_rvfi_mepc),
         .cpu_rvfi_mcause(cpu_rvfi_mcause),
         .cpu_paddr(cpu_paddr),
@@ -262,6 +272,7 @@ module tb_firmware_soc;
         .rvfi_intr(cpu_rvfi_intr),
         .rvfi_pc_rdata(cpu_rvfi_pc_rdata),
         .rvfi_pc_wdata(cpu_rvfi_pc_wdata),
+        .rvfi_rs1_rdata(cpu_rvfi_rs1_rdata),
         .rvfi_rd_addr(cpu_rvfi_rd_addr),
         .rvfi_rd_wdata(cpu_rvfi_rd_wdata),
         .rvfi_mem_addr(cpu_rvfi_mem_addr),
@@ -269,8 +280,12 @@ module tb_firmware_soc;
         .rvfi_mem_wmask(cpu_rvfi_mem_wmask),
         .rvfi_mstatus(cpu_rvfi_mstatus),
         .rvfi_mie(cpu_rvfi_mie),
+        .rvfi_mscratch(cpu_rvfi_mscratch),
         .rvfi_mepc(cpu_rvfi_mepc),
-        .rvfi_mcause(cpu_rvfi_mcause)
+        .rvfi_mcause(cpu_rvfi_mcause),
+        .irq_external(dut.cpu_irq_ext),
+        .irq_timer(dut.cpu_irq_timer),
+        .wfi_sleep(dut.u_cpu.wfi_sleep_q)
     );
 `endif
 
@@ -549,6 +564,15 @@ module tb_firmware_soc;
                     link_hold_active = 1'b0;
                 end
             end
+            if ((test_name == "gcc_wfi_external") && !link_hold_active &&
+                doorbells_seen > 0 && !dut.u_cpu.wfi_sleep_q && completion_pushes == 0) begin
+                force dut.u_chiplet.u_die_a.tx_stream_ready = 1'b0;
+                link_hold_active = 1'b1;
+            end else if ((test_name == "gcc_wfi_external") && link_hold_active &&
+                         dut.u_cpu.wfi_sleep_q) begin
+                release dut.u_chiplet.u_die_a.tx_stream_ready;
+                link_hold_active = 1'b0;
+            end
             if ((test_name == "sleep_resume") || (test_name == "gcc_power_active") ||
                 ((test_name == "gcc_random_workload") && power_event == "sleep")) begin
                 if (!sleep_applied &&
@@ -557,6 +581,17 @@ module tb_firmware_soc;
                     power_state = PWR_SLEEP;
                     sleep_applied = 1'b1;
                     sleep_hold = 24;
+                end else if (sleep_hold > 0) begin
+                    sleep_hold--;
+                    if (sleep_hold == 0) power_state = PWR_RUN;
+                end
+            end
+
+            if (test_name == "gcc_wfi_sleep") begin
+                if (!sleep_applied && cycles >= 120) begin
+                    power_state = PWR_SLEEP;
+                    sleep_applied = 1'b1;
+                    sleep_hold = 32;
                 end else if (sleep_hold > 0) begin
                     sleep_hold--;
                     if (sleep_hold == 0) power_state = PWR_RUN;
@@ -662,14 +697,15 @@ module tb_firmware_soc;
 `endif
         if (rvfi_trace_fd != 0 && cpu_rvfi_valid) begin
             $fwrite(rvfi_trace_fd,
-                    "%0d,%0d,%0d,%0d,%08x,%08x,%08x,%0d,%0d,%0d,%08x,%0d,%08x,%0d,%08x,%08x,%x,%x,%08x,%08x,%08x,%08x,%08x,%08x,%08x\n",
-                    cycles, reset_epoch, dut.cpu_irq_ext, cpu_rvfi_order, cpu_rvfi_insn, cpu_rvfi_pc_rdata,
+                    "%0d,%0d,%0d,%0d,%0d,%08x,%08x,%08x,%0d,%0d,%0d,%08x,%0d,%08x,%0d,%08x,%08x,%x,%x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x\n",
+                    cycles, reset_epoch, dut.cpu_irq_ext, dut.cpu_irq_timer, cpu_rvfi_order, cpu_rvfi_insn, cpu_rvfi_pc_rdata,
                     cpu_rvfi_pc_wdata, cpu_rvfi_trap, cpu_rvfi_intr,
                     cpu_rvfi_rs1_addr, cpu_rvfi_rs1_rdata, cpu_rvfi_rs2_addr,
                     cpu_rvfi_rs2_rdata, cpu_rvfi_rd_addr, cpu_rvfi_rd_wdata,
                     cpu_rvfi_mem_addr, cpu_rvfi_mem_rmask, cpu_rvfi_mem_wmask,
                     cpu_rvfi_mem_rdata, cpu_rvfi_mem_wdata, cpu_rvfi_mstatus,
-                    cpu_rvfi_mie, cpu_rvfi_mtvec, cpu_rvfi_mepc, cpu_rvfi_mcause);
+                    cpu_rvfi_mie, cpu_rvfi_mtvec, cpu_rvfi_mscratch,
+                    cpu_rvfi_mepc, cpu_rvfi_mcause);
         end
         if (trace_fd != 0) begin
             $fwrite(trace_fd, "%0d,%0d,%0d,%0d,%0h,%0h,%0d,%0d,%0d,%0d,%0h,%0d,%0h,%0d,%0d,%0d,%0h,%0h,%0d,%0d,%0d,%0h,%0d,%0h,%0h,%0h,%0d,%0d,%0d,%0d,%0d,%0d,%0h,%0d,%0d\n",
@@ -843,7 +879,7 @@ module tb_firmware_soc;
         if (rvfi_trace_path != "") begin
             rvfi_trace_fd = $fopen(rvfi_trace_path, "w");
             $fwrite(rvfi_trace_fd,
-                    "cycle,epoch,irq_level,order,insn,pc_rdata,pc_wdata,trap,intr,rs1_addr,rs1_rdata,rs2_addr,rs2_rdata,rd_addr,rd_wdata,mem_addr,mem_rmask,mem_wmask,mem_rdata,mem_wdata,mstatus,mie,mtvec,mepc,mcause\n");
+                    "cycle,epoch,irq_level,irq_timer_level,order,insn,pc_rdata,pc_wdata,trap,intr,rs1_addr,rs1_rdata,rs2_addr,rs2_rdata,rd_addr,rd_wdata,mem_addr,mem_rmask,mem_wmask,mem_rdata,mem_wdata,mstatus,mie,mtvec,mscratch,mepc,mcause\n");
         end
         if (reference_path != "") u_ref.load_reference(reference_path); else u_ref.clear_reference();
 
@@ -851,7 +887,6 @@ module tb_firmware_soc;
         @(negedge clk);
         preload_source_memory();
         rst_n = 1'b1;
-
         if (test_name == "gcc_apb_reset_phase") begin
             repeat (40) @(negedge clk);
             rst_n = 1'b0;
@@ -863,11 +898,34 @@ module tb_firmware_soc;
             reset_recovery_seen = 1'b1;
         end
 
+`ifdef ACT4_MODE
+        while (!dut.firmware_result_valid_q && cycles < 2000000) @(posedge clk);
+        if (!dut.firmware_result_valid_q) begin
+            errors++;
+            $display("ACT4_RESULT|kind=timeout|mailbox=NA|last_pc=%08x|cycles=%0d",
+                     cpu_rvfi_pc_rdata, cycles);
+            $error("ACT4 scenario %s timed out before the result mailbox", test_name);
+        end else if (dut.firmware_result_status_q != 32'h0000_0001) begin
+            errors++;
+            $display("ACT4_RESULT|kind=mailbox_failure|mailbox=%08x|last_pc=%08x|cycles=%0d",
+                     dut.firmware_result_status_q, cpu_rvfi_pc_rdata, cycles);
+            $error("ACT4 scenario %s reported a self-check failure", test_name);
+        end else begin
+            $display("ACT4_RESULT|kind=pass|mailbox=%08x|last_pc=%08x|cycles=%0d",
+                     dut.firmware_result_status_q, cpu_rvfi_pc_rdata, cycles);
+        end
+`elsif FIRMWARE_C_MODE
+        while (!dut.firmware_result_valid_q && cycles < 100000) @(posedge clk);
+        if (!dut.firmware_result_valid_q || dut.firmware_result_status_q != 32'hc0de_0000) begin
+`else
         while (!cpu_halted && cycles < 100000) @(posedge clk);
         if (!cpu_halted) begin
+`endif
+`ifndef ACT4_MODE
             errors++;
             $error("Firmware scenario %s timed out", test_name);
         end
+`endif
         repeat (8) @(posedge clk);
         if (link_hold_active) begin
             release dut.u_chiplet.u_die_a.tx_stream_ready;
@@ -878,6 +936,9 @@ module tb_firmware_soc;
             return_suppress_active = 1'b0;
         end
 
+`ifdef ACT4_MODE
+        if (assertion_failures != 0) errors++;
+`else
         case (test_name)
             "dma_smoke": begin
                 if (dut.u_cpu.data_mem_q[0] != 32'h101) errors++;
@@ -1015,7 +1076,7 @@ module tb_firmware_soc;
             end
             "gcc_csr_illegal": begin
                 if (dut.u_cpu.data_mem_q[0] != 0 || dut.u_cpu.data_mem_q[1] != 32'h120 ||
-                    dut.u_cpu.data_mem_q[2] != 32'h88 || dut.u_cpu.data_mem_q[3] != 32'h800 ||
+                    dut.u_cpu.data_mem_q[2] != 32'h88 || dut.u_cpu.data_mem_q[3] != 32'h880 ||
                     dut.u_cpu.data_mem_q[4] != 1 || assertion_failures != 0) errors++;
             end
             "gcc_irq_trap_priority": begin
@@ -1037,6 +1098,48 @@ module tb_firmware_soc;
                 if (submit_accepts != 1 || successful_completions != 1 || completion_pops != 1 ||
                     assertion_failures != 0) errors++;
             end
+            "gcc_timer_future": begin
+                if (dut.u_cpu.data_mem_q[0] == 0 || dut.u_cpu.data_mem_q[2] <= dut.u_cpu.data_mem_q[1] ||
+                    dut.u_cpu.mcause_q != 32'h8000_0007 || assertion_failures != 0) errors++;
+            end
+            "gcc_timer_masked": begin
+                if (dut.u_cpu.data_mem_q[0] != 0 || dut.u_cpu.data_mem_q[1] == 0 ||
+                    assertion_failures != 0) errors++;
+            end
+            "gcc_timer_apb_wait": begin
+                if (dut.u_cpu.data_mem_q[1] == 0 || wait_cycles_seen == 0 || assertion_failures != 0) errors++;
+            end
+            "gcc_timer_priority": begin
+                if (dut.u_cpu.data_mem_q[0] == 0 || dut.u_cpu.data_mem_q[1] == 0 ||
+                    dut.u_cpu.data_mem_q[2] != 32'hc040 || successful_completions != 1 ||
+                    assertion_failures != 0) errors++;
+            end
+            "gcc_wfi_timer": begin
+                if (dut.u_cpu.data_mem_q[0] == 0 || dut.u_cpu.data_mem_q[1] == 0 ||
+                    assertion_failures != 0) errors++;
+            end
+            "gcc_wfi_external": begin
+                if (dut.u_cpu.data_mem_q[0] == 0 || dut.u_cpu.data_mem_q[1] != 32'hc042 ||
+                    successful_completions != 1 || assertion_failures != 0) errors++;
+            end
+            "gcc_wfi_sleep": begin
+                if (dut.u_cpu.data_mem_q[0] == 0 || !sleep_applied || !restore_seen ||
+                    assertion_failures != 0) errors++;
+            end
+            "gcc_counter_rollover": begin
+                if (dut.u_cpu.data_mem_q[1] >= dut.u_cpu.data_mem_q[0] ||
+                    dut.u_cpu.data_mem_q[3] >= dut.u_cpu.data_mem_q[2] || assertion_failures != 0) errors++;
+            end
+            "gcc_counter_latency": begin
+                if (dut.u_cpu.data_mem_q[0] == 0 || dut.u_cpu.data_mem_q[1] == 0 ||
+                    dut.u_cpu.data_mem_q[2] != 32'hc045 || successful_completions != 1 ||
+                    assertion_failures != 0) errors++;
+            end
+            "gcc_timer_arch_edges": begin
+                if (dut.u_cpu.data_mem_q[1] != 32'h1234 ||
+                    dut.u_cpu.data_mem_q[2] != 32'h5678 ||
+                    dut.u_cpu.data_mem_q[3] != 1 || assertion_failures != 0) errors++;
+            end
             "gcc_random_workload": begin
                 if (submit_accepts == 0 || completion_pushes != submit_accepts ||
                     completion_pops != completion_pushes || assertion_failures != 0 ||
@@ -1052,6 +1155,7 @@ module tb_firmware_soc;
                 $error("Unknown firmware scenario %s", test_name);
             end
         endcase
+`endif
 
         if (ref_mismatch_count != 0) errors += ref_mismatch_count;
         pass = (errors == 0);

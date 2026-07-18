@@ -1,0 +1,2 @@
+group,mode,status,depth,detail
+custom_csr_trap_apb,bounded_solver,PASS,12,expected_counterexample:RV32_BUG_MSCRATCH_WRITE_DROP

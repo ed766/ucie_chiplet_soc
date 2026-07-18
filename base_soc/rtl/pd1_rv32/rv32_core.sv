@@ -4,6 +4,7 @@ module rv32_core #(
   parameter int DATA_MEM_WORDS = 64,
   parameter logic [31:0] MAILBOX_ALIAS_BASE = 32'h0000_8000,
   parameter bit ENABLE_TRAPS = 1'b0,
+  parameter bit EBREAK_TEST_HALT = 1'b1,
   parameter logic [31:0] RESET_MTVEC = 32'h0000_0300
 ) (
   input  logic        clk,
@@ -12,6 +13,7 @@ module rv32_core #(
   output logic        instr_ready,
   input  logic [31:0] instr,
   input  logic        irq_ext,
+  input  logic        irq_timer,
   output logic [31:0] paddr,
   output logic        psel,
   output logic        penable,
@@ -59,12 +61,15 @@ module rv32_core #(
   output logic [31:0] rvfi_mstatus,
   output logic [31:0] rvfi_mie,
   output logic [31:0] rvfi_mtvec,
+  output logic [31:0] rvfi_mscratch,
+  output logic [31:0] rvfi_mscratch_state,
   output logic [31:0] rvfi_mepc,
   output logic [31:0] rvfi_mcause
 );
 
   localparam logic [31:0] MSTATUS_MIE  = 32'h0000_0008;
   localparam logic [31:0] MSTATUS_MPIE = 32'h0000_0080;
+  localparam logic [31:0] MIE_MTIE     = 32'h0000_0080;
   localparam logic [31:0] MIE_MEIE     = 32'h0000_0800;
 
   logic [31:0] regs_q [0:31];
@@ -83,12 +88,25 @@ module rv32_core #(
   logic [31:0] mstatus_q;
   logic [31:0] mie_q;
   logic [31:0] mtvec_q;
+  logic [31:0] mscratch_q;
   logic [31:0] mepc_q;
   logic [31:0] mcause_q;
+  logic [63:0] mcycle_q;
+  logic [63:0] minstret_q;
+  logic        wfi_sleep_q;
   logic [63:0] order_q;
   integer idx;
+`ifndef FORMAL
   string data_hex;
+`endif
 
+`ifdef FORMAL
+  initial begin
+    for (int init_idx = 0; init_idx < DATA_MEM_WORDS; init_idx++) begin
+      data_init_mem[init_idx] = '0;
+    end
+  end
+`else
   initial begin
     for (int init_idx = 0; init_idx < DATA_MEM_WORDS; init_idx++) begin
       data_init_mem[init_idx] = '0;
@@ -97,6 +115,7 @@ module rv32_core #(
     void'($value$plusargs("DATA_HEX=%s", data_hex));
     if (data_hex != "") $readmemh(data_hex, data_init_mem);
   end
+`endif
 
   function automatic logic [31:0] imm_i(input logic [31:0] value);
     imm_i = {{20{value[31]}}, value[31:20]};
@@ -127,7 +146,11 @@ module rv32_core #(
     begin
       shifted = word >> (byte_offset * 8);
       unique case (funct3)
+`ifdef RV32_BUG_LOAD_SIGN_EXT
+        3'b000: load_value = {24'b0, shifted[7:0]};
+`else
         3'b000: load_value = {{24{shifted[7]}}, shifted[7:0]};
+`endif
         3'b001: load_value = {{16{shifted[15]}}, shifted[15:0]};
         3'b010: load_value = word;
         3'b100: load_value = {24'b0, shifted[7:0]};
@@ -142,7 +165,11 @@ module rv32_core #(
     input logic [1:0] byte_offset
   );
     unique case (funct3)
+`ifdef RV32_BUG_STORE_MASK_SHIFT
+      3'b000, 3'b100: access_mask = 4'b0001 << (byte_offset + 1'b1);
+`else
       3'b000, 3'b100: access_mask = 4'b0001 << byte_offset;
+`endif
       3'b001, 3'b101: access_mask = 4'b0011 << byte_offset;
       default: access_mask = 4'b1111;
     endcase
@@ -175,8 +202,14 @@ module rv32_core #(
       12'h300: csr_value = mstatus_q;
       12'h304: csr_value = mie_q;
       12'h305: csr_value = mtvec_q;
+      12'h340: csr_value = mscratch_q;
       12'h341: csr_value = mepc_q;
       12'h342: csr_value = mcause_q;
+      12'h344: csr_value = {20'b0, irq_ext, 3'b0, irq_timer, 7'b0};
+      12'hb00: csr_value = mcycle_q[31:0];
+      12'hb80: csr_value = mcycle_q[63:32];
+      12'hb02: csr_value = minstret_q[31:0];
+      12'hb82: csr_value = minstret_q[63:32];
       default: csr_value = '0;
     endcase
   endfunction
@@ -201,13 +234,15 @@ module rv32_core #(
       rvfi_mstatus   <= mstatus_q;
       rvfi_mie       <= mie_q;
       rvfi_mtvec     <= mtvec_q;
+      rvfi_mscratch  <= mscratch_q;
       rvfi_mepc      <= mepc_q;
       rvfi_mcause    <= mcause_q;
       order_q        <= order_q + 1'b1;
     end
   endtask
 
-  assign instr_ready = rst_n && !halted && !pending_valid_q && !mmio_pending_q;
+  assign instr_ready = rst_n && !halted && !wfi_sleep_q && !pending_valid_q && !mmio_pending_q;
+  assign rvfi_mscratch_state = mscratch_q;
 
   always_ff @(posedge clk or negedge rst_n) begin : execute
     if (!rst_n) begin
@@ -224,8 +259,12 @@ module rv32_core #(
       mstatus_q <= '0;
       mie_q <= '0;
       mtvec_q <= RESET_MTVEC;
+      mscratch_q <= '0;
       mepc_q <= '0;
       mcause_q <= '0;
+      mcycle_q <= '0;
+      minstret_q <= '0;
+      wfi_sleep_q <= 1'b0;
       order_q <= '0;
       commit_valid <= 1'b0;
       commit_instr <= 32'h0000_0013;
@@ -270,6 +309,7 @@ module rv32_core #(
       rvfi_mstatus <= '0;
       rvfi_mie <= '0;
       rvfi_mtvec <= RESET_MTVEC;
+      rvfi_mscratch <= '0;
       rvfi_mepc <= '0;
       rvfi_mcause <= '0;
       for (idx = 0; idx < 32; idx = idx + 1) regs_q[idx] <= '0;
@@ -328,8 +368,33 @@ module rv32_core #(
       rvfi_mem_wmask <= '0;
       rvfi_mem_rdata <= '0;
       rvfi_mem_wdata <= '0;
+      mcycle_q <= mcycle_q + 1'b1;
+      // Interrupt entry is represented by a legacy RVFI pseudo-event, not a
+      // retired instruction, so it must not advance minstret.
+      if (retire && !rvfi_intr) minstret_q <= minstret_q + 1'b1;
 
-      if (mmio_pending_q) begin
+      if (wfi_sleep_q) begin
+        if ((irq_ext === 1'b1) || (irq_timer === 1'b1)) begin
+          wfi_sleep_q <= 1'b0;
+          if (ENABLE_TRAPS && mstatus_q[3] &&
+              (((irq_ext === 1'b1) && mie_q[11]) || ((irq_timer === 1'b1) && mie_q[7]))) begin
+            mepc_q <= pc_q;
+            mcause_q <= ((irq_ext === 1'b1) && mie_q[11]) ? 32'h8000_000b : 32'h8000_0007;
+            mstatus_q[7] <= mstatus_q[3];
+            mstatus_q[3] <= 1'b0;
+            rvfi_intr <= 1'b1;
+            set_rvfi_base(32'h0000_0013, pc_q, {mtvec_q[31:2], 2'b00}, '0, '0);
+            rvfi_mepc <= pc_q;
+            rvfi_mcause <= ((irq_ext === 1'b1) && mie_q[11]) ? 32'h8000_000b : 32'h8000_0007;
+            commit_valid <= 1'b1;
+            commit_instr <= 32'h0000_0013;
+            commit_pc <= pc_q;
+            commit_next_pc <= {mtvec_q[31:2], 2'b00};
+            retire <= 1'b1;
+            pc_q <= {mtvec_q[31:2], 2'b00};
+          end
+        end
+      end else if (mmio_pending_q) begin
         psel <= 1'b1;
         pwrite <= mmio_write_q;
         paddr <= mmio_addr_q;
@@ -379,7 +444,11 @@ module rv32_core #(
           rvfi_mem_rdata <= prdata;
           rvfi_mem_wdata <= mmio_wdata_q;
           pending_valid_q <= 1'b0;
+`ifdef RV32_BUG_DUP_APB_COMPLETION
+          mmio_pending_q <= 1'b1;
+`else
           mmio_pending_q <= 1'b0;
+`endif
           psel <= 1'b0;
           penable <= 1'b0;
         end
@@ -408,16 +477,17 @@ module rv32_core #(
         trap_cause = '0;
         mem_idx = 0;
 
-        if (ENABLE_TRAPS && (irq_ext === 1'b1) && mstatus_q[3] && mie_q[11]) begin
+        if (ENABLE_TRAPS && mstatus_q[3] &&
+            (((irq_ext === 1'b1) && mie_q[11]) || ((irq_timer === 1'b1) && mie_q[7]))) begin
           mepc_q <= pending_pc_q;
-          mcause_q <= 32'h8000_000b;
+          mcause_q <= ((irq_ext === 1'b1) && mie_q[11]) ? 32'h8000_000b : 32'h8000_0007;
           mstatus_q[7] <= mstatus_q[3];
           mstatus_q[3] <= 1'b0;
           next_pc = {mtvec_q[31:2], 2'b00};
           rvfi_intr <= 1'b1;
           set_rvfi_base(32'h0000_0013, pending_pc_q, next_pc, '0, '0);
           rvfi_mepc <= pending_pc_q;
-          rvfi_mcause <= 32'h8000_000b;
+          rvfi_mcause <= ((irq_ext === 1'b1) && mie_q[11]) ? 32'h8000_000b : 32'h8000_0007;
           commit_instr <= 32'h0000_0013;
           pending_valid_q <= 1'b0;
         end else begin
@@ -437,7 +507,11 @@ module rv32_core #(
               unique case (funct3)
                 3'b000: branch_taken <= (rs1_value == rs2_value);
                 3'b001: branch_taken <= (rs1_value != rs2_value);
+`ifdef RV32_BUG_SIGNED_BRANCH
+                3'b100: branch_taken <= (rs1_value < rs2_value);
+`else
                 3'b100: branch_taken <= ($signed(rs1_value) < $signed(rs2_value));
+`endif
                 3'b101: branch_taken <= ($signed(rs1_value) >= $signed(rs2_value));
                 3'b110: branch_taken <= (rs1_value < rs2_value);
                 3'b111: branch_taken <= (rs1_value >= rs2_value);
@@ -445,7 +519,11 @@ module rv32_core #(
               endcase
               if (legal && ((funct3 == 3'b000 && rs1_value == rs2_value) ||
                             (funct3 == 3'b001 && rs1_value != rs2_value) ||
+`ifdef RV32_BUG_SIGNED_BRANCH
+                            (funct3 == 3'b100 && rs1_value < rs2_value) ||
+`else
                             (funct3 == 3'b100 && $signed(rs1_value) < $signed(rs2_value)) ||
+`endif
                             (funct3 == 3'b101 && $signed(rs1_value) >= $signed(rs2_value)) ||
                             (funct3 == 3'b110 && rs1_value < rs2_value) ||
                             (funct3 == 3'b111 && rs1_value >= rs2_value)))
@@ -487,7 +565,9 @@ module rv32_core #(
               endcase
             end
             7'b0000011: begin // Loads
-              legal = funct3 inside {3'b000,3'b001,3'b010,3'b100,3'b101};
+              legal = (funct3 == 3'b000) || (funct3 == 3'b001) ||
+                      (funct3 == 3'b010) || (funct3 == 3'b100) ||
+                      (funct3 == 3'b101);
               address = rs1_value + imm_i(pending_instr_q);
               if (legal && ENABLE_TRAPS && access_misaligned(funct3, address[1:0])) begin
                 take_trap = 1'b1;
@@ -519,7 +599,8 @@ module rv32_core #(
               end
             end
             7'b0100011: begin // Stores
-              legal = funct3 inside {3'b000,3'b001,3'b010};
+              legal = (funct3 == 3'b000) || (funct3 == 3'b001) ||
+                      (funct3 == 3'b010);
               address = rs1_value + imm_s(pending_instr_q);
               if (legal && ENABLE_TRAPS && access_misaligned(funct3, address[1:0])) begin
                 take_trap = 1'b1;
@@ -563,7 +644,16 @@ module rv32_core #(
             7'b0001111: legal = (funct3 == 3'b000); // FENCE
             7'b1110011: begin
               if (pending_instr_q == 32'h0010_0073) begin
-                halted <= 1'b1; // EBREAK remains a test completion mechanism.
+                if (EBREAK_TEST_HALT) begin
+                  halted <= 1'b1;
+                end else begin
+                  take_trap = ENABLE_TRAPS;
+                  trap_cause = 32'd3;
+                  legal = !ENABLE_TRAPS;
+                end
+              end else if (pending_instr_q == 32'h1050_0073) begin
+                legal = ENABLE_TRAPS;
+                wfi_sleep_q <= ENABLE_TRAPS;
               end else if (pending_instr_q == 32'h3020_0073) begin
                 legal = ENABLE_TRAPS;
 `ifdef RV32_BUG_MRET_SKIP
@@ -571,7 +661,11 @@ module rv32_core #(
 `else
                 next_pc = mepc_q;
 `endif
+`ifdef RV32_BUG_IRQ_RESTORE
+                mstatus_q[3] <= 1'b0;
+`else
                 mstatus_q[3] <= mstatus_q[7];
+`endif
                 mstatus_q[7] <= 1'b1;
               end else if (pending_instr_q == 32'h0000_0073) begin
                 take_trap = ENABLE_TRAPS;
@@ -579,7 +673,17 @@ module rv32_core #(
                 legal = !ENABLE_TRAPS;
               end else begin
                 legal = ENABLE_TRAPS && (funct3 != 3'b000) &&
-                        (pending_instr_q[31:20] inside {12'h300,12'h304,12'h305,12'h341,12'h342});
+                        ((pending_instr_q[31:20] == 12'h300) ||
+                         (pending_instr_q[31:20] == 12'h304) ||
+                         (pending_instr_q[31:20] == 12'h305) ||
+                         (pending_instr_q[31:20] == 12'h340) ||
+                         (pending_instr_q[31:20] == 12'h341) ||
+                         (pending_instr_q[31:20] == 12'h342) ||
+                         (pending_instr_q[31:20] == 12'h344) ||
+                         (pending_instr_q[31:20] == 12'hb00) ||
+                         (pending_instr_q[31:20] == 12'hb80) ||
+                         (pending_instr_q[31:20] == 12'hb02) ||
+                         (pending_instr_q[31:20] == 12'hb82));
                 if (legal) begin
                   csr_old = csr_value(pending_instr_q[31:20]);
                   csr_source = funct3[2] ? {27'b0, rs1} : rs1_value;
@@ -589,13 +693,30 @@ module rv32_core #(
                     2'b11: csr_new = csr_old & ~csr_source;
                     default: begin csr_new = csr_old; legal = 1'b0; end
                   endcase
-                  if (legal && ((funct3[1:0] == 2'b01) || (csr_source != 0))) begin
+`ifdef RV32_BUG_CSR_ZERO_SOURCE
+                  if ((funct3[1:0] == 2'b10) && (csr_source == 0)) csr_new = '0;
+`endif
+                  if (legal && ((funct3[1:0] == 2'b01) || (csr_source != 0)
+`ifdef RV32_BUG_CSR_ZERO_SOURCE
+                                || (funct3[1:0] == 2'b10)
+`endif
+                               )) begin
                     unique case (pending_instr_q[31:20])
                       12'h300: mstatus_q <= csr_new & (MSTATUS_MIE | MSTATUS_MPIE);
-                      12'h304: mie_q <= csr_new & MIE_MEIE;
+                      12'h304: mie_q <= csr_new & (MIE_MEIE | MIE_MTIE);
                       12'h305: mtvec_q <= {csr_new[31:2], 2'b00};
+                      12'h340: begin
+`ifndef RV32_BUG_MSCRATCH_WRITE_DROP
+                        mscratch_q <= csr_new;
+`endif
+                      end
                       12'h341: mepc_q <= {csr_new[31:2], 2'b00};
                       12'h342: mcause_q <= csr_new;
+                      12'h344: begin end
+                      12'hb00: mcycle_q[31:0] <= csr_new;
+                      12'hb80: mcycle_q[63:32] <= csr_new;
+                      12'hb02: minstret_q[31:0] <= csr_new;
+                      12'hb82: minstret_q[63:32] <= csr_new;
                       default: legal = 1'b0;
                     endcase
                   end
@@ -607,7 +728,8 @@ module rv32_core #(
           endcase
 
           if (legal && !take_trap && ENABLE_TRAPS &&
-              (opcode inside {7'b1101111, 7'b1100111, 7'b1100011}) && next_pc[1]) begin
+              ((opcode == 7'b1101111) || (opcode == 7'b1100111) ||
+               (opcode == 7'b1100011)) && next_pc[1]) begin
             take_trap = 1'b1;
             trap_cause = 32'd0;
           end
@@ -620,6 +742,12 @@ module rv32_core #(
             end
           end
 
+`ifdef RV32_BUG_TRAP_CAUSE
+          if (take_trap) trap_cause = trap_cause ^ 32'd1;
+`endif
+`ifdef RV32_BUG_ALU_RESULT
+          if (legal && ((opcode == 7'b0010011) || (opcode == 7'b0110011))) result = result ^ 32'd1;
+`endif
           if (take_trap) begin
             mepc_q <= pending_pc_q;
             mcause_q <= trap_cause;
@@ -629,9 +757,12 @@ module rv32_core #(
             rvfi_trap <= 1'b1;
             rvfi_mepc <= pending_pc_q;
             rvfi_mcause <= trap_cause;
-            if (opcode inside {7'b0000011, 7'b0100011}) rvfi_mem_addr <= address;
+            if ((opcode == 7'b0000011) || (opcode == 7'b0100011)) rvfi_mem_addr <= address;
           end else if (legal && !defer_retire &&
-                       (opcode inside {7'b0110111,7'b0010111,7'b1101111,7'b1100111,7'b0010011,7'b0110011,7'b0000011,7'b1110011}) &&
+                       ((opcode == 7'b0110111) || (opcode == 7'b0010111) ||
+                        (opcode == 7'b1101111) || (opcode == 7'b1100111) ||
+                        (opcode == 7'b0010011) || (opcode == 7'b0110011) ||
+                        (opcode == 7'b0000011) || (opcode == 7'b1110011)) &&
                        (rd != 0) && !(opcode == 7'b1110011 && pending_instr_q == 32'h3020_0073)) begin
             regs_q[rd] <= result;
             wb_valid <= 1'b1;
@@ -646,7 +777,7 @@ module rv32_core #(
             if (take_trap) begin
               rvfi_mepc <= pending_pc_q;
               rvfi_mcause <= trap_cause;
-              if (opcode inside {7'b0000011, 7'b0100011}) rvfi_mem_addr <= address;
+              if ((opcode == 7'b0000011) || (opcode == 7'b0100011)) rvfi_mem_addr <= address;
             end
             commit_instr <= pending_instr_q;
             pending_valid_q <= 1'b0;
