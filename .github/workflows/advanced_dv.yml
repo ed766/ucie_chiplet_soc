@@ -53,7 +53,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install Verilator build dependencies
-        run: sudo apt-get update && sudo apt-get install -y autoconf flex bison ccache libfl2 libfl-dev zlib1g-dev
+        run: sudo apt-get update && sudo apt-get install -y autoconf flex bison ccache help2man libfl2 libfl-dev zlib1g-dev
       - name: Cache Verilator v5.048
         uses: actions/cache@v4
         with:
