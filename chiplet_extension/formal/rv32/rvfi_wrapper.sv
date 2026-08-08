@@ -26,7 +26,7 @@ module rvfi_wrapper (
         .rvfi_rd_wdata(legacy_rd_wdata), .rvfi_mem_addr(legacy_mem_addr),
         .rvfi_mem_rmask(legacy_mem_rmask), .rvfi_mem_wmask(legacy_mem_wmask),
         .rvfi_mem_rdata(legacy_mem_rdata), .rvfi_mem_wdata(legacy_mem_wdata),
-        .rvfi_mscratch(), .rvfi_mscratch_state(), .halted(halted)
+        .rvfi_mscratch(), .rvfi_mscratch_state(), .rvfi_mtval(), .halted(halted)
     );
 
     rvfi_standard_adapter adapter (

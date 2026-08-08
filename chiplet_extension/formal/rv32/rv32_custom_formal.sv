@@ -18,9 +18,9 @@ module rv32_custom_formal;
     logic [63:0] rvfi_order;
     logic [31:0] rvfi_insn, rvfi_pc_rdata, rvfi_pc_wdata;
     logic [4:0] rvfi_rd_addr;
-    logic [31:0] rvfi_rd_wdata, rvfi_rs1_rdata;
+    logic [31:0] rvfi_rd_wdata, rvfi_rs1_rdata, rvfi_mem_addr;
     logic [3:0] rvfi_mem_rmask, rvfi_mem_wmask;
-    logic [31:0] rvfi_mstatus, rvfi_mie, rvfi_mscratch, rvfi_mscratch_state, rvfi_mepc, rvfi_mcause;
+    logic [31:0] rvfi_mstatus, rvfi_mie, rvfi_mtvec, rvfi_mscratch, rvfi_mscratch_state, rvfi_mepc, rvfi_mcause, rvfi_mtval;
     logic csr_mstatus_read_pending, csr_mie_read_pending, csr_mscratch_read_pending;
     logic csr_mscratch_write_pending;
     logic [31:0] csr_mstatus_snapshot, csr_mie_snapshot, csr_mscratch_snapshot;
@@ -32,9 +32,9 @@ module rv32_custom_formal;
         .prdata, .pready, .pslverr,
         .rvfi_valid, .rvfi_order, .rvfi_insn, .rvfi_trap, .rvfi_intr,
         .rvfi_pc_rdata, .rvfi_pc_wdata, .rvfi_rs1_rdata, .rvfi_rd_addr, .rvfi_rd_wdata,
-        .rvfi_mem_rmask, .rvfi_mem_wmask, .rvfi_mstatus, .rvfi_mie, .rvfi_mscratch,
+        .rvfi_mem_addr, .rvfi_mem_rmask, .rvfi_mem_wmask, .rvfi_mstatus, .rvfi_mie, .rvfi_mtvec, .rvfi_mscratch,
         .rvfi_mscratch_state,
-        .rvfi_mepc, .rvfi_mcause
+        .rvfi_mepc, .rvfi_mcause, .rvfi_mtval
     );
 
     always @(posedge clk) begin
@@ -62,6 +62,10 @@ module rv32_custom_formal;
         end
 
         if (past_valid && rst_n) begin
+            // A machine-only implementation has no lower privilege to save;
+            // mstatus.MPP is therefore WARL-fixed to Machine mode.
+            if (rvfi_valid) assert(rvfi_mstatus[12:11] == 2'b11);
+
             // A stalled MMIO instruction is not an architectural boundary.
             if (psel && penable && !pready) assert(!rvfi_valid && !rvfi_intr);
 
@@ -73,6 +77,11 @@ module rv32_custom_formal;
                 // (mcause 5/7), even though architectural state does not commit.
                 assert(rvfi_mem_rmask == 0 || rvfi_mcause == 32'd5);
                 assert(rvfi_mem_wmask == 0 || rvfi_mcause == 32'd7);
+                assert(rvfi_pc_wdata == {rvfi_mtvec[31:2], 2'b00});
+                if (rvfi_mcause == 32'd2) assert(rvfi_mtval == rvfi_insn);
+                if (rvfi_mcause == 32'd4 || rvfi_mcause == 32'd5 ||
+                    rvfi_mcause == 32'd6 || rvfi_mcause == 32'd7)
+                    assert(rvfi_mtval == rvfi_mem_addr);
             end
 
             // MRET resumes at the saved exception PC.
@@ -151,11 +160,34 @@ module rv32_custom_formal;
                 assert(rvfi_rd_addr == 0 && rvfi_mem_rmask == 0 && rvfi_mem_wmask == 0);
                 assert(rvfi_mepc == rvfi_pc_rdata);
                 assert(rvfi_mcause == 32'h8000_000b || rvfi_mcause == 32'h8000_0007);
+                assert(rvfi_mtval == 0);
+                if (rvfi_mtvec[1:0] == 2'b01)
+                    assert(rvfi_pc_wdata == {rvfi_mtvec[31:2], 2'b00} +
+                           {rvfi_mcause[29:0], 2'b00});
+                else
+                    assert(rvfi_pc_wdata == {rvfi_mtvec[31:2], 2'b00});
+            end
+
+            if (rvfi_valid && rvfi_insn[6:0] == 7'b1110011 &&
+                rvfi_insn[31:20] == 12'h301 &&
+                (rvfi_insn[14:12] == 3'b001 || rvfi_insn[14:12] == 3'b010 ||
+                 rvfi_insn[14:12] == 3'b011 || rvfi_insn[14:12] == 3'b101 ||
+                 rvfi_insn[14:12] == 3'b110 || rvfi_insn[14:12] == 3'b111)) begin
+                if ((rvfi_insn[14:12] == 3'b010 || rvfi_insn[14:12] == 3'b011 ||
+                     rvfi_insn[14:12] == 3'b110 || rvfi_insn[14:12] == 3'b111) &&
+                    rvfi_insn[19:15] == 0) begin
+                    assert(!rvfi_trap);
+                    if (rvfi_rd_addr != 0) assert(rvfi_rd_wdata == 32'h4000_0100);
+                end else begin
+                    assert(rvfi_trap && rvfi_mcause == 32'd2);
+                end
             end
 
             cover(rvfi_valid && rvfi_trap && !rvfi_intr);
             cover(rvfi_valid && rvfi_intr);
             cover(rvfi_valid && rvfi_insn == 32'h3020_0073);
+            cover(rvfi_valid && rvfi_intr && rvfi_mtvec[1:0] == 2'b01);
+            cover(rvfi_valid && rvfi_trap && rvfi_mcause == 32'd2 && rvfi_mtval == rvfi_insn);
             cover(psel && penable && !pready);
         end
     end

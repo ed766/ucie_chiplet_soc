@@ -1,0 +1,17 @@
+cross_bin,hit,hit_count,first_test,contributing_tests,evidence
+direct__illegal_instruction,1,1,illegal_instruction_mtval,illegal_instruction_mtval,RVFI transaction window + firmware self-check
+direct__load_misaligned,1,1,misaligned_load_mtval,misaligned_load_mtval,RVFI transaction window + firmware self-check
+direct__store_access_fault,1,1,store_access_fault_mtval,store_access_fault_mtval,RVFI transaction window + firmware self-check
+direct__machine_ecall,1,1,mtvec_direct_exception,mtvec_direct_exception,RVFI transaction window + firmware self-check
+vectored__synchronous_exception,1,1,mtvec_vectored_timer,mtvec_vectored_timer,RVFI transaction window + firmware self-check
+vectored__timer_interrupt,1,1,mtvec_vectored_timer,mtvec_vectored_timer,RVFI transaction window + firmware self-check
+vectored__external_interrupt,1,1,mtvec_vectored_external,mtvec_vectored_external,RVFI transaction window + firmware self-check
+mtval__illegal_instruction_bits,1,1,illegal_instruction_mtval,illegal_instruction_mtval,RVFI transaction window + firmware self-check
+mtval__load_fault_address,1,1,misaligned_load_mtval,misaligned_load_mtval,RVFI transaction window + firmware self-check
+mtval__store_fault_address,1,1,store_access_fault_mtval,store_access_fault_mtval,RVFI transaction window + firmware self-check
+mtval__ecall_zero,1,1,mtvec_direct_exception,mtvec_direct_exception,RVFI transaction window + firmware self-check
+mtval__interrupt_zero,1,2,mtvec_vectored_external,mtvec_vectored_external;mtvec_vectored_timer,RVFI transaction window + firmware self-check
+csr_policy__misa_read,1,1,misa_mtval_csr_matrix,misa_mtval_csr_matrix,RVFI transaction window + firmware self-check
+csr_policy__misa_write_illegal,1,1,misa_mtval_csr_matrix,misa_mtval_csr_matrix,RVFI transaction window + firmware self-check
+csr_policy__mtval_writable,1,1,misa_mtval_csr_matrix,misa_mtval_csr_matrix,RVFI transaction window + firmware self-check
+csr_policy__unsupported_mtvec_mode_warl,1,1,mtvec_direct_exception,mtvec_direct_exception,RVFI transaction window + firmware self-check

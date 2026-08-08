@@ -118,7 +118,7 @@
   <text x="714" y="805" text-anchor="middle" class="metric-label">same-window interaction crosses</text>
   <text x="982" y="773" text-anchor="middle" class="metric">10 / 10</text>
   <text x="982" y="805" text-anchor="middle" class="metric-label">true RTL mutation detections</text>
-  <text x="1256" y="773" text-anchor="middle" class="metric">96.90% / 91.18%</text>
+  <text x="1256" y="773" text-anchor="middle" class="metric">96.49% / 90.00%</text>
   <text x="1256" y="805" text-anchor="middle" class="metric-label">focused line / branch coverage</text>
 
   <text x="720" y="875" text-anchor="middle" class="small">Behavioral open-source verification evidence; not RISC-V compliance, production firmware, or silicon signoff.</text>

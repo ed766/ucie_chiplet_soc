@@ -26,6 +26,7 @@ def read_rows(path: Path) -> list[dict[str, str]]:
 def main() -> int:
     local_report = REPORTS / "rv32_external_mutation_local_iss.csv"
     spike_report = REPORTS / "rv32_external_mutation_spike.csv"
+    spike_mpp_report = REPORTS / "rv32_external_mutation_spike_mpp.csv"
     act_report = REPORTS / "rv32_external_mutation_act4.csv"
     formal_report = REPORTS / "rv32_external_mutation_formal.csv"
 
@@ -34,6 +35,9 @@ def main() -> int:
     run([sys.executable, str(SCRIPTS / "run_external_iss.py"), "--require",
          "--program", "operand_corner_matrix_Os", "--mutation", "RV32_BUG_ALU_RESULT",
          "--expect-detection", "--report", str(spike_report)])
+    run([sys.executable, str(SCRIPTS / "run_external_iss.py"), "--require",
+         "--program", "csr_state_matrix_Os", "--mutation", "RV32_BUG_MSTATUS_MPP_ZERO",
+         "--expect-detection", "--report", str(spike_mpp_report)])
     run([sys.executable, str(SCRIPTS / "run_act4.py"), "--require", "--suite-prefix", "Zicsr",
          "--mutation", "RV32_BUG_MSCRATCH_WRITE_DROP", "--expect-detection",
          "--report", str(act_report)])
@@ -43,6 +47,7 @@ def main() -> int:
 
     local = read_rows(local_report)
     spike = read_rows(spike_report)
+    spike_mpp = read_rows(spike_mpp_report)
     act = read_rows(act_report)
     formal = read_rows(formal_report)
     rows = [
@@ -57,10 +62,18 @@ def main() -> int:
         {
             "oracle": "Spike",
             "mutation": "RV32_BUG_ALU_RESULT",
-            "expected_detection": "PC/instruction_stream_divergence",
+            "expected_detection": "architectural_register_or_control_flow_divergence",
             "observed_detection": spike[0].get("first_mismatch", "") if spike else "none",
             "status": "PASS" if spike and spike[0]["status"] == "PASS" and spike[0]["detected"] == "1" else "FAIL",
             "evidence": str(spike_report.relative_to(ROOT.parent)),
+        },
+        {
+            "oracle": "Spike",
+            "mutation": "RV32_BUG_MSTATUS_MPP_ZERO",
+            "expected_detection": "machine_mode_mstatus_register_divergence",
+            "observed_detection": spike_mpp[0].get("first_mismatch", "") if spike_mpp else "none",
+            "status": "PASS" if spike_mpp and spike_mpp[0]["status"] == "PASS" and spike_mpp[0]["detected"] == "1" else "FAIL",
+            "evidence": str(spike_mpp_report.relative_to(ROOT.parent)),
         },
         {
             "oracle": "ACT4/Sail",

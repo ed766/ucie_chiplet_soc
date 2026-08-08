@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -14,6 +15,7 @@ ROOT = Path(__file__).resolve().parent.parent
 BUILD = ROOT / "build" / "async_cdc"
 REPORT = ROOT / "reports" / "async_cdc_summary.csv"
 RATIOS = ((5, 5, 0), (5, 7, 1), (3, 5, 2), (5, 2, 3))
+RUN_CYCLES = 240
 
 
 def main() -> int:
@@ -24,8 +26,11 @@ def main() -> int:
         shutil.rmtree(BUILD)
     BUILD.mkdir(parents=True)
     sources = [ROOT / "sim" / "tb_async_chiplet.sv", *sorted((ROOT / "rtl").rglob("*.sv"))]
+    version = subprocess.run([args.verilator, "--version"], capture_output=True, text=True)
+    match = re.search(r"Verilator\s+(\d+)\.(\d+)", version.stdout + version.stderr)
+    timing_flags = ["--no-sched-zero-delay"] if match and tuple(map(int, match.groups())) >= (5, 40) else []
     cmd = [
-        args.verilator, "--binary", "--sv", "--timing", "-Wall", "-Wno-fatal",
+        args.verilator, "--binary", "--sv", "--timing", *timing_flags, "-Wall", "-Wno-fatal",
         "-Wno-DECLFILENAME", "-Wno-PINCONNECTEMPTY", "-Wno-WIDTHEXPAND",
         "-Wno-UNUSEDSIGNAL", "-Wno-UNUSEDPARAM", "--top-module", "tb_async_chiplet",
         "-Mdir", str(BUILD / "obj"), *map(str, sources),
@@ -39,7 +44,8 @@ def main() -> int:
     rows = []
     for a_half, b_half, skew in RATIOS:
         run = subprocess.run(
-            [str(binary), f"+A_HALF={a_half}", f"+B_HALF={b_half}", f"+RESET_SKEW={skew}"],
+            [str(binary), f"+A_HALF={a_half}", f"+B_HALF={b_half}",
+             f"+RESET_SKEW={skew}", f"+RUN_CYCLES={RUN_CYCLES}"],
             cwd=ROOT, capture_output=True, text=True, timeout=60,
         )
         log = BUILD / f"ratio_{a_half}_{b_half}_skew_{skew}.log"
@@ -47,12 +53,13 @@ def main() -> int:
         passed = run.returncode == 0 and "ASYNC_RESULT|status=PASS" in run.stdout
         rows.append({
             "clock_ratio": f"{a_half}:{b_half}", "reset_skew": skew,
+            "run_cycles": RUN_CYCLES,
             "status": "PASS" if passed else "FAIL",
             "log": str(log.relative_to(ROOT.parent)),
         })
     REPORT.parent.mkdir(parents=True, exist_ok=True)
     with REPORT.open("w", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=rows[0].keys())
+        writer = csv.DictWriter(handle, fieldnames=rows[0].keys(), lineterminator="\n")
         writer.writeheader(); writer.writerows(rows)
     passed = sum(row["status"] == "PASS" for row in rows)
     print(f"Async CDC matrix: {passed}/{len(rows)}; report={REPORT.relative_to(ROOT.parent)}")

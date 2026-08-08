@@ -31,7 +31,7 @@ The payload path is the behavioral UCIe-style transport. APB is the RV32 firmwar
 
 Freestanding C is compiled into split instruction/data images, executed by the RV32 RTL, and observed through RVFI-style retirement plus APB/device event traces. The repository-local ISS predicts architectural state independently; the existing DMA/AES golden models check device behavior and final memory rather than asking the DUT to check itself.
 
-The extended lane also verifies an always-on machine timer, `WFI`, timer/external interrupt priority, and writable `mcycle/minstret` counters. A standard-RVFI adapter and pinned Spike, ACT4/Sail, and `riscv-formal` integration paths provide independent release evidence when those external dependencies are installed; missing tools are reported as `SKIP`, never as passes.
+The extended lane also verifies an always-on machine timer, `WFI`, timer/external interrupt priority, and writable `mcycle/minstret` counters. A standard-RVFI adapter and pinned Spike, ACT4/Sail, and `riscv-formal` integration paths provide independent evidence. Standalone probes report missing tools as `SKIP`, never as passes; the release gate uses `--require` and fails on any missing or revision-mismatched dependency.
 
 ## Verification Snapshot
 
@@ -43,31 +43,16 @@ This table is generated from `chiplet_extension/reports/project_metrics.csv` by 
 | Stable regression | `70 / 70` |
 | Functional coverage | `60 / 60` |
 | Low-power proxy targets | `26 / 26` |
-| RV32 firmware scenarios | `12 / 12` |
 | GCC C/ISS firmware scenarios | `85 / 85` |
-| Named GCC firmware scenarios | `35 / 35` |
-| Seeded CPU streams | `25 / 25` |
-| Seeded firmware workloads | `25 / 25` |
 | Compiled firmware coverage | `178 / 178` |
 | Compiled firmware crosses | `94 / 94` |
-| Compiled firmware focused line coverage | `96.90%` |
-| Compiled firmware focused branch coverage | `91.18%` |
-| Trace-checker mutation self-tests | `10 / 10` |
-| Generated-C differential programs | `25 / 25` |
-| Compiler/ABI executions | `34 / 34` |
-| Compiler/ABI coverage | `16 / 16` |
-| Timer/WFI/counter scenarios | `10 / 10` |
-| Timer/WFI/counter coverage | `16 / 16` |
-| Timer/WFI/counter crosses | `22 / 22` |
-| True RV32 RTL mutations | `10 / 10` |
-| Two-source architectural points | `118 / 118` |
-| Two-source high-risk crosses | `58 / 58` |
+| Compiled firmware focused line coverage | `96.49%` |
+| Compiled firmware focused branch coverage | `90.00%` |
+| True RV32 RTL mutations | `14 / 14` |
 | Spike CPU differential | `12 PASS / 0 SKIP / 0 FAIL` |
 | ACT4/Sail RTL tests | `45 PASS / 0 SKIP / 0 FAIL` |
 | RV32 standard/custom formal | `3 PASS / 0 SKIP / 0 FAIL` |
-| External-oracle mutation sensitivity | `4 / 4` |
 | Supporting real-UVM lane | `4 / 4` |
-| Solver-backed proofs | `7 / 7` |
 | Integrated async CDC ratios | `4 / 4` |
 | Raw design line coverage | `96.25%` |
 | Raw design toggle coverage | `1933 / 2570 (75.21%)` |
@@ -83,12 +68,13 @@ The non-UVM Verilator regression remains the default functional closure gate. Th
 3. [Firmware-driven verification](docs/firmware_soc_verification.md)
 4. [Compiled-C and ISS evidence](docs/reference/compiled_firmware_verification.md)
 5. [Power and UPF verification](docs/power_verification_plan.md)
-6. [Coverage closure](docs/coverage_closure_case_study.md)
-7. [Formal evidence](docs/formal_appendix.md)
-8. [Bug diary](docs/bug_diary.md)
-9. [Performance characterization](docs/performance_characterization.md)
-10. [UVM status](docs/uvm_status.md)
-11. [Documentation index](docs/README.md)
+6. [Privileged architecture validation](docs/reference/privileged_architecture_validation.md)
+7. [Coverage closure](docs/coverage_closure_case_study.md)
+8. [Formal evidence](docs/formal_appendix.md)
+9. [Bug diary](docs/bug_diary.md)
+10. [Performance characterization](docs/performance_characterization.md)
+11. [UVM status](docs/uvm_status.md)
+12. [Documentation index](docs/README.md)
 
 Core evidence refresh:
 
@@ -100,19 +86,10 @@ make -C chiplet_extension upf-check
 Supporting lanes:
 
 ```bash
-make -C chiplet_extension firmware-soc-check
-make -C chiplet_extension firmware-c-check
-make -C chiplet_extension firmware-c-closure
+make -C chiplet_extension firmware-c-release-check
 make -C chiplet_extension firmware-c-coverage
-make -C chiplet_extension firmware-c-compiler-matrix
-make -C chiplet_extension firmware-c-generated-c-random
-make -C chiplet_extension timer-wfi-check
-make -C chiplet_extension firmware-c-rtl-mutation-check
-make -C chiplet_extension firmware-c-robustness-check
-make -C chiplet_extension rv32-isa-check
 make -C chiplet_extension formal-prove
 make -C chiplet_extension async-cdc-check
-make -C chiplet_extension code-coverage
 make -C chiplet_extension uvm-ci
 ```
 
@@ -130,7 +107,7 @@ Two independently reported firmware lanes execute the same software-visible DMA 
 
 The twelve programs cover nominal and back-to-back DMA, queue-full rejection, completion-FIFO pressure, timeout, parity and invalid-memory errors, IRQ pending-then-enable, sleep/resume, CRYPTO_ONLY rejection, APB wait/error handling, and reset during a pending transfer. Testbench control may inject power, reset, or link conditions, but it does not program DMA CSRs in this lane.
 
-The compiled lane adds 35 named C/assembly-linked scenarios, 25 deterministic generated CPU streams, and 25 seeded firmware/DMA workloads. It closes `178 / 178` RV32/firmware coverage points and `94 / 94` event-correlated crosses using split code/data images, RVFI-style retirement traces, APB/device event traces, interrupt/trap handlers, exact access-mask checks, and all six Zicsr forms on `mscratch`. Mutation evidence is intentionally split into `10 / 10` true RTL mutations and `10 / 10` trace-checker self-tests. GCC/binutils are checksum-pinned through `firmware_c/toolchain.lock.json`. The repository-local ISS independently validates the compiled instruction image and models GPRs, initialized SRAM, machine CSRs including `mscratch`, PC flow, reset epochs, traps, and interrupt state while the existing Python DMA/AES model remains authoritative for device behavior; it is not an official RISC-V compliance framework.
+The compiled lane adds 35 named C/assembly-linked scenarios, 25 deterministic generated CPU streams, and 25 seeded firmware/DMA workloads. It closes `178 / 178` RV32/firmware coverage points and `94 / 94` event-correlated crosses using split code/data images, RVFI-style retirement traces, APB/device event traces, interrupt/trap handlers, exact access-mask checks, and all six Zicsr forms on `mscratch`. A separate privileged lane closes `8 / 8` scenarios, `32 / 32` points, and `16 / 16` same-window crosses for `misa`, `mtval`, direct/vectored `mtvec`, interrupt source selection, and `MRET` state restoration. Mutation evidence is intentionally split into `14 / 14` true RTL mutations and `10 / 10` trace-checker self-tests. GCC/binutils are checksum-pinned through `firmware_c/toolchain.lock.json`. The repository-local ISS independently validates the compiled instruction image and models GPRs, initialized SRAM, machine CSRs including `mscratch`, PC flow, reset epochs, traps, and interrupt state while the existing Python DMA/AES model remains authoritative for device behavior; it is not an official RISC-V compliance framework.
 
 ### Reproducing the GCC/ISS Evidence
 
@@ -141,16 +118,17 @@ The compiled lane adds 35 named C/assembly-linked scenarios, 25 deterministic ge
 | Trace-derived functional points | `178 / 178` | [`firmware_c_coverage_summary.csv`](chiplet_extension/reports/firmware_c_coverage_summary.csv) |
 | Same-window interaction crosses | `94 / 94` | [`firmware_c_cross_coverage_summary.csv`](chiplet_extension/reports/firmware_c_cross_coverage_summary.csv) |
 | Trace-checker mutation self-tests | `10 / 10` | [`firmware_c_trace_mutation_summary.csv`](chiplet_extension/reports/firmware_c_trace_mutation_summary.csv) |
-| True RTL mutation sensitivity | `10 / 10` | [`firmware_c_rtl_mutation_summary.csv`](chiplet_extension/reports/firmware_c_rtl_mutation_summary.csv) |
+| True RTL mutation sensitivity | `14 / 14` | [`firmware_c_rtl_mutation_summary.csv`](chiplet_extension/reports/firmware_c_rtl_mutation_summary.csv) |
 | Generated-C differential programs | `25 / 25` | [`firmware_c_generated_c_summary.csv`](chiplet_extension/reports/firmware_c_generated_c_summary.csv) |
 | Optimizer/ABI executions and points | `34 / 34`, `16 / 16` | [`firmware_c_compiler_matrix_summary.csv`](chiplet_extension/reports/firmware_c_compiler_matrix_summary.csv) |
 | Timer/WFI/counter scenarios and coverage | `10 / 10`, `16 / 16`, `22 / 22` | [`timer_wfi_summary.csv`](chiplet_extension/reports/timer_wfi_summary.csv) |
 | Two-contributor robustness | `118 / 118` points, `58 / 58` crosses | [`firmware_c_coverage_robustness.csv`](chiplet_extension/reports/firmware_c_coverage_robustness.csv) |
-| Focused RTL line / branch coverage | `96.90% / 91.18%` | [`firmware_c_code_coverage_summary.md`](chiplet_extension/reports/firmware_c_code_coverage_summary.md) |
+| Focused RTL line / branch coverage | `96.49% / 90.00%` | [`firmware_c_code_coverage_summary.md`](chiplet_extension/reports/firmware_c_code_coverage_summary.md) |
 | Spike CPU differential | `12 / 12` | [`rv32_external_iss_summary.csv`](chiplet_extension/reports/rv32_external_iss_summary.csv) |
 | ACT4/Sail RTL architectural tests | `45 / 45` | [`rv32_act_summary.csv`](chiplet_extension/reports/rv32_act_summary.csv) |
 | Standard/custom RVFI formal groups | `3 / 3` | [`rv32_formal_summary.csv`](chiplet_extension/reports/rv32_formal_summary.csv) |
-| External-oracle RTL mutation sensitivity | `4 / 4` | [`rv32_external_mutation_matrix.csv`](chiplet_extension/reports/rv32_external_mutation_matrix.csv) |
+| External-oracle RTL mutation sensitivity | `5 / 5` | [`rv32_external_mutation_matrix.csv`](chiplet_extension/reports/rv32_external_mutation_matrix.csv) |
+| Privileged architecture scenarios / points / crosses | `8 / 8`, `32 / 32`, `16 / 16` | [`privileged_arch_summary.csv`](chiplet_extension/reports/privileged_arch_summary.csv) |
 
 ```bash
 make -C chiplet_extension firmware-c-closure
@@ -159,7 +137,7 @@ make -C chiplet_extension firmware-c-mutation-check
 make -C chiplet_extension firmware-c-release-check
 ```
 
-The closure runner records the first architectural mismatch, ELF symbol/source line, surrounding disassembly, waveform cycle, seed, instruction count, APB activity, traps/interrupts, DMA outcomes, and memory-scoreboard status. Coverage receives no scenario-name-only credit; provenance is checked in [`firmware_c_evidence_audit.csv`](chiplet_extension/reports/firmware_c_evidence_audit.csv). [External validation status](docs/reference/rv32_external_validation.md) and [timer/WFI verification](docs/reference/timer_wfi_verification.md) describe the new independent and architectural evidence.
+The closure runner records the first architectural mismatch, ELF symbol/source line, surrounding disassembly, waveform cycle, seed, instruction count, APB activity, traps/interrupts, DMA outcomes, and memory-scoreboard status. Coverage receives no scenario-name-only credit; provenance is checked in [`firmware_c_evidence_audit.csv`](chiplet_extension/reports/firmware_c_evidence_audit.csv). [External validation status](docs/reference/rv32_external_validation.md), [privileged architecture validation](docs/reference/privileged_architecture_validation.md), and [timer/WFI verification](docs/reference/timer_wfi_verification.md) describe the independent and architectural evidence.
 
 ## DMA and Memory
 

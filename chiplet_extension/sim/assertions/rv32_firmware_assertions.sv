@@ -26,6 +26,8 @@ module rv32_firmware_assertions (
     input logic [31:0] rvfi_mscratch,
     input logic [31:0] rvfi_mepc,
     input logic [31:0] rvfi_mcause,
+    input logic [31:0] rvfi_mtvec,
+    input logic [31:0] rvfi_mtval,
     input logic irq_external,
     input logic irq_timer,
     input logic wfi_sleep
@@ -69,6 +71,23 @@ module rv32_firmware_assertions (
         $past(rvfi_mcause) inside {32'd0, 32'd2, 32'd3, 32'd4, 32'd5, 32'd6, 32'd7, 32'd11});
     a_rv32_trap_records_fault_pc: assert property (disable iff (!rst_n) (rvfi_valid && rvfi_trap) |=>
         $past(rvfi_mepc) == $past(rvfi_pc_rdata));
+    // Sample the same pre-NBA retirement record consumed by the RVFI trace writer.
+    always @(posedge clk) begin
+        if (rst_n && rvfi_valid && rvfi_trap && !rvfi_intr)
+            a_rv32_sync_trap_uses_mtvec_base:
+                assert (rvfi_pc_wdata == {rvfi_mtvec[31:2], 2'b00});
+        if (rst_n && rvfi_valid && rvfi_intr && rvfi_mtvec[1:0] == 2'b01)
+            a_rv32_vectored_interrupt_target:
+                assert (rvfi_pc_wdata == ({rvfi_mtvec[31:2], 2'b00} +
+                                           {rvfi_mcause[29:0], 2'b00}));
+        if (rst_n && rvfi_valid && rvfi_intr)
+            a_rv32_interrupt_mtval_zero: assert (rvfi_mtval == 0);
+        if (rst_n && rvfi_valid && rvfi_trap &&
+            rvfi_mcause inside {32'd4, 32'd5, 32'd6, 32'd7})
+            a_rv32_address_fault_mtval: assert (rvfi_mtval == rvfi_mem_addr);
+        if (rst_n && rvfi_valid && rvfi_trap && rvfi_mcause == 32'd2)
+            a_rv32_illegal_instruction_mtval: assert (rvfi_mtval == rvfi_insn);
+    end
 
     a_rv32_load_mask_matches_width: assert property (disable iff (!rst_n)
         (rvfi_valid && !rvfi_trap && rvfi_insn[6:0] == 7'b0000011) |->
@@ -86,7 +105,10 @@ module rv32_firmware_assertions (
     a_rv32_zero_destination_has_zero_data: assert property (disable iff (!rst_n)
         (rvfi_valid && rvfi_rd_addr == 0) |-> rvfi_rd_wdata == 0);
     a_rv32_csr_state_is_implemented_subset: assert property (disable iff (!rst_n) rvfi_valid |->
-        ((rvfi_mstatus & ~32'h0000_0088) == 0 && (rvfi_mie & ~32'h0000_0880) == 0));
+        ((rvfi_mstatus & ~32'h0000_1888) == 0 &&
+         rvfi_mstatus[12:11] == 2'b11 && (rvfi_mie & ~32'h0000_0880) == 0));
+    a_rv32_machine_only_mpp_fixed: assert property (disable iff (!rst_n)
+        rvfi_valid |-> rvfi_mstatus[12:11] == 2'b11);
     a_rv32_mmio_completion_cannot_repeat: assert property (disable iff (!rst_n)
         (psel && penable && pready) |=> !(psel && penable && pready));
     a_rv32_mmio_error_retires_precise_trap: assert property (disable iff (!rst_n)

@@ -62,8 +62,9 @@ closure, not replacing the stable gate:
 - The architectural checker is repository-local and decoder-independent; it is not Spike/Sail or an official RISC-V compliance suite.
 - Compiled programs terminate through an explicit APB result mailbox at `0x1E0`; architectural EBREAK behavior is verified separately with `EBREAK_TEST_HALT=0`, while legacy assembly tests retain the parameterized halt shortcut.
 - The separate compiled closure runs 35 directed programs, 25 stratified generated CPU streams, and 25 firmware/DMA workload seeds. It targets `178 / 178` trace-derived points and `94 / 94` same-window crosses, including `mscratch` read/write semantics and all six Zicsr forms, without inflating canonical chiplet closure; an evidence audit rejects scenario-name-only coverage credit.
-- `make -C chiplet_extension firmware-c-coverage` merges one native Verilator database per closure execution and enforces focused line and branch/expression thresholds across the RV32 core, APB bridge, ROM feeder, and integration top.
-- `firmware-c-rtl-mutation-check` checks nine true RTL mutations. `firmware-c-mutation-check` separately runs ten deliberately corrupted architectural traces covering PC, instruction, register, memory, CSR, cause, epoch, and retirement-order integrity; its legacy combined CSV is retained only for release compatibility.
+- `make -C chiplet_extension firmware-c-coverage` merges one native Verilator database per compiled closure, timer/WFI, and privileged-architecture execution, then enforces focused line and branch/expression thresholds across the RV32 core, APB bridge, machine timer, ROM feeder, and integration top.
+- `privileged-arch-check` runs eight additional GCC/ISS scenarios for `misa`, `mtval`, direct and vectored `mtvec`, timer/external interrupt vectors, and `MRET` state restoration. Its `32 / 32` points and `16 / 16` same-window crosses are reported separately from the canonical compiled-firmware model.
+- `firmware-c-rtl-mutation-check` checks fourteen true RTL mutations, including `mtval`, vectored trap entry, and read-only `misa` handling. `firmware-c-mutation-check` separately runs ten deliberately corrupted architectural traces covering PC, instruction, register, memory, CSR, cause, epoch, and retirement-order integrity; its legacy combined CSV is retained only for release compatibility.
 
 ### Proxy power benching
 
@@ -587,7 +588,7 @@ Current local milestone:
 - assertion inventory documents `65` protocol/control invariants, including twelve compiled-firmware architectural checks and software-reject correlation
 - firmware-driven integration passes `12 / 12` programs with `30 / 30` required points and `7 / 7` outcome/power crosses
 - GCC-built compiled firmware closes `85 / 85` directed/seeded executions with `178 / 178` detailed points and `94 / 94` same-window interaction crosses
-- independent architectural release evidence closes Spike `12 / 12`, ACT4/Sail `45 / 45`, standard/custom RVFI formal `3 / 3`, and external-oracle mutation sensitivity `4 / 4`
+- independent architectural release evidence closes Spike `12 / 12`, ACT4/Sail `45 / 45`, standard/custom RVFI formal `3 / 3`, and external-oracle mutation sensitivity `5 / 5`
 - expected bug-validation failures are observed at `5 / 5`
 - low-power proxy rows meet expectation at `26 / 26`
 - low-power functional coverage shows PST states `4 / 4`, legal transitions

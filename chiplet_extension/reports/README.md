@@ -1,64 +1,37 @@
-# Report Policy
+# Curated Report Policy
 
-This directory keeps only curated evidence summaries under version control.
-Raw per-test and per-seed artifacts are generated locally by the Make targets
-and are ignored by default.
+This directory contains normalized, reviewer-facing evidence. Raw logs, waveforms, compiled firmware, coverage databases, per-seed traces, and simulator build trees belong under ignored `build/` or `logs/` directories.
 
-Keep checked in:
+## Canonical Evidence Groups
 
-- `regress_summary.csv`
-- `coverage_summary.csv`
-- `failure_buckets.csv`
-- `verification_dashboard.md`
-- `power_state_summary.csv`
-- `coverage_closure_matrix.md`
-- `cross_coverage_summary.csv`
-- `formal_summary.csv`
-- `formal_proof_summary.csv`
-- `async_cdc_summary.csv`
-- `uvm_ci_regress_summary.csv`
-- `uvm_ci_coverage_summary.csv`
-- `code_coverage_summary.txt`
-- `code_coverage_summary.md`
-- `code_coverage_test_ranking.csv`
-- `code_coverage_holes.csv`
-- `perf_characterization.csv`
-- `dma_mem_characterization.csv`
-- `project_metrics.csv`
-- `frontend_quality_summary.csv`
-- `frontend_quality_summary.md`
-- `cdc_rdc_summary.csv`
-- `firmware_soc_summary.csv`
-- `firmware_coverage_summary.csv`
-- `firmware_cross_coverage_summary.csv`
-- `firmware_code_coverage_summary.txt`
-- `firmware_code_coverage_summary.md`
-- `firmware_c_summary.csv`
-- `firmware_c_coverage_summary.csv`
-- `firmware_c_cross_coverage_summary.csv`
-- `firmware_c_evidence_audit.csv`
-- `firmware_c_mutation_summary.csv`
-  - RTL and normalized-trace mutation sensitivity for the compiled-firmware lane.
-- `firmware_c_isa_random_summary.csv`
-  - Results and seeds for 25 generated RV32I/Zicsr instruction streams.
-- `firmware_c_workload_random_summary.csv`
-  - Applied knobs and outcomes for 25 generated firmware/DMA workloads.
-- `firmware_c_performance_summary.csv`
-  - Behavioral cycle, CPI, APB wait, interrupt, handler, and submit/completion statistics.
-- `firmware_c_code_coverage_summary.txt`
-- `firmware_c_code_coverage_summary.md`
-- `firmware_c_code_coverage_test_ranking.csv`
+| Group | Representative artifacts |
+| --- | --- |
+| Stable closure | `regress_summary.csv`, `coverage_summary.csv`, `power_state_summary.csv`, `failure_buckets.csv` |
+| Functional interactions | `cross_coverage_summary.csv`, `true_cross_coverage_summary.csv`, `coverage_closure_matrix.md` |
+| Firmware/APB | `firmware_soc_summary.csv`, `firmware_coverage_summary.csv`, `firmware_cross_coverage_summary.csv` |
+| GCC/ISS | `firmware_c_summary.csv`, directed/seeded summaries, functional/cross coverage, evidence audit, performance, and focused code coverage |
+| Privileged RV32 | `privileged_arch_summary.csv`, `privileged_arch_coverage_summary.csv`, `privileged_arch_cross_coverage_summary.csv` |
+| External architecture | `rv32_external_tool_status.csv`, Spike, ACT4/Sail, RVFI formal, and external mutation summaries |
+| Formal/assertions | `formal_summary.csv`, `formal_proof_summary.csv` |
+| UVM/CDC | `uvm_ci_*`, `async_cdc_summary.csv`, `cdc_rdc_summary.csv` |
+| Code/implementation | `code_coverage_*`, `frontend_quality_summary.*` |
+| Characterization | `perf_characterization.csv`, `dma_mem_characterization.csv` |
+| Reviewer snapshot | `project_metrics.csv`, `verification_dashboard.md` |
 
-The firmware flat/cross coverage summaries and focused code-coverage report
-are curated exceptions because they are the canonical firmware evidence.
-The compiled-C summaries are curated because they record architectural
-differential results, detailed ISA/firmware interactions, focused native code
-coverage, test contribution, and checker mutation sensitivity without retaining
-raw traces or machine-specific build products.
-The front-end summaries retain the bounded Yosys control/link proxy and
-structural CDC/RDC result while excluding tool logs and build trees.
+## Rules
 
-Do not check in other routine generated files matching `*_coverage.csv`,
-`*_scoreboard.csv`, `*_power.csv`, seed-specific summaries, smoke summaries,
-or UVM per-test artifacts unless they are being used as a specific debug case
-study.
+- Reports must use repository-relative paths and deterministic column ordering.
+- Functional, cross, power, code, UVM, formal, and mutation evidence remain separate metrics.
+- Expected-fail rows are retained only when their intended checker and failure bucket are explicit.
+- Focused firmware coverage is not substituted for full-chiplet code coverage.
+- Missing optional tools are reported as `SKIP`; release-required external tools fail under `--require`.
+- New curated artifacts must be added to `.gitignore` exceptions and, when reviewer-facing, to `REPORT_ARTIFACTS` in the Makefile.
+
+Run the following after regenerating evidence:
+
+```bash
+make project-metrics readme-metrics normalize-report-paths docs-check
+git diff --check
+```
+
+Routine `*_scoreboard.csv`, per-test coverage, seed-specific reports, raw LCOV data, and local tool logs should not be committed unless they support a named debug case study.

@@ -39,6 +39,7 @@ RUN_ACT4 := $(ROOT_DIR)/scripts/run_act4.py
 RUN_EXTERNAL_MUTATIONS := $(ROOT_DIR)/scripts/run_external_mutation_matrix.py
 GEN_RV32_VALIDATION_DASHBOARD := $(ROOT_DIR)/scripts/gen_rv32_validation_dashboard.py
 RUN_RTL_MUTATIONS := $(ROOT_DIR)/scripts/run_rtl_mutations.py
+RUN_PRIVILEGED_ARCH := $(ROOT_DIR)/scripts/run_privileged_arch.py
 RUN_GENERATED_C_RANDOM := $(ROOT_DIR)/scripts/run_generated_c_random.py
 GEN_FIRMWARE_ROBUSTNESS := $(ROOT_DIR)/scripts/gen_firmware_robustness.py
 RUN_RV32_EBREAK_CHECK := $(ROOT_DIR)/scripts/run_rv32_ebreak_check.py
@@ -84,7 +85,11 @@ REPORT_ARTIFACTS := \
 		$(REPORTS_DIR)/firmware_c_code_coverage_summary.txt \
 		$(REPORTS_DIR)/firmware_c_code_coverage_summary.md \
 		$(REPORTS_DIR)/firmware_c_code_coverage_test_ranking.csv \
+		$(REPORTS_DIR)/privileged_arch_summary.csv \
+		$(REPORTS_DIR)/privileged_arch_coverage_summary.csv \
+		$(REPORTS_DIR)/privileged_arch_cross_coverage_summary.csv \
 		$(ROOT_DIR)/../docs/reference/compiled_firmware_verification.md \
+		$(ROOT_DIR)/../docs/reference/privileged_architecture_validation.md \
 		$(ROOT_DIR)/../docs/performance_characterization.md \
 		$(ROOT_DIR)/../docs/reference/assertion_inventory.md \
 		$(ROOT_DIR)/../docs/reference/random_stress_summary.md \
@@ -96,7 +101,7 @@ REPORT_ARTIFACTS := \
 		$(ROOT_DIR)/../docs/reference/clock_reset_cdc_plan.md \
 		$(ROOT_DIR)/../docs/reference/c_reference_model_summary.md
 
-.PHONY: chiplet-sim chiplet-report project-check regress closure closure-equivalence power-regress stress negative-regress negative-summary bug-validate formal-check formal-prove assertion-inventory upf-check frontend-quality code-coverage coverage-edges-check axi-lite-check cdc-rdc-check async-cdc-check credit-edges-check c-reference-check firmware-soc-smoke firmware-soc-check firmware-code-coverage firmware-waveform rv32-toolchain-install rv32-toolchain-check rv32-external-tools-install rv32-isa-check rv32-ebreak-check rv32-external-iss-check rv32-act-check rv32-formal-check rv32-external-mutation-check firmware-c-build firmware-c-smoke firmware-c-check firmware-c-isa-random firmware-c-workload-random firmware-c-generated-c-random firmware-c-closure firmware-c-coverage firmware-c-waveform firmware-c-mutation-check firmware-c-rtl-mutation-check firmware-c-compiler-matrix firmware-c-robustness-check firmware-c-release-check timer-wfi-check uvm-check-env uvm-smoke uvm-ci uvm-ral-smoke uvm-closure uvm-regress characterize characterize-link characterize-dma-mem performance-report project-metrics readme-metrics docs-check normalize-report-paths random-smoke-25 stress-retry-50 power-dma-cross-25 random-stress-run random-stress-summary cross-coverage-summary dma-retry-waveform clean
+.PHONY: chiplet-sim chiplet-report project-check regress closure closure-equivalence power-regress stress negative-regress negative-summary bug-validate formal-check formal-prove assertion-inventory upf-check frontend-quality code-coverage coverage-edges-check axi-lite-check cdc-rdc-check async-cdc-check credit-edges-check c-reference-check firmware-soc-smoke firmware-soc-check firmware-code-coverage firmware-waveform rv32-toolchain-install rv32-toolchain-check rv32-external-tools-install rv32-isa-check rv32-ebreak-check rv32-external-iss-check rv32-act-check rv32-formal-check rv32-external-mutation-check firmware-c-build firmware-c-smoke firmware-c-check firmware-c-isa-random firmware-c-workload-random firmware-c-generated-c-random firmware-c-closure firmware-c-coverage firmware-c-waveform firmware-c-mutation-check firmware-c-rtl-mutation-check firmware-c-compiler-matrix firmware-c-robustness-check firmware-c-release-check timer-wfi-check privileged-arch-check uvm-check-env uvm-smoke uvm-ci uvm-ral-smoke uvm-closure uvm-regress characterize characterize-link characterize-dma-mem performance-report project-metrics readme-metrics docs-check normalize-report-paths random-smoke-25 stress-retry-50 power-dma-cross-25 random-stress-run random-stress-summary cross-coverage-summary dma-retry-waveform clean
 
 chiplet-sim:
 	$(PYTHON) $(RUN_REGRESSION) --tests prbs_smoke,soc_smoke --random-seeds 1 --seed $(SEED) --verilator $(VERILATOR) --report-prefix smoke --run-id-prefix smoke
@@ -300,6 +305,7 @@ rv32-ebreak-check:
 firmware-c-coverage: rv32-toolchain-check
 	$(PYTHON) $(RUN_COMPILED_FIRMWARE) --verilator $(VERILATOR) --coverage --closure --count 25
 	$(PYTHON) $(RUN_COMPILED_FIRMWARE) --verilator $(VERILATOR) --coverage --timer-wfi --append-coverage
+	$(PYTHON) $(RUN_PRIVILEGED_ARCH) --verilator $(VERILATOR) --coverage
 	$(PYTHON) $(GEN_CODE_COVERAGE_REPORT) \
 		--dat-dir $(ROOT_DIR)/build/firmware_c/coverage_data --prefix firmware_c_ \
 		--output-txt $(REPORTS_DIR)/firmware_c_code_coverage_summary.txt \
@@ -328,6 +334,9 @@ timer-wfi-check: rv32-toolchain-check
 	$(PYTHON) $(RUN_COMPILED_FIRMWARE) --verilator $(VERILATOR) --timer-wfi
 	$(PYTHON) $(GEN_TIMER_WFI_COVERAGE)
 
+privileged-arch-check: rv32-toolchain-check
+	$(PYTHON) $(RUN_PRIVILEGED_ARCH) --verilator $(VERILATOR)
+
 rv32-external-iss-check: firmware-c-check
 	$(PYTHON) $(CHECK_EXTERNAL_RISCV_TOOLS)
 	$(PYTHON) $(RUN_EXTERNAL_ISS)
@@ -344,7 +353,7 @@ rv32-external-mutation-check:
 	@test -f $(ROOT_DIR)/build/external_riscv_tools/environment.sh || { echo "Missing pinned external tools; run 'make rv32-external-tools-install'"; exit 1; }
 	bash -c 'source $(ROOT_DIR)/build/external_riscv_tools/environment.sh && $(PYTHON) $(RUN_EXTERNAL_MUTATIONS)'
 
-firmware-c-release-check: firmware-c-closure firmware-c-generated-c-random firmware-c-compiler-matrix timer-wfi-check rv32-ebreak-check firmware-c-rtl-mutation-check firmware-c-robustness-check
+firmware-c-release-check: firmware-c-closure firmware-c-generated-c-random firmware-c-compiler-matrix timer-wfi-check privileged-arch-check rv32-ebreak-check firmware-c-rtl-mutation-check firmware-c-robustness-check
 	@test -f $(ROOT_DIR)/build/external_riscv_tools/environment.sh || { echo "Missing pinned external tools; run 'make rv32-external-tools-install'"; exit 1; }
 	bash -c 'source $(ROOT_DIR)/build/external_riscv_tools/environment.sh && $(PYTHON) $(CHECK_EXTERNAL_RISCV_TOOLS) --require'
 	bash -c 'source $(ROOT_DIR)/build/external_riscv_tools/environment.sh && $(PYTHON) $(RUN_EXTERNAL_ISS) --require'

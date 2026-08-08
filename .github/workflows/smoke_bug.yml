@@ -70,7 +70,7 @@ jobs:
             chiplet_extension/reports/*.md
 
   compiled-firmware-closure:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -115,3 +115,4 @@ jobs:
             chiplet_extension/reports/firmware_c_*.md
             chiplet_extension/reports/firmware_c_*.txt
             chiplet_extension/reports/rv32_*.csv
+            chiplet_extension/reports/privileged_arch_*.csv

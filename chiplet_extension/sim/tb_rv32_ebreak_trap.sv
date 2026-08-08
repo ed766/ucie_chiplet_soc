@@ -10,6 +10,7 @@ module tb_rv32_ebreak_trap;
         .instr(32'h0010_0073), .irq_ext(1'b0), .irq_timer(1'b0),
         .prdata('0), .pready(1'b1), .pslverr(1'b0),
         .rvfi_valid(rvfi_valid), .rvfi_trap(rvfi_trap), .rvfi_mcause(rvfi_mcause),
+        .rvfi_mtval(),
         .rvfi_mscratch(),
         .rvfi_mscratch_state(),
         .rvfi_pc_wdata(rvfi_pc_wdata)

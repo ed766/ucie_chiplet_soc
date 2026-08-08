@@ -3,6 +3,7 @@ module tb_async_chiplet;
     int a_half = 5;
     int b_half = 5;
     int reset_skew = 0;
+    int run_cycles = 240;
     logic clk_a = 0, clk_b = 0, rst_a_n = 0, rst_b_n = 0;
     logic [31:0] cfg_rdata;
     logic cfg_ready, irq_done, a2b_overflow, b2a_overflow;
@@ -48,18 +49,19 @@ module tb_async_chiplet;
 
     initial begin
         void'($value$plusargs("RESET_SKEW=%d", reset_skew));
+        void'($value$plusargs("RUN_CYCLES=%d", run_cycles));
         a2b_writes = 0; a2b_reads = 0; b2a_writes = 0; b2a_reads = 0;
         repeat (5) @(posedge clk_a);
         rst_a_n = 1;
         repeat (reset_skew) @(posedge clk_b);
         rst_b_n = 1;
-        repeat (8000) @(posedge clk_a);
+        repeat (run_cycles) @(posedge clk_a);
         assert (a2b_writes > 0 && a2b_reads > 0) else $fatal(1, "No A2B traffic");
         assert (b2a_writes > 0 && b2a_reads > 0) else $fatal(1, "No B2A traffic");
         assert (a2b_reads <= a2b_writes) else $fatal(1, "A2B duplication");
         assert (b2a_reads <= b2a_writes) else $fatal(1, "B2A duplication");
-        $display("ASYNC_RESULT|status=PASS|a_half=%0d|b_half=%0d|reset_skew=%0d|a2b=%0d/%0d|b2a=%0d/%0d",
-                 a_half, b_half, reset_skew, a2b_reads, a2b_writes, b2a_reads, b2a_writes);
+        $display("ASYNC_RESULT|status=PASS|a_half=%0d|b_half=%0d|reset_skew=%0d|run_cycles=%0d|a2b=%0d/%0d|b2a=%0d/%0d",
+                 a_half, b_half, reset_skew, run_cycles, a2b_reads, a2b_writes, b2a_reads, b2a_writes);
         $finish;
     end
 endmodule

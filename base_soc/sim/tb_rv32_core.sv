@@ -160,7 +160,8 @@ module tb_rv32_core;
     .rvfi_mscratch(),
     .rvfi_mscratch_state(),
     .rvfi_mepc   (),
-    .rvfi_mcause ()
+    .rvfi_mcause (),
+    .rvfi_mtval ()
   );
 
   task automatic wait_for_halt();

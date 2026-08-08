@@ -39,6 +39,7 @@ RV32_EXTRA_ASSERTIONS = (
     ("a_rv32_apb_wait_blocks_architectural_event", "interface ordering invariant", "Neither retirement nor interrupt entry occurs during an unresolved APB transfer.", "An MMIO instruction or interrupt crosses an incomplete bus operation.", "interrupt_during_apb_wait / APB wait matrix"),
     ("a_rv32_zero_destination_has_zero_data", "architectural safety invariant", "RVFI reports zero write data when the destination is x0.", "A discarded x0 write appears architecturally visible.", "CPU seeds / operand matrix"),
     ("a_rv32_csr_state_is_implemented_subset", "CSR-state invariant", "Machine status and interrupt-enable snapshots contain only implemented bits.", "Unsupported CSR bits become observable.", "csr_state_matrix / illegal CSR matrix"),
+    ("a_rv32_machine_only_mpp_fixed", "privilege-state invariant", "The machine-only core always reports mstatus.MPP as Machine mode.", "External architectural tools observe an impossible lower-privilege return state.", "csr_state_matrix / Spike / RV32_BUG_MSTATUS_MPP_ZERO"),
     ("a_rv32_mmio_completion_cannot_repeat", "control-bus transaction invariant", "A completed MMIO transfer cannot repeat on the following cycle.", "One instruction causes duplicate peripheral side effects.", "APB atomicity matrix"),
     ("a_rv32_mmio_error_retires_precise_trap", "fault-containment invariant", "An APB error retires as a precise trap without destination writeback.", "A failed MMIO operation appears successful.", "APB legality and atomicity matrices"),
     ("a_rv32_mret_has_saved_interrupt_state", "trap-return invariant", "MRET observes a saved machine interrupt-enable state before returning.", "Interrupt enable state is lost across a handler.", "IRQ level/MRET matrix"),
@@ -50,6 +51,11 @@ RV32_EXTRA_ASSERTIONS = (
     ("a_mscratch_reset_zero", "CSR reset invariant", "The machine scratch CSR resets to zero.", "Stale trap-handler context survives reset.", "csr_state_matrix / reset scenarios"),
     ("a_mscratch_read_returns_old_value", "CSR read-modify-write invariant", "A Zicsr instruction returns the pre-update mscratch value.", "The destination receives new or stale-unrelated CSR state.", "csr_state_matrix / ACT4 Zicsr"),
     ("a_mscratch_write_semantics", "CSR state-transition invariant", "All six Zicsr forms update mscratch according to register/immediate and zero-source rules.", "A legal mscratch write is dropped or applies the wrong set/clear mask.", "csr_state_matrix / RV32_BUG_MSCRATCH_WRITE_DROP"),
+    ("a_rv32_sync_trap_uses_mtvec_base", "trap-vector invariant", "Synchronous exceptions use the aligned mtvec base even when vectored mode is selected.", "An exception incorrectly indexes the interrupt vector table.", "mtvec_direct_exception / mtvec_vectored_timer"),
+    ("a_rv32_vectored_interrupt_target", "interrupt-vector invariant", "A vectored interrupt targets mtvec.BASE plus four times the interrupt cause.", "Timer or external interrupt enters the wrong vector slot.", "mtvec_vectored_timer / mtvec_vectored_external / RV32_BUG_MTVEC_DIRECT_ONLY"),
+    ("a_rv32_interrupt_mtval_zero", "precise-interrupt invariant", "Interrupt retirement reports zero mtval.", "Stale exception information leaks into an interrupt record.", "mtvec vectored interrupt scenarios"),
+    ("a_rv32_address_fault_mtval", "precise-exception invariant", "Address exceptions report the faulting effective address in mtval.", "Software cannot identify the faulting load/store address.", "misaligned_load_mtval / store_access_fault_mtval / RV32_BUG_MTVAL_ZERO"),
+    ("a_rv32_illegal_instruction_mtval", "precise-exception invariant", "Illegal-instruction exceptions report the rejected instruction encoding in mtval.", "The illegal instruction is lost from architectural trap state.", "illegal_instruction_mtval / RV32_BUG_MTVAL_ZERO"),
 )
 
 

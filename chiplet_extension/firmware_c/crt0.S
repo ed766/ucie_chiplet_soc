@@ -20,6 +20,22 @@ _start:
 1:
     j 1b
 
+    .balign 64
+    .globl trap_vector_base
+trap_vector_base:
+    j trap_entry
+    j trap_entry
+    j trap_entry
+    j trap_entry
+    j trap_entry
+    j trap_entry
+    j trap_entry
+    j trap_entry
+    j trap_entry
+    j trap_entry
+    j trap_entry
+    j trap_entry
+
     .align 2
     .globl trap_entry
 trap_entry:
@@ -42,6 +58,14 @@ trap_entry:
     sw a7, 60(sp)
 
     csrr t0, mcause
+    la t1, last_mcause
+    sw t0, 0(t1)
+    csrr t2, mepc
+    la t1, last_mepc
+    sw t2, 0(t1)
+    csrr t2, mtval
+    la t1, last_mtval
+    sw t2, 0(t1)
     blt t0, zero, 3f
     la t1, trap_count
     lw t2, 0(t1)

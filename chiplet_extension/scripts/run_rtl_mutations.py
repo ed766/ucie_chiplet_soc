@@ -9,6 +9,7 @@ from pathlib import Path
 
 from build_compiled_firmware import SCENARIOS as IDS, build_one
 from run_compiled_firmware import BUILD, REPORTS, SCENARIOS, Scenario, TIMER_WFI_SCENARIOS, compile_sim, run_one
+from run_privileged_arch import PRIVILEGED_SCENARIOS
 
 MUTATIONS = (
     ("RV32_BUG_ALU_RESULT", "operand_corner_matrix"),
@@ -17,10 +18,14 @@ MUTATIONS = (
     ("RV32_BUG_STORE_MASK_SHIFT", "operand_corner_matrix"),
     ("RV32_BUG_CSR_ZERO_SOURCE", "csr_state_matrix"),
     ("RV32_BUG_MSCRATCH_WRITE_DROP", "csr_state_matrix"),
+    ("RV32_BUG_MSTATUS_MPP_ZERO", "csr_state_matrix"),
     ("RV32_BUG_TRAP_CAUSE", "isa_matrix"),
     ("RV32_BUG_DUP_APB_COMPLETION", "apb_wait_trap"),
     ("RV32_BUG_IRQ_RESTORE", "interrupt_before_after_retire"),
     ("RV32_BUG_MRET_SKIP", "interrupt_before_after_retire"),
+    ("RV32_BUG_MTVAL_ZERO", "illegal_instruction_mtval"),
+    ("RV32_BUG_MTVEC_DIRECT_ONLY", "mtvec_vectored_timer"),
+    ("RV32_BUG_MISA_WRITABLE", "misa_mtval_csr_matrix"),
 )
 
 
@@ -29,7 +34,7 @@ def main() -> int:
     parser.add_argument("--mutation", choices=[item[0] for item in MUTATIONS])
     parser.add_argument("--report", type=Path, default=REPORTS / "firmware_c_rtl_mutation_summary.csv")
     args = parser.parse_args()
-    scenarios = {item.name: item for item in (*SCENARIOS, *TIMER_WFI_SCENARIOS)}
+    scenarios = {item.name: item for item in (*SCENARIOS, *TIMER_WFI_SCENARIOS, *PRIVILEGED_SCENARIOS)}
     images = BUILD / "rtl_mutations"; rows = []
     selected = [item for item in MUTATIONS if not args.mutation or item[0] == args.mutation]
     for mutation, scenario_name in selected:

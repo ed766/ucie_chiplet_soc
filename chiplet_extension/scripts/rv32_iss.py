@@ -52,7 +52,8 @@ class RV32ISS:
         self.interrupts = 0
         self.mismatches: list[str] = []
         self.csrs = {
-            0x300: 0, 0x304: 0, 0x305: 0x300, 0x340: 0, 0x341: 0, 0x342: 0,
+            0x300: 0x1800, 0x301: 0x40000100, 0x304: 0, 0x305: 0x300,
+            0x340: 0, 0x341: 0, 0x342: 0, 0x343: 0,
             0x344: 0, 0xB00: 0, 0xB80: 0, 0xB02: 0, 0xB82: 0,
         }
         self.instructions_by_pc: dict[int, int] = {}
@@ -84,7 +85,8 @@ class RV32ISS:
         self.regs = [0] * 32
         self.memory = dict(self.initial_memory)
         self.csrs = {
-            0x300: 0, 0x304: 0, 0x305: 0x300, 0x340: 0, 0x341: 0, 0x342: 0,
+            0x300: 0x1800, 0x301: 0x40000100, 0x304: 0, 0x305: 0x300,
+            0x340: 0, 0x341: 0, 0x342: 0, 0x343: 0,
             0x344: 0, 0xB00: 0, 0xB80: 0, 0xB02: 0, 0xB82: 0,
         }
         self.expected_order = 0
@@ -96,9 +98,10 @@ class RV32ISS:
             0x305: parse_hex(row["mtvec"]), 0x340: parse_hex(row["mscratch"]),
             0x341: parse_hex(row["mepc"]),
             0x342: parse_hex(row["mcause"]),
+            0x343: parse_hex(row["mtval"]),
         }
         for csr, value in observed.items():
-            if trap_override and csr in (0x341, 0x342):
+            if trap_override and csr in (0x341, 0x342, 0x343):
                 continue
             if value != self.csrs[csr]:
                 self.mismatch(order, f"CSR 0x{csr:03x}=0x{value:08x}, expected 0x{self.csrs[csr]:08x}")
@@ -150,7 +153,10 @@ class RV32ISS:
 
         if intr:
             self.interrupts += 1
-            if observed_next_pc != (parse_hex(row["mtvec"]) & ~3):
+            cause = 0x8000_000B if int(row.get("irq_level", "0")) else 0x8000_0007
+            mtvec = parse_hex(row["mtvec"])
+            expected_target = (mtvec & ~3) + ((cause & 0x7FFF_FFFF) * 4 if (mtvec & 3) == 1 else 0)
+            if observed_next_pc != expected_target:
                 self.mismatch(order, "interrupt target does not match mtvec")
             irq_external = int(row.get("irq_level", "0")) != 0
             irq_timer = int(row.get("irq_timer_level", "0")) != 0
@@ -161,8 +167,11 @@ class RV32ISS:
                 self.mismatch(order, f"interrupt mcause is 0x{parse_hex(row['mcause']):08x}, expected 0x{expected_interrupt_cause:08x}")
             if parse_hex(row["mepc"]) != pc:
                 self.mismatch(order, "interrupt mepc does not identify the interrupted instruction")
+            if parse_hex(row["mtval"]) != 0:
+                self.mismatch(order, "interrupt mtval must be zero")
             self.csrs[0x341] = pc
             self.csrs[0x342] = expected_interrupt_cause
+            self.csrs[0x343] = 0
             old_mie = bool(self.csrs[0x300] & 0x8)
             self.csrs[0x300] = (self.csrs[0x300] & ~0x88) | (0x80 if old_mie else 0)
             self.expected_order = order + 1
@@ -211,10 +220,21 @@ class RV32ISS:
                 self.mismatch(order, f"mcause {parse_hex(row['mcause'])}, expected {expected_cause}")
             if parse_hex(row["mepc"]) != pc:
                 self.mismatch(order, "trap mepc does not identify the faulting instruction")
+            if expected_cause == 0:
+                expected_mtval = target
+            elif expected_cause == 2:
+                expected_mtval = insn
+            elif expected_cause in (4, 5, 6, 7):
+                expected_mtval = mem_address
+            else:
+                expected_mtval = 0
+            if parse_hex(row["mtval"]) != u32(expected_mtval):
+                self.mismatch(order, f"mtval 0x{parse_hex(row['mtval']):08x}, expected 0x{u32(expected_mtval):08x}")
             if observed_rd or observed_rd_value:
                 self.mismatch(order, "trapping instruction changed architectural destination state")
             self.csrs[0x341] = pc
             self.csrs[0x342] = expected_cause
+            self.csrs[0x343] = u32(expected_mtval)
             old_mie = bool(self.csrs[0x300] & 0x8)
             self.csrs[0x300] = (self.csrs[0x300] & ~0x88) | (0x80 if old_mie else 0)
             self.expected_order = order + 1
@@ -344,9 +364,13 @@ class RV32ISS:
                 elif mode == 3: new_value = expected_value & ~source
                 else: new_value = expected_value; legal = False
                 if legal and (mode == 1 or source != 0):
-                    if csr == 0x300: new_value &= 0x88
+                    if csr == 0x301:
+                        legal = False
+                    if csr == 0x300: new_value = 0x1800 | (new_value & 0x88)
                     if csr == 0x304: new_value &= 0x880
-                    if csr in (0x305, 0x341): new_value &= ~3
+                    if csr == 0x305:
+                        new_value = (new_value & ~3) | (1 if (new_value & 3) == 1 else 0)
+                    if csr == 0x341: new_value &= ~3
                     if csr != 0x344:
                         self.csrs[csr] = u32(new_value)
             else:

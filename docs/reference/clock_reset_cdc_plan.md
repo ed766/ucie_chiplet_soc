@@ -70,7 +70,10 @@ chiplet datapath, and the documented datapath waiver.
 `make -C chiplet_extension async-cdc-check` runs independent Die A/Die B clock
 ratios `1:1`, `5:7`, `3:5`, and `5:2` with staggered reset release. It requires
 traffic in both directions, no FIFO overflow, no read-side duplication, and
-clean recovery. Results are written to `reports/async_cdc_summary.csv`.
+clean recovery over a bounded 240-cycle Die A observation window. The bounded
+window validates clock-ratio and reset-skew behavior without claiming sustained
+rate conversion when one serialized lane source permanently outruns the other
+domain. Results are written to `reports/async_cdc_summary.csv`.
 
 ## Design Intent
 

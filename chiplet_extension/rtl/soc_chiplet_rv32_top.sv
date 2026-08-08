@@ -49,6 +49,7 @@ module soc_chiplet_rv32_top #(
     output logic [31:0]           cpu_rvfi_mscratch,
     output logic [31:0]           cpu_rvfi_mepc,
     output logic [31:0]           cpu_rvfi_mcause,
+    output logic [31:0]           cpu_rvfi_mtval,
     output logic [31:0]           cpu_paddr,
     output logic                  cpu_psel,
     output logic                  cpu_penable,
@@ -230,7 +231,8 @@ module soc_chiplet_rv32_top #(
         .rvfi_mscratch(cpu_rvfi_mscratch),
         .rvfi_mscratch_state(),
         .rvfi_mepc(cpu_rvfi_mepc),
-        .rvfi_mcause(cpu_rvfi_mcause)
+        .rvfi_mcause(cpu_rvfi_mcause),
+        .rvfi_mtval(cpu_rvfi_mtval)
     );
 
     apb_dma_csr_bridge u_apb_csr (

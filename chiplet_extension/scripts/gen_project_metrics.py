@@ -163,6 +163,9 @@ def generate(csv_out: Path, md_out: Path) -> None:
     rv32_act = read_csv(REPORTS / "rv32_act_summary.csv")
     rv32_formal = read_csv(REPORTS / "rv32_formal_summary.csv")
     rv32_external_mutations = read_csv(REPORTS / "rv32_external_mutation_matrix.csv")
+    privileged_arch = read_csv(REPORTS / "privileged_arch_summary.csv")
+    privileged_arch_coverage = read_csv(REPORTS / "privileged_arch_coverage_summary.csv")
+    privileged_arch_crosses = read_csv(REPORTS / "privileged_arch_cross_coverage_summary.csv")
     code_cov = key_value_file(REPORTS / "code_coverage_summary.txt")
     solver_formal = read_csv(REPORTS / "formal_proof_summary.csv")
     async_cdc = read_csv(REPORTS / "async_cdc_summary.csv")
@@ -258,8 +261,11 @@ def generate(csv_out: Path, md_out: Path) -> None:
         ("rv32_act4", pass_skip_fail(rv32_act), "ACT4/Sail self-checking ELF execution on RTL; generation alone is not a pass."),
         ("rv32_standard_custom_formal", pass_skip_fail(rv32_formal), "Standard riscv-formal and project-specific solver status."),
         ("rv32_external_mutation_matrix", metric_pair(sum(1 for row in rv32_external_mutations if row.get("status") == "PASS"), len(rv32_external_mutations)), "Independent Spike, ACT4/Sail, local ISS/SVA, and solver mutation sensitivity."),
+        ("privileged_arch_scenarios", metric_pair(sum(1 for row in privileged_arch if row.get("status") == "PASS"), len(privileged_arch)), "Dedicated GCC/ISS scenarios for misa, mtval, mtvec direct/vectored traps, and MRET state restoration."),
+        ("privileged_arch_coverage", metric_pair(sum(1 for row in privileged_arch_coverage if row.get("hit") == "1"), len(privileged_arch_coverage)), "Trace-derived privileged-architecture functional points."),
+        ("privileged_arch_crosses", metric_pair(sum(1 for row in privileged_arch_crosses if row.get("hit") == "1"), len(privileged_arch_crosses)), "Same-window trap cause, mtval, vector mode, interrupt source, and return-state interactions."),
         ("optional_collateral_code_coverage", f"{optional_cov}%" if optional_cov != "NA" else "NA", "Verilator line coverage for optional AXI/CDC collateral RTL."),
-        ("integrated_async_cdc", metric_pair(async_pass, len(async_cdc)), "Optional two-clock chiplet matrix across clock ratios and reset skew."),
+        ("integrated_async_cdc", metric_pair(async_pass, len(async_cdc)), "Optional bounded two-clock chiplet matrix across clock ratios and reset skew."),
         ("real_uvm_ci", metric_pair(uvm_pass, len(uvm_ci)), "Pinned Verilator/UVM phase, TLM, coverage, and RAL smoke lane when executed."),
         ("design_line_coverage", f"{code_cov.get('design_line_coverage_pct', 'NA')}%" if code_cov.get("design_line_coverage_pct") else "NA", "Native Verilator design-RTL line coverage."),
         ("design_branch_expression_coverage", f"{code_cov.get('design_branch_expression_coverage_pct', 'NA')}%" if code_cov.get('design_branch_expression_coverage_pct') else "NA", "Verilator design-RTL branch/expression outcome coverage."),

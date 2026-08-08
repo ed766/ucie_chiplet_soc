@@ -1,0 +1,2 @@
+program,source,optimizer,mutation,detected,status,rtl_status,rtl_retires,spike_retires,matched_retires,matched_register_writes,matched_memory_accesses,rtl_suffix_retires,terminal_relation,first_mismatch
+csr_state_matrix_Os,csr_state_matrix,-Os,RV32_BUG_MSTATUS_MPP_ZERO,1,PASS,FAIL,0,148,0,0,0,0,spike_mailbox_fault_rtl_mailbox_accept,"relocated_rtl_failed:order 0: CSR 0x300=0x00000000, expected 0x00001800"

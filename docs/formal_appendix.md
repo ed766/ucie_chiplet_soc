@@ -76,6 +76,11 @@ Current checked-in evidence:
   custom bounded CSR/trap/APB/interrupt group
 - the custom RV32 group includes `mscratch` read/write next-state semantics and
   produces an expected counterexample for `RV32_BUG_MSCRATCH_WRITE_DROP`
+- the custom group also checks read-only `misa`, precise `mtval`, synchronous
+  exception base targeting, vectored timer/external interrupt targeting, and
+  interrupt-zero `mtval` at depth 12
+- the expanded privileged lane detected and closed a CSRRS/CSRRC write-intent
+  bug where RTL used the source value instead of the encoded source index
 - DMA completion, timeout, memory-integrity, and power-control invariants now
   have bounded harness coverage in addition to regression coverage
 

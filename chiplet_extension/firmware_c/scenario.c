@@ -4,6 +4,9 @@
 volatile uint32_t irq_seen;
 volatile uint32_t timer_irq_seen;
 volatile uint32_t trap_count;
+volatile uint32_t last_mcause;
+volatile uint32_t last_mepc;
+volatile uint32_t last_mtval;
 volatile uint32_t initialized_data_word = 0x13579bdfu;
 const uint8_t initialized_const_table[8] = {0x11u, 0x22u, 0x33u, 0x44u, 0x55u, 0x66u, 0x77u, 0x88u};
 volatile uint32_t zero_bss_words[4];
@@ -168,7 +171,7 @@ int main(void)
     __asm__ volatile (".word 0x40001013"); /* Illegal SLLI funct7. */
     __asm__ volatile (".word 0x02000033"); /* Unsupported OP funct7. */
     __asm__ volatile (".word 0x30004073"); /* Reserved CSR operation mode. */
-    __asm__ volatile (".word 0x34302073"); /* Unsupported CSR address. */
+    __asm__ volatile (".word 0x34502073"); /* Unsupported CSR address. */
     __asm__ volatile ("sh zero, 0(%0)" :: "r"(DMA_BASE));
     __asm__ volatile ("ecall");
     __asm__ volatile ("lh zero, 1(%0)" :: "r"(DMA_BASE));
@@ -287,7 +290,7 @@ int main(void)
 #elif SCENARIO_ID == 28
     __asm__ volatile (".word 0x00003003"); /* Reserved load funct3. */
     __asm__ volatile (".word 0x00003023"); /* Reserved store funct3. */
-    __asm__ volatile (".word 0x34302073"); /* Unsupported CSR. */
+    __asm__ volatile (".word 0x34502073"); /* Unsupported CSR. */
     __asm__ volatile ("sh zero, 0(%0)" :: "r"(DMA_BASE));
     local_write(0u, trap_count);
 #elif SCENARIO_ID == 29
@@ -318,7 +321,7 @@ int main(void)
     __asm__ volatile ("csrr %0, mie" : "=r"(masked_mie));
     __asm__ volatile ("csrrc zero, mstatus, %0" :: "r"(masked_status));
     __asm__ volatile ("csrw mtvec, %0" :: "r"(old_mtvec));
-    __asm__ volatile (".word 0x34301073");
+    __asm__ volatile (".word 0x34501073"); /* Unsupported CSR write. */
     local_write(0u, aligned_mtvec & 3u);
     local_write(1u, aligned_mepc);
     local_write(2u, masked_status);
@@ -447,6 +450,138 @@ int main(void)
     local_write(1u, cycle_high);
     local_write(2u, instret_high);
     local_write(3u, trap_count);
+#elif SCENARIO_ID == 47
+    volatile uint32_t *word = (volatile uint32_t *)(uintptr_t)0x2200u;
+    volatile uint8_t *bytes = (volatile uint8_t *)(uintptr_t)0x2200u;
+    volatile uint16_t *halves = (volatile uint16_t *)(uintptr_t)0x2200u;
+    uint32_t failures = 0u;
+    *word = 0x11223344u;
+    bytes[1] = 0xa5u;
+    halves[1] = 0x80aau;
+    if (*word != 0x80aaa544u) failures++;
+    if ((int32_t)*(volatile int8_t *)(uintptr_t)0x2203u != -128) failures++;
+    if (*(volatile uint8_t *)(uintptr_t)0x2203u != 0x80u) failures++;
+    if ((int32_t)*(volatile int16_t *)(uintptr_t)0x2202u != -32598) failures++;
+    if (*(volatile uint16_t *)(uintptr_t)0x2202u != 0x80aau) failures++;
+    local_write(0u, *word);
+    return (int)failures;
+#elif SCENARIO_ID == 48
+    volatile uint32_t selector = 3u;
+    uint32_t accumulator = 0u;
+    for (uint32_t i = 0; i < 12u; ++i) {
+        if ((i & 1u) == 0u) accumulator += i * 3u;
+        else accumulator ^= i + 0x55u;
+    }
+    uint32_t (*function)(uint32_t, uint32_t) = abi_leaf;
+    uint32_t branch_value;
+    switch (selector) {
+        case 0u: branch_value = 0x10u; break;
+        case 1u: branch_value = 0x20u; break;
+        case 2u: branch_value = 0x30u; break;
+        case 3u: branch_value = function(accumulator, 0x123u); break;
+        default: branch_value = 0u; break;
+    }
+    local_write(0u, accumulator);
+    local_write(1u, branch_value);
+    return branch_value == abi_leaf(accumulator, 0x123u) ? 0 : 1;
+#elif SCENARIO_ID == 49
+    volatile uint32_t source[8] = {
+        0x00000000u, 0xffffffffu, 0x80000000u, 0x7fffffffu,
+        0x13579bdfu, 0x2468ace0u, 0x55aa55aau, 0xaa55aa55u
+    };
+    uint32_t value = source[0];
+    for (uint32_t i = 1; i < 8u; ++i) {
+        value = (value + source[i]) ^ (source[i] << (i & 31u));
+        value = (value >> ((i + 1u) & 7u)) | (value << ((32u - ((i + 1u) & 7u)) & 31u));
+        source[i - 1u] = value;
+    }
+    uint32_t alias_check = source[0] ^ source[3] ^ source[6];
+    local_write(0u, value);
+    local_write(1u, alias_check);
+    return (source[6] == value && alias_check == (source[0] ^ source[3] ^ value)) ? 0 : 1;
+#elif SCENARIO_ID == 50
+    uint32_t failures = 0u;
+    uint32_t misa_before = read_csr_misa();
+    write_csr_mtval(0x5a5aa5a5u);
+    uint32_t mtval_roundtrip = read_csr_mtval();
+    uint32_t illegal_value = 0xffffffffu;
+    __asm__ volatile ("csrw misa, %0" :: "r"(illegal_value));
+    uint32_t misa_after = read_csr_misa();
+    if (misa_before != 0x40000100u || misa_after != misa_before) failures++;
+    if (mtval_roundtrip != 0x5a5aa5a5u) failures++;
+    if (last_mcause != 2u || trap_count != 1u) failures++;
+    local_write(0u, misa_before);
+    local_write(1u, misa_after);
+    local_write(2u, mtval_roundtrip);
+    local_write(3u, last_mtval);
+    return (int)failures;
+#elif SCENARIO_ID == 51
+    __asm__ volatile (".word 0xffffffff");
+    local_write(0u, last_mcause);
+    local_write(1u, last_mtval);
+    local_write(2u, trap_count);
+    return (last_mcause == 2u && last_mtval == 0xffffffffu && trap_count == 1u) ? 0 : 1;
+#elif SCENARIO_ID == 52
+    uint32_t ignored;
+    uint32_t bad_address = 0x00002001u;
+    __asm__ volatile ("lw %0, 0(%1)" : "=r"(ignored) : "r"(bad_address));
+    local_write(0u, last_mcause);
+    local_write(1u, last_mtval);
+    local_write(2u, trap_count);
+    return (last_mcause == 4u && last_mtval == bad_address && trap_count == 1u) ? 0 : 1;
+#elif SCENARIO_ID == 53
+    uint32_t bad_address = 0x00004000u;
+    uint32_t value = 0x12345678u;
+    __asm__ volatile ("sw %0, 0(%1)" :: "r"(value), "r"(bad_address) : "memory");
+    local_write(0u, last_mcause);
+    local_write(1u, last_mtval);
+    local_write(2u, trap_count);
+    return (last_mcause == 7u && last_mtval == bad_address && trap_count == 1u) ? 0 : 1;
+#elif SCENARIO_ID == 54
+    uint32_t requested = ((uint32_t)(uintptr_t)&trap_vector_base) | 2u;
+    write_csr_mtvec(requested);
+    uint32_t coerced = read_csr_mtvec();
+    __asm__ volatile ("ecall");
+    local_write(0u, coerced);
+    local_write(1u, last_mcause);
+    local_write(2u, last_mtval);
+    return (((coerced & 3u) == 0u) && last_mcause == 11u && last_mtval == 0u) ? 0 : 1;
+#elif SCENARIO_ID == 55
+    write_csr_mtvec(((uint32_t)(uintptr_t)&trap_vector_base) | 1u);
+    // Vectored mode applies only to interrupts; synchronous traps still use BASE.
+    __asm__ volatile ("ecall");
+    enable_machine_timer_irq();
+    uint32_t before = timer_read(TIMER_MTIME_LO);
+    set_mtimecmp(read_mtime() + 200u);
+    while (timer_irq_seen == 0u) { }
+    uint32_t after = timer_read(TIMER_MTIME_LO);
+    local_write(0u, timer_irq_seen);
+    local_write(1u, before);
+    local_write(2u, after);
+    local_write(3u, last_mtval);
+    return (last_mcause == 0x80000007u && last_mtval == 0u && (read_csr_mtvec() & 3u) == 1u) ? 0 : 1;
+#elif SCENARIO_ID == 56
+    write_csr_mtvec(((uint32_t)(uintptr_t)&trap_vector_base) | 1u);
+    enable_machine_external_irq();
+    mmio_write(DMA_IRQ_ENABLE, 1u);
+    submit(0u, 64u, 4u, 0xd056u);
+    while (irq_seen == 0u) { }
+    local_write(0u, irq_seen);
+    local_write(1u, mmio_read(DMA_COMP_TAG));
+    local_write(2u, last_mcause);
+    local_write(3u, last_mtval);
+    mmio_write(DMA_COMP_POP, 1u);
+    return (last_mcause == 0x8000000bu && last_mtval == 0u && (read_csr_mtvec() & 3u) == 1u) ? 0 : 1;
+#elif SCENARIO_ID == 57
+    enable_global_irq();
+    uint32_t before = read_csr_mstatus();
+    __asm__ volatile ("ecall");
+    uint32_t after = read_csr_mstatus();
+    local_write(0u, before);
+    local_write(1u, after);
+    local_write(2u, last_mepc);
+    local_write(3u, last_mcause);
+    return (((before & 8u) != 0u) && ((after & 8u) != 0u) && last_mcause == 11u) ? 0 : 1;
 #else
 #error Unsupported SCENARIO_ID
 #endif

@@ -52,6 +52,7 @@ module tb_firmware_soc;
     logic [31:0] cpu_rvfi_mscratch;
     logic [31:0] cpu_rvfi_mepc;
     logic [31:0] cpu_rvfi_mcause;
+    logic [31:0] cpu_rvfi_mtval;
     logic [31:0] cpu_paddr;
     logic cpu_psel;
     logic cpu_penable;
@@ -231,6 +232,7 @@ module tb_firmware_soc;
         .cpu_rvfi_mscratch(cpu_rvfi_mscratch),
         .cpu_rvfi_mepc(cpu_rvfi_mepc),
         .cpu_rvfi_mcause(cpu_rvfi_mcause),
+        .cpu_rvfi_mtval(cpu_rvfi_mtval),
         .cpu_paddr(cpu_paddr),
         .cpu_psel(cpu_psel),
         .cpu_penable(cpu_penable),
@@ -283,6 +285,8 @@ module tb_firmware_soc;
         .rvfi_mscratch(cpu_rvfi_mscratch),
         .rvfi_mepc(cpu_rvfi_mepc),
         .rvfi_mcause(cpu_rvfi_mcause),
+        .rvfi_mtvec(cpu_rvfi_mtvec),
+        .rvfi_mtval(cpu_rvfi_mtval),
         .irq_external(dut.cpu_irq_ext),
         .irq_timer(dut.cpu_irq_timer),
         .wfi_sleep(dut.u_cpu.wfi_sleep_q)
@@ -697,7 +701,7 @@ module tb_firmware_soc;
 `endif
         if (rvfi_trace_fd != 0 && cpu_rvfi_valid) begin
             $fwrite(rvfi_trace_fd,
-                    "%0d,%0d,%0d,%0d,%0d,%08x,%08x,%08x,%0d,%0d,%0d,%08x,%0d,%08x,%0d,%08x,%08x,%x,%x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x\n",
+                    "%0d,%0d,%0d,%0d,%0d,%08x,%08x,%08x,%0d,%0d,%0d,%08x,%0d,%08x,%0d,%08x,%08x,%x,%x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x,%08x\n",
                     cycles, reset_epoch, dut.cpu_irq_ext, dut.cpu_irq_timer, cpu_rvfi_order, cpu_rvfi_insn, cpu_rvfi_pc_rdata,
                     cpu_rvfi_pc_wdata, cpu_rvfi_trap, cpu_rvfi_intr,
                     cpu_rvfi_rs1_addr, cpu_rvfi_rs1_rdata, cpu_rvfi_rs2_addr,
@@ -705,7 +709,7 @@ module tb_firmware_soc;
                     cpu_rvfi_mem_addr, cpu_rvfi_mem_rmask, cpu_rvfi_mem_wmask,
                     cpu_rvfi_mem_rdata, cpu_rvfi_mem_wdata, cpu_rvfi_mstatus,
                     cpu_rvfi_mie, cpu_rvfi_mtvec, cpu_rvfi_mscratch,
-                    cpu_rvfi_mepc, cpu_rvfi_mcause);
+                    cpu_rvfi_mepc, cpu_rvfi_mcause, cpu_rvfi_mtval);
         end
         if (trace_fd != 0) begin
             $fwrite(trace_fd, "%0d,%0d,%0d,%0d,%0h,%0h,%0d,%0d,%0d,%0d,%0h,%0d,%0h,%0d,%0d,%0d,%0h,%0h,%0d,%0d,%0d,%0h,%0d,%0h,%0h,%0h,%0d,%0d,%0d,%0d,%0d,%0d,%0h,%0d,%0d\n",
@@ -879,7 +883,7 @@ module tb_firmware_soc;
         if (rvfi_trace_path != "") begin
             rvfi_trace_fd = $fopen(rvfi_trace_path, "w");
             $fwrite(rvfi_trace_fd,
-                    "cycle,epoch,irq_level,irq_timer_level,order,insn,pc_rdata,pc_wdata,trap,intr,rs1_addr,rs1_rdata,rs2_addr,rs2_rdata,rd_addr,rd_wdata,mem_addr,mem_rmask,mem_wmask,mem_rdata,mem_wdata,mstatus,mie,mtvec,mscratch,mepc,mcause\n");
+                    "cycle,epoch,irq_level,irq_timer_level,order,insn,pc_rdata,pc_wdata,trap,intr,rs1_addr,rs1_rdata,rs2_addr,rs2_rdata,rd_addr,rd_wdata,mem_addr,mem_rmask,mem_wmask,mem_rdata,mem_wdata,mstatus,mie,mtvec,mscratch,mepc,mcause,mtval\n");
         end
         if (reference_path != "") u_ref.load_reference(reference_path); else u_ref.clear_reference();
 
@@ -1076,7 +1080,7 @@ module tb_firmware_soc;
             end
             "gcc_csr_illegal": begin
                 if (dut.u_cpu.data_mem_q[0] != 0 || dut.u_cpu.data_mem_q[1] != 32'h120 ||
-                    dut.u_cpu.data_mem_q[2] != 32'h88 || dut.u_cpu.data_mem_q[3] != 32'h880 ||
+                    dut.u_cpu.data_mem_q[2] != 32'h1888 || dut.u_cpu.data_mem_q[3] != 32'h880 ||
                     dut.u_cpu.data_mem_q[4] != 1 || assertion_failures != 0) errors++;
             end
             "gcc_irq_trap_priority": begin

@@ -61,6 +61,17 @@ SCENARIOS = {
     "counter_rollover": 44,
     "firmware_latency_counters": 45,
     "timer_counter_arch_edges": 46,
+    "spike_memory_width_matrix": 47,
+    "spike_control_flow_matrix": 48,
+    "spike_dependency_matrix": 49,
+    "misa_mtval_csr_matrix": 50,
+    "illegal_instruction_mtval": 51,
+    "misaligned_load_mtval": 52,
+    "store_access_fault_mtval": 53,
+    "mtvec_direct_exception": 54,
+    "mtvec_vectored_timer": 55,
+    "mtvec_vectored_external": 56,
+    "mret_state_restore": 57,
 }
 
 

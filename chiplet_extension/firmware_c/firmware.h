@@ -31,6 +31,49 @@
 extern volatile uint32_t irq_seen;
 extern volatile uint32_t timer_irq_seen;
 extern volatile uint32_t trap_count;
+extern volatile uint32_t last_mcause;
+extern volatile uint32_t last_mepc;
+extern volatile uint32_t last_mtval;
+extern void trap_entry(void);
+extern void trap_vector_base(void);
+
+static inline uint32_t read_csr_misa(void)
+{
+    uint32_t value;
+    __asm__ volatile ("csrr %0, misa" : "=r"(value));
+    return value;
+}
+
+static inline uint32_t read_csr_mtvec(void)
+{
+    uint32_t value;
+    __asm__ volatile ("csrr %0, mtvec" : "=r"(value));
+    return value;
+}
+
+static inline uint32_t read_csr_mstatus(void)
+{
+    uint32_t value;
+    __asm__ volatile ("csrr %0, mstatus" : "=r"(value));
+    return value;
+}
+
+static inline void write_csr_mtvec(uint32_t value)
+{
+    __asm__ volatile ("csrw mtvec, %0" :: "r"(value));
+}
+
+static inline void write_csr_mtval(uint32_t value)
+{
+    __asm__ volatile ("csrw mtval, %0" :: "r"(value));
+}
+
+static inline uint32_t read_csr_mtval(void)
+{
+    uint32_t value;
+    __asm__ volatile ("csrr %0, mtval" : "=r"(value));
+    return value;
+}
 
 static inline void mmio_write(uint32_t offset, uint32_t value)
 {
