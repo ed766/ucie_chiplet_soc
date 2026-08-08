@@ -11,7 +11,7 @@ jobs:
   documentation-consistency:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Regenerate README metrics and validate links
         run: make -C chiplet_extension readme-metrics docs-check
       - name: Require reproducible documentation
@@ -25,10 +25,10 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.11"
 
@@ -62,7 +62,7 @@ jobs:
 
       - name: Upload verification reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: smoke-bug-reports
           path: |
@@ -73,8 +73,8 @@ jobs:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - name: Install Verilator and restore pinned RV32 toolchain
@@ -85,7 +85,7 @@ jobs:
             libexpat1-dev libtool zlib1g-dev
           make -C chiplet_extension rv32-toolchain-install rv32-toolchain-check
       - name: Cache pinned external RISC-V tools
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: chiplet_extension/build/external_riscv_tools
           key: rv32-external-${{ runner.os }}-${{ hashFiles('chiplet_extension/verification/external_riscv_tools.lock.json') }}
@@ -107,7 +107,7 @@ jobs:
         run: make -C chiplet_extension firmware-c-coverage
       - name: Upload compiled-firmware evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: compiled-firmware-closure
           path: |

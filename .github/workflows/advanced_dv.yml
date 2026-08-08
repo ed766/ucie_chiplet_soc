@@ -19,9 +19,9 @@ jobs:
   solver-formal:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Cache OSS CAD Suite
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ runner.tool_cache }}/oss-cad-suite-2026-07-01
           key: oss-cad-suite-linux-x64-2026-07-01
@@ -40,7 +40,7 @@ jobs:
           echo "${root}/bin" >> "${GITHUB_PATH}"
       - name: Run solver-backed proofs, covers, and mutations
         run: make -C chiplet_extension formal-prove
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: solver-formal-evidence
@@ -51,11 +51,11 @@ jobs:
   real-uvm:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install Verilator build dependencies
         run: sudo apt-get update && sudo apt-get install -y autoconf flex bison ccache help2man libfl2 libfl-dev zlib1g-dev
       - name: Cache Verilator v5.048
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ runner.tool_cache }}/verilator-v5.048
           key: verilator-v5.048-${{ runner.os }}
@@ -82,7 +82,7 @@ jobs:
           echo "UVM_HOME=${RUNNER_TEMP}/uvm-verilator/src" >> "${GITHUB_ENV}"
       - name: Run real UVM phases, TLM, coverage, and RAL smoke
         run: make -C chiplet_extension uvm-ci
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: real-uvm-evidence
@@ -93,11 +93,11 @@ jobs:
   integrated-cdc:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: sudo apt-get update && sudo apt-get install -y verilator
       - name: Run multi-clock ratio and reset-skew matrix
         run: make -C chiplet_extension async-cdc-check
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: integrated-cdc-evidence
