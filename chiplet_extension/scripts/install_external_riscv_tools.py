@@ -132,6 +132,11 @@ def main() -> int:
     mise_bin = find_executable(mise_root, "mise")
     act_gcc_bin = find_executable(act_gcc_root, "riscv-none-elf-gcc")
     sby_bin = find_executable(oss_root, "sby")
+    oss_python = find_executable(oss_root, "tabbypy3")
+    # OSS CAD Suite isolates Python from the host environment. Install the
+    # SymbiYosys runtime dependency into the interpreter that executes sby.
+    subprocess.run([str(oss_python), "-m", "pip", "install", "--disable-pip-version-check",
+                    "click==8.1.8"], check=True)
 
     # ACT4's checked-in .mise.toml pins the Ruby and uv versions used by its
     # generator. Provision them without requiring root-owned host packages.
