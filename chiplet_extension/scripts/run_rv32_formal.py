@@ -22,6 +22,19 @@ def row(group: str, mode: str, status: str, depth: str, detail: str) -> dict[str
     return {"group": group, "mode": mode, "status": status, "depth": depth, "detail": detail}
 
 
+def solver_env(sby: str | None) -> dict[str, str]:
+    """Keep the OSS CAD Suite Python runtime visible through nested make/sby calls."""
+    env = os.environ.copy()
+    if not sby:
+        return env
+    suite = Path(sby).resolve().parent.parent
+    candidates = sorted((suite / "lib").glob("python*/site-packages"))
+    if candidates:
+        existing = env.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = str(candidates[-1]) + (f":{existing}" if existing else "")
+    return env
+
+
 def run_custom(sby: str | None, mutation: str = "", expect_detection: bool = False) -> dict[str, str]:
     if not sby:
         return row("custom_csr_trap_apb", "bounded_solver", "SKIP", CUSTOM_DEPTH, "sby_missing")
@@ -38,7 +51,8 @@ def run_custom(sby: str | None, mutation: str = "", expect_detection: bool = Fal
                                           f"read -formal -D FORMAL -D {mutation} -sv"))
         sby_file = generated_sby
     command = [sby, "-f", str(sby_file)]
-    result = subprocess.run(command, cwd=formal_dir, capture_output=True, text=True)
+    result = subprocess.run(command, cwd=formal_dir, capture_output=True, text=True,
+                            env=solver_env(sby))
     generated_sby.unlink(missing_ok=True)
     work.parent.mkdir(parents=True, exist_ok=True)
     (BUILD / "custom.log").write_text(result.stdout + result.stderr)
@@ -87,7 +101,8 @@ def run_standard(home_text: str, sby: str | None) -> list[dict[str, str]]:
     (BUILD / "genchecks.log").write_text(generated.stdout + generated.stderr)
     if generated.returncode:
         return [row(group, "riscv-formal", "FAIL", "20-30", "genchecks_failed") for group in groups]
-    result = subprocess.run(["make", "-C", "checks", "-j2"], cwd=core, capture_output=True, text=True)
+    result = subprocess.run(["make", "-C", "checks", "-j2"], cwd=core,
+                            capture_output=True, text=True, env=solver_env(sby))
     (BUILD / "checks.log").write_text(result.stdout + result.stderr)
     status = "PASS" if result.returncode == 0 else "FAIL"
     return [row(group, "riscv-formal", status, "20-30", "pinned_riscv_formal_checks")
