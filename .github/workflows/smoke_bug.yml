@@ -83,6 +83,7 @@ jobs:
           sudo apt-get install -y verilator autoconf automake device-tree-compiler \
             libboost-program-options-dev libboost-regex-dev libboost-system-dev \
             libexpat1-dev libtool zlib1g-dev
+          python -m pip install cryptography
           make -C chiplet_extension rv32-toolchain-install rv32-toolchain-check
       - name: Cache pinned external RISC-V tools
         uses: actions/cache@v6
