@@ -96,6 +96,8 @@ jobs:
             --github-env "$GITHUB_ENV" --github-path "$GITHUB_PATH"
       - name: Verify pinned external revisions and archive checksums
         run: python3 chiplet_extension/scripts/check_external_riscv_tools.py --require
+      - name: Reclaim verified download and build intermediates
+        run: python3 chiplet_extension/scripts/prune_external_riscv_tools.py
       - name: Run GCC/ISS closure, generated C, robustness, and RTL mutations
         run: make -C chiplet_extension firmware-c-closure firmware-c-generated-c-random firmware-c-compiler-matrix timer-wfi-check firmware-c-mutation-check firmware-c-rtl-mutation-check firmware-c-robustness-check
       - name: Require pinned external architectural lanes
@@ -117,3 +119,4 @@ jobs:
             chiplet_extension/reports/firmware_c_*.txt
             chiplet_extension/reports/rv32_*.csv
             chiplet_extension/reports/privileged_arch_*.csv
+            chiplet_extension/build/rv32_formal/*.log
