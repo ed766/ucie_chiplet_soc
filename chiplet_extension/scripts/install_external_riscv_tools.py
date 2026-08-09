@@ -131,7 +131,11 @@ def main() -> int:
     sail_bin = find_executable(sail_root, "sail_riscv_sim")
     mise_bin = find_executable(mise_root, "mise")
     act_gcc_bin = find_executable(act_gcc_root, "riscv-none-elf-gcc")
-    sby_bin = find_executable(oss_root, "sby")
+    sby_candidates = sorted(path for path in oss_root.glob("**/bin/sby")
+                            if path.is_file() and os.access(path, os.X_OK))
+    if not sby_candidates:
+        raise RuntimeError(f"OSS CAD Suite sby wrapper missing under {oss_root}")
+    sby_bin = sby_candidates[0]
     oss_python = sby_bin.parent / "tabbypy3"
     if not oss_python.is_file():
         raise RuntimeError(f"OSS CAD Suite Python missing beside sby: {oss_python}")
