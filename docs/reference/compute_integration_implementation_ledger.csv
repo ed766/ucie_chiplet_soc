@@ -5,7 +5,8 @@ A-RAND-01,Deterministic mixed arithmetic streams,PASS,rv32m-random-check,100/100
 A-FORMAL-01,Arithmetic protocol safety and reachability,PASS,rv32m-formal-check,2/2 bounded formal groups,
 A-MUT-01,RV32M RTL mutation sensitivity,PASS,rv32m-mutation-check,8/8 detected,
 B-IOMMU-01,Latched translation context and PTE validation,PASS,make iommu-check in axi4_qos_fabric_dv,22/22 IOMMU points,
-B-SVC-01,CPU-independent protected accelerator service,NOT_RUN,protected-offload-shared-check,No canonical report,service extraction not implemented
+B-HOST-PREREQ,Explicit RV32 external-memory APB window,PASS,rv32-external-window-check,two wait-stated transfers with exact retirement and data checks,
+B-SVC-01,CPU-independent protected accelerator service,PASS,make protected-offload-service-check in int8_tensor_accelerator_dv,explicit host payload PTW invalidation configuration and IRQ ports,
 B-HOST-01,Firmware-owned shared-memory AXI host,NOT_RUN,protected-offload-shared-check,No canonical report,external-memory RV32 path not implemented
 B-IRQ-01,Combined accelerator interrupt aggregation,NOT_RUN,compute-host-check,No canonical report,shared-memory service prerequisite
 C-CACHE-01,Baseline L1 ownership and maintenance integration,NOT_RUN,cached-offload-check,No canonical report,uncached shared-memory milestone prerequisite
