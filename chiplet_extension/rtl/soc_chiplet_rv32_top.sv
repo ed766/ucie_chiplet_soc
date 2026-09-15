@@ -5,6 +5,7 @@ module soc_chiplet_rv32_top #(
     parameter int LANES = 16,
     parameter int ROM_WORDS = 256,
     parameter int CPU_DATA_MEM_WORDS = 64,
+    parameter bit CPU_ENABLE_M = 1'b0,
     parameter bit CPU_ENABLE_TRAPS = 1'b0,
     parameter bit CPU_EBREAK_TEST_HALT = 1'b1
 ) (
@@ -172,6 +173,7 @@ module soc_chiplet_rv32_top #(
         .MMIO_BASE(32'h0000_0100),
         .MMIO_END (32'h0000_01ff),
         .DATA_MEM_WORDS(CPU_DATA_MEM_WORDS),
+        .ENABLE_M(CPU_ENABLE_M),
         .ENABLE_TRAPS(CPU_ENABLE_TRAPS),
         .EBREAK_TEST_HALT(CPU_EBREAK_TEST_HALT)
     ) u_cpu (

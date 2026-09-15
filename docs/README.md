@@ -30,6 +30,8 @@ The primary reviewer path is intentionally limited to twelve documents. Generate
 - [Machine timer, WFI, and counters](reference/timer_wfi_verification.md)
 - [External RV32 validation status](reference/rv32_external_validation.md)
 - [Privileged RV32 architecture validation](reference/privileged_architecture_validation.md)
+- [Optional RV32M validation](reference/rv32m_validation.md)
+- [Compute integration implementation ledger](reference/compute_integration_implementation_ledger.csv)
 - [GCC/ISS co-verification architecture](images/gcc_iss_architecture.svg)
 - [Compiled-firmware mutation debug case](reference/debug_case_study_compiled_firmware.md)
 - [Negative-test summary](reference/negative_test_summary.md)

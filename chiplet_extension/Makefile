@@ -43,6 +43,11 @@ RUN_PRIVILEGED_ARCH := $(ROOT_DIR)/scripts/run_privileged_arch.py
 RUN_GENERATED_C_RANDOM := $(ROOT_DIR)/scripts/run_generated_c_random.py
 GEN_FIRMWARE_ROBUSTNESS := $(ROOT_DIR)/scripts/gen_firmware_robustness.py
 RUN_RV32_EBREAK_CHECK := $(ROOT_DIR)/scripts/run_rv32_ebreak_check.py
+RUN_RV32M_UNIT := $(ROOT_DIR)/scripts/run_rv32m_unit.py
+RUN_RV32M_COMPILER := $(ROOT_DIR)/scripts/run_rv32m_compiler.py
+RUN_RV32M_RANDOM := $(ROOT_DIR)/scripts/run_rv32m_random.py
+RUN_RV32M_MUTATIONS := $(ROOT_DIR)/scripts/run_rv32m_mutations.py
+RUN_RV32M_FORMAL := $(ROOT_DIR)/scripts/run_rv32m_formal.py
 BUILD_COMPILED_FIRMWARE := $(ROOT_DIR)/scripts/build_compiled_firmware.py
 CHECK_RV32_TOOLCHAIN := $(ROOT_DIR)/scripts/check_rv32_toolchain.py
 INSTALL_RV32_TOOLCHAIN := $(ROOT_DIR)/scripts/install_rv32_toolchain.py
@@ -442,3 +447,24 @@ clean:
 		-name '*_power.csv' \
 	\) -delete
 	@echo "Cleaned Verilator regression artifacts"
+rv32m-lint:
+	$(VERILATOR) --lint-only --sv --timing -Wall -Wno-fatal \
+		$(ROOT_DIR)/../base_soc/rtl/pd1_rv32/rv32_muldiv.sv \
+		$(ROOT_DIR)/../base_soc/rtl/pd1_rv32/rv32_core.sv
+
+rv32m-unit-check:
+	$(PYTHON) $(RUN_RV32M_UNIT)
+
+rv32m-compiler-matrix: rv32-toolchain-check
+	$(PYTHON) $(RUN_RV32M_COMPILER)
+
+rv32m-random-check:
+	$(PYTHON) $(RUN_RV32M_RANDOM)
+
+rv32m-mutation-check:
+	$(PYTHON) $(RUN_RV32M_MUTATIONS)
+
+rv32m-formal-check:
+	$(PYTHON) $(RUN_RV32M_FORMAL)
+
+rv32m-release-check: rv32m-lint rv32m-unit-check rv32m-random-check rv32m-compiler-matrix rv32m-formal-check rv32m-mutation-check

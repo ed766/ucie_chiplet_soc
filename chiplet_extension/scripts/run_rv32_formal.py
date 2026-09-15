@@ -86,6 +86,7 @@ def run_standard(home_text: str, sby: str | None) -> list[dict[str, str]]:
         shutil.copy2(ROOT / "formal" / "rv32" / source, core / source)
     shutil.copy2(ROOT / "sim" / "rvfi" / "rvfi_standard_adapter.sv", core / "rvfi_standard_adapter.sv")
     shutil.copy2(REPO / "base_soc" / "rtl" / "pd1_rv32" / "rv32_core.sv", core / "rv32_core.sv")
+    shutil.copy2(REPO / "base_soc" / "rtl" / "pd1_rv32" / "rv32_muldiv.sv", core / "rv32_muldiv.sv")
     # The pinned riscv-formal revision predates current Yosys' SystemVerilog
     # parser. Preserve its intent while translating the legacy random-variable
     # syntax into the attributes supported by the pinned OSS CAD Suite.

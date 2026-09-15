@@ -3,6 +3,7 @@ module rv32_core #(
   parameter logic [31:0] MMIO_END  = 32'h0000_01ff,
   parameter int DATA_MEM_WORDS = 64,
   parameter logic [31:0] MAILBOX_ALIAS_BASE = 32'h0000_8000,
+  parameter bit ENABLE_M = 1'b0,
   parameter bit ENABLE_TRAPS = 1'b0,
   parameter bit EBREAK_TEST_HALT = 1'b1,
   parameter logic [31:0] RESET_MTVEC = 32'h0000_0300
@@ -68,7 +69,7 @@ module rv32_core #(
   output logic [31:0] rvfi_mtval
 );
 
-  localparam logic [31:0] MISA_VALUE   = 32'h4000_0100;
+  localparam logic [31:0] MISA_VALUE   = 32'h4000_0100 | (ENABLE_M ? 32'h0000_1000 : 32'h0);
   localparam logic [31:0] MSTATUS_MIE  = 32'h0000_0008;
   localparam logic [31:0] MSTATUS_MPIE = 32'h0000_0080;
 `ifdef RV32_BUG_MSTATUS_MPP_ZERO
@@ -104,6 +105,11 @@ module rv32_core #(
   logic [63:0] mcycle_q;
   logic [63:0] minstret_q;
   logic        wfi_sleep_q;
+  logic        muldiv_active_q;
+  logic        muldiv_req_valid, muldiv_req_ready;
+  logic        muldiv_rsp_valid, muldiv_rsp_ready;
+  logic [2:0]  muldiv_req_op;
+  logic [31:0] muldiv_rsp_result;
   logic [63:0] order_q;
   integer idx;
 `ifndef FORMAL
@@ -271,8 +277,24 @@ module rv32_core #(
     end
   endtask
 
-  assign instr_ready = rst_n && !halted && !wfi_sleep_q && !pending_valid_q && !mmio_pending_q;
+  assign instr_ready = rst_n && !halted && !wfi_sleep_q && !pending_valid_q &&
+                       !mmio_pending_q && !muldiv_active_q;
   assign rvfi_mscratch_state = mscratch_q;
+  assign muldiv_req_valid = pending_valid_q && !muldiv_active_q && ENABLE_M &&
+                            pending_instr_q[6:0] == 7'b0110011 &&
+                            pending_instr_q[31:25] == 7'b0000001;
+  assign muldiv_req_op = pending_instr_q[14:12];
+  assign muldiv_rsp_ready = muldiv_active_q;
+
+  rv32_muldiv u_muldiv (
+    .clk, .rst_n,
+    .req_valid(muldiv_req_valid), .req_ready(muldiv_req_ready),
+    .req_op(muldiv_req_op),
+    .req_lhs(regs_q[pending_instr_q[19:15]]),
+    .req_rhs(regs_q[pending_instr_q[24:20]]),
+    .rsp_valid(muldiv_rsp_valid), .rsp_ready(muldiv_rsp_ready),
+    .rsp_result(muldiv_rsp_result)
+  );
 
   always_ff @(posedge clk or negedge rst_n) begin : execute
     if (!rst_n) begin
@@ -297,6 +319,7 @@ module rv32_core #(
       mcycle_q <= '0;
       minstret_q <= '0;
       wfi_sleep_q <= 1'b0;
+      muldiv_active_q <= 1'b0;
       order_q <= '0;
       commit_valid <= 1'b0;
       commit_instr <= 32'h0000_0013;
@@ -526,7 +549,30 @@ module rv32_core #(
         trap_value = '0;
         mem_idx = 0;
 
-        if (ENABLE_TRAPS && mstatus_q[3] &&
+        if (muldiv_active_q) begin
+          defer_retire = 1'b1;
+          if (muldiv_rsp_valid) begin
+            set_rvfi_base(pending_instr_q, pending_pc_q, pending_pc_q + 4,
+                          rs1_value, rs2_value);
+            if (rd != 0) begin
+              regs_q[rd] <= muldiv_rsp_result;
+              wb_valid <= 1'b1;
+              wb_rd <= rd;
+              wb_data <= muldiv_rsp_result;
+              rvfi_rd_addr <= rd;
+              rvfi_rd_wdata <= muldiv_rsp_result;
+            end
+            commit_valid <= 1'b1;
+            commit_instr <= pending_instr_q;
+            commit_pc <= pending_pc_q;
+            commit_next_pc <= pending_pc_q + 4;
+            retire <= 1'b1;
+            pc_q <= pending_pc_q + 4;
+            regs_q[0] <= '0;
+            pending_valid_q <= 1'b0;
+            muldiv_active_q <= 1'b0;
+          end
+        end else if (ENABLE_TRAPS && mstatus_q[3] &&
             (((irq_ext === 1'b1) && mie_q[11]) || ((irq_timer === 1'b1) && mie_q[7]))) begin
           logic [31:0] interrupt_cause;
           interrupt_cause = ((irq_ext === 1'b1) && mie_q[11]) ? 32'h8000_000b : 32'h8000_0007;
@@ -603,7 +649,16 @@ module rv32_core #(
               endcase
             end
             7'b0110011: begin
-              unique case ({funct7, funct3})
+              if (funct7 == 7'b0000001 && ENABLE_M) begin
+`ifdef RV32_BUG_M_EARLY_RETIRE
+                legal = 1'b1;
+                result = '0;
+`else
+                legal = muldiv_req_ready;
+                defer_retire = muldiv_req_ready;
+                if (muldiv_req_ready) muldiv_active_q <= 1'b1;
+`endif
+              end else unique case ({funct7, funct3})
                 {7'b0000000,3'b000}: result = rs1_value + rs2_value;
                 {7'b0100000,3'b000}: result = rs1_value - rs2_value;
                 {7'b0000000,3'b001}: result = rs1_value << rs2_value[4:0];

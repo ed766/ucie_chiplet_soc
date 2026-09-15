@@ -1,6 +1,6 @@
 # RISC-V Chiplet SoC RTL and Verification
 
-A dual-die RISC-V subsystem built to demonstrate firmware-driven SoC integration, queued DMA offload, low-power intent, and report-backed design verification with open-source tools. An RV32I/Zicsr core runs both lightweight assembly and GCC-built bare-metal C to program DMA through APB MMIO; payload traffic crosses a retry-capable behavioral UCIe-style link to an AES service die.
+A dual-die RISC-V subsystem built to demonstrate firmware-driven SoC integration, queued DMA offload, low-power intent, and report-backed design verification with open-source tools. An RV32I/Zicsr core runs both lightweight assembly and GCC-built bare-metal C to program DMA through APB MMIO; an optional RV32M configuration adds iterative integer multiply/divide while preserving RV32I as the released default. Payload traffic crosses a retry-capable behavioral UCIe-style link to an AES service die.
 
 The flagship result is the chiplet extension under `chiplet_extension/`. The earlier `base_soc/` implementation is retained only as historical context and is excluded from current project metrics.
 
@@ -69,11 +69,11 @@ The non-UVM Verilator regression remains the default functional closure gate. Th
 4. [Compiled-C and ISS evidence](docs/reference/compiled_firmware_verification.md)
 5. [Power and UPF verification](docs/power_verification_plan.md)
 6. [Privileged architecture validation](docs/reference/privileged_architecture_validation.md)
-7. [Coverage closure](docs/coverage_closure_case_study.md)
-8. [Formal evidence](docs/formal_appendix.md)
-9. [Bug diary](docs/bug_diary.md)
-10. [Performance characterization](docs/performance_characterization.md)
-11. [UVM status](docs/uvm_status.md)
+7. [Optional RV32M validation](docs/reference/rv32m_validation.md)
+8. [Coverage closure](docs/coverage_closure_case_study.md)
+9. [Formal evidence](docs/formal_appendix.md)
+10. [Bug diary](docs/bug_diary.md)
+11. [Performance characterization](docs/performance_characterization.md)
 12. [Documentation index](docs/README.md)
 
 Core evidence refresh:
@@ -91,6 +91,7 @@ make -C chiplet_extension firmware-c-coverage
 make -C chiplet_extension formal-prove
 make -C chiplet_extension async-cdc-check
 make -C chiplet_extension uvm-ci
+make -C chiplet_extension rv32m-release-check
 ```
 
 ## Firmware-Driven DMA Flow

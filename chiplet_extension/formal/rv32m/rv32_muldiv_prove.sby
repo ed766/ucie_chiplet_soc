@@ -1,0 +1,14 @@
+[options]
+mode bmc
+depth 42
+
+[engines]
+smtbmc z3
+
+[script]
+read -formal -sv rv32_muldiv.sv rv32_muldiv_formal.sv
+prep -top rv32_muldiv_formal
+
+[files]
+../../../base_soc/rtl/pd1_rv32/rv32_muldiv.sv
+rv32_muldiv_formal.sv

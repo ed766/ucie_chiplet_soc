@@ -66,7 +66,10 @@ RESULT_RE = re.compile(r"FIRMWARE_RESULT\|(?P<fields>[^\n]+)")
 
 
 def rtl_sources() -> list[str]:
-    sources = [str(REPO / "base_soc" / "rtl" / "pd1_rv32" / "rv32_core.sv")]
+    sources = [
+        str(REPO / "base_soc" / "rtl" / "pd1_rv32" / "rv32_muldiv.sv"),
+        str(REPO / "base_soc" / "rtl" / "pd1_rv32" / "rv32_core.sv"),
+    ]
     sources.extend(str(path) for path in sorted((ROOT / "rtl").rglob("*.sv")))
     return sources
 

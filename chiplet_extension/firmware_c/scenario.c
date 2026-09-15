@@ -582,6 +582,58 @@ int main(void)
     local_write(2u, last_mepc);
     local_write(3u, last_mcause);
     return (((before & 8u) != 0u) && ((after & 8u) != 0u) && last_mcause == 11u) ? 0 : 1;
+#elif SCENARIO_ID == 58
+    uint32_t signature = 0u;
+#if RV32M_KERNEL_ID == 0
+    volatile int32_t a[4] = {-3, 5, 7, -11};
+    volatile int32_t b[4] = {2, -4, 6, 8};
+    int32_t result = 0;
+    for (uint32_t i = 0; i < 4u; ++i) result += a[i] * b[i];
+    signature = (uint32_t)result;
+    if (result != -72) return 1;
+#elif RV32M_KERNEL_ID == 1
+    volatile int32_t a[4] = {1, 2, 3, 4};
+    volatile int32_t b[4] = {-1, 5, 2, -3};
+    int32_t checksum = 0;
+    for (uint32_t row = 0; row < 2u; ++row)
+        for (uint32_t col = 0; col < 2u; ++col)
+            for (uint32_t k = 0; k < 2u; ++k)
+                checksum += a[row * 2u + k] * b[k * 2u + col];
+    signature = (uint32_t)checksum;
+    if (checksum != 10) return 1;
+#elif RV32M_KERNEL_ID == 2
+    volatile int32_t samples[5] = {1, -2, 3, -4, 5};
+    volatile int32_t taps[5] = {2, -1, 3, -1, 3};
+    int32_t result = 0;
+    for (uint32_t i = 0; i < 5u; ++i) result += samples[i] * taps[i];
+    signature = (uint32_t)result;
+    if (result != 32) return 1;
+#elif RV32M_KERNEL_ID == 3
+    volatile uint32_t lhs = 0xf1234567u, rhs = 257u;
+    uint32_t quotient = lhs / rhs, remainder = lhs % rhs;
+    signature = quotient ^ remainder;
+    if (quotient != 15741714u || remainder != 85u) return 1;
+#elif RV32M_KERNEL_ID == 4
+    volatile int32_t lhs = -12345, rhs = 37;
+    int32_t quotient = lhs / rhs, remainder = lhs % rhs;
+    signature = (uint32_t)quotient ^ (uint32_t)remainder;
+    if (quotient != -333 || remainder != -24) return 1;
+#else
+    volatile int32_t lhs = 123, rhs = 77, divisor = 13;
+    int32_t product = lhs * rhs;
+    int32_t quotient = product / divisor;
+    int32_t remainder = product % divisor;
+    signature = (uint32_t)(product ^ quotient ^ remainder);
+    if (signature != 9760u) return 1;
+#endif
+    local_write(0u, signature);
+    local_write(1u, read_csr_misa());
+#ifdef __riscv_mul
+    if (read_csr_misa() != 0x40001100u) return 1;
+#else
+    if (read_csr_misa() != 0x40000100u) return 1;
+#endif
+    return 0;
 #else
 #error Unsupported SCENARIO_ID
 #endif

@@ -14,6 +14,7 @@ REPORT = ROOT / "reports" / "rv32_ebreak_summary.csv"
 
 BUILD.mkdir(parents=True, exist_ok=True)
 command = ["verilator", "--binary", "--sv", "--timing", "-Wall", "-Wno-fatal", "-Wno-UNUSEDSIGNAL",
+           str(REPO / "base_soc/rtl/pd1_rv32/rv32_muldiv.sv"),
            str(REPO / "base_soc/rtl/pd1_rv32/rv32_core.sv"), str(ROOT / "sim/tb_rv32_ebreak_trap.sv"),
            "--top-module", "tb_rv32_ebreak_trap", "-Mdir", str(BUILD)]
 result = subprocess.run(command, capture_output=True, text=True)

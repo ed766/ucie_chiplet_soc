@@ -72,6 +72,7 @@ SCENARIOS = {
     "mtvec_vectored_timer": 55,
     "mtvec_vectored_external": 56,
     "mret_state_restore": 57,
+    "rv32m_compiler_kernel": 58,
 }
 
 
@@ -135,6 +136,7 @@ def build_one(
     linker_script: Path | None = None,
     text_base_address: int = 0,
     data_base_address: int = 0x2000,
+    march: str = "rv32i_zicsr",
 ) -> dict[str, Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
     elf = output_dir / f"{name}.elf"
@@ -150,7 +152,7 @@ def build_one(
     objdump = tool("objdump")
     command = [
         gcc,
-        "-march=rv32i_zicsr",
+        f"-march={march}",
         "-mabi=ilp32",
         optimization,
         "-g",
@@ -168,6 +170,7 @@ def build_one(
         str(SOURCE / "isa_matrix.S"),
         str(SOURCE / "extended_matrix.S"),
         str(SOURCE / "abi_support.c"),
+        str(SOURCE / "rv32_runtime.c"),
         *(str(path) for path in (extra_sources or [])),
         str(SOURCE / "scenario.c"),
         f"-T{linker_script or (SOURCE / 'link.ld')}",

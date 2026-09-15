@@ -196,7 +196,10 @@ assert len(REQUIRED_CROSSES) == 94
 
 
 def rtl_sources() -> list[str]:
-    sources = [str(REPO / "base_soc" / "rtl" / "pd1_rv32" / "rv32_core.sv")]
+    sources = [
+        str(REPO / "base_soc" / "rtl" / "pd1_rv32" / "rv32_muldiv.sv"),
+        str(REPO / "base_soc" / "rtl" / "pd1_rv32" / "rv32_core.sv"),
+    ]
     sources.extend(str(path) for path in sorted((ROOT / "rtl").rglob("*.sv")))
     return sources
 
@@ -493,7 +496,8 @@ def run_one(
     log.write_text(" ".join(command) + "\n\n" + output)
     fields = parse_result(output)
     state = parse_state(output)
-    iss = check_trace(trace, instruction_manifest, data_image) if trace.exists() else None
+    iss = check_trace(trace, instruction_manifest, data_image,
+                      enable_m=(metadata or {}).get("isa") == "rv32im") if trace.exists() else None
     timing = trace_timing(trace) if trace.exists() else {"handler_cycles": 0}
     status = result.returncode == 0 and fields.get("status") == "PASS" and iss is not None and not iss.mismatches
     first_mismatch = "" if not iss or not iss.mismatches else iss.mismatches[0]

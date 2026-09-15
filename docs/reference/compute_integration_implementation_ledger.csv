@@ -1,0 +1,12 @@
+requirement_id,component,status,test_target,evidence,blocking_dependency
+A-RTL-01,Optional complete RV32M iterative unit,PASS,rv32m-unit-check,24/24 directed and 48/48 arithmetic bins,
+A-ISS-01,Independent local ISS RV32M semantics,PASS,rv32m-compiler-matrix,36/36 compiler executions,
+A-RAND-01,Deterministic mixed arithmetic streams,PASS,rv32m-random-check,100/100 seeds,
+A-FORMAL-01,Arithmetic protocol safety and reachability,PASS,rv32m-formal-check,2/2 bounded formal groups,
+A-MUT-01,RV32M RTL mutation sensitivity,PASS,rv32m-mutation-check,8/8 detected,
+B-IOMMU-01,Latched translation context and PTE validation,PASS,make iommu-check in axi4_qos_fabric_dv,22/22 IOMMU points,
+B-SVC-01,CPU-independent protected accelerator service,NOT_RUN,protected-offload-shared-check,No canonical report,service extraction not implemented
+B-HOST-01,Firmware-owned shared-memory AXI host,NOT_RUN,protected-offload-shared-check,No canonical report,external-memory RV32 path not implemented
+B-IRQ-01,Combined accelerator interrupt aggregation,NOT_RUN,compute-host-check,No canonical report,shared-memory service prerequisite
+C-CACHE-01,Baseline L1 ownership and maintenance integration,NOT_RUN,cached-offload-check,No canonical report,uncached shared-memory milestone prerequisite
+C-PERF-01,Matched five-path performance experiment,NOT_RUN,compute-performance,No canonical report,cached and uncached paths required

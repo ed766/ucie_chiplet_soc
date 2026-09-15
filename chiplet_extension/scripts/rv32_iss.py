@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Independent RV32I/Zicsr architectural checker for normalized RVFI traces."""
+"""Independent RV32IM/Zicsr architectural checker for normalized RVFI traces."""
 
 from __future__ import annotations
 
@@ -30,6 +30,31 @@ def parse_hex(value: str) -> int:
     return int(cleaned or "0", 16)
 
 
+def rv32m_result(funct3: int, lhs: int, rhs: int) -> int:
+    """Return the architecturally defined RV32M result without host UB."""
+    lhs_u, rhs_u = u32(lhs), u32(rhs)
+    lhs_s, rhs_s = signed(lhs_u), signed(rhs_u)
+    if funct3 == 0:
+        return u32(lhs_u * rhs_u)
+    if funct3 == 1:
+        return u32((lhs_s * rhs_s) >> 32)
+    if funct3 == 2:
+        return u32((lhs_s * rhs_u) >> 32)
+    if funct3 == 3:
+        return u32((lhs_u * rhs_u) >> 32)
+    if rhs_u == 0:
+        return 0xFFFF_FFFF if funct3 in (4, 5) else lhs_u
+    if funct3 in (4, 6) and lhs_u == 0x8000_0000 and rhs_u == 0xFFFF_FFFF:
+        return 0x8000_0000 if funct3 == 4 else 0
+    if funct3 in (4, 6):
+        quotient = abs(lhs_s) // abs(rhs_s)
+        if (lhs_s < 0) != (rhs_s < 0):
+            quotient = -quotient
+        remainder = lhs_s - quotient * rhs_s
+        return u32(quotient if funct3 == 4 else remainder)
+    return u32(lhs_u // rhs_u if funct3 == 5 else lhs_u % rhs_u)
+
+
 @dataclass
 class CheckResult:
     instructions: int
@@ -40,7 +65,7 @@ class CheckResult:
 
 class RV32ISS:
     def __init__(self, instruction_manifest: Path | None = None,
-                 data_image: Path | None = None) -> None:
+                 data_image: Path | None = None, enable_m: bool = False) -> None:
         self.regs = [0] * 32
         self.memory: dict[int, int] = {}
         self.previous_order: int | None = None
@@ -52,7 +77,8 @@ class RV32ISS:
         self.interrupts = 0
         self.mismatches: list[str] = []
         self.csrs = {
-            0x300: 0x1800, 0x301: 0x40000100, 0x304: 0, 0x305: 0x300,
+            0x300: 0x1800, 0x301: 0x40000100 | (0x1000 if enable_m else 0),
+            0x304: 0, 0x305: 0x300,
             0x340: 0, 0x341: 0, 0x342: 0, 0x343: 0,
             0x344: 0, 0xB00: 0, 0xB80: 0, 0xB02: 0, 0xB82: 0,
         }
@@ -293,15 +319,19 @@ class RV32ISS:
             expected_rd = rd
         elif opcode == 0x33:
             a, b = self.regs[rs1], self.regs[rs2]
-            operations = {
-                (0x00, 0): u32(a + b), (0x20, 0): u32(a - b),
-                (0x00, 1): u32(a << (b & 31)), (0x00, 2): int(signed(a) < signed(b)),
-                (0x00, 3): int(a < b), (0x00, 4): a ^ b,
-                (0x00, 5): a >> (b & 31), (0x20, 5): u32(signed(a) >> (b & 31)),
-                (0x00, 6): a | b, (0x00, 7): a & b,
-            }
-            legal = (funct7, funct3) in operations
-            expected_rd, expected_value = rd, operations.get((funct7, funct3), 0)
+            if funct7 == 0x01:
+                expected_rd, expected_value = rd, rv32m_result(funct3, a, b)
+                legal = funct3 in range(8)
+            else:
+                operations = {
+                    (0x00, 0): u32(a + b), (0x20, 0): u32(a - b),
+                    (0x00, 1): u32(a << (b & 31)), (0x00, 2): int(signed(a) < signed(b)),
+                    (0x00, 3): int(a < b), (0x00, 4): a ^ b,
+                    (0x00, 5): a >> (b & 31), (0x20, 5): u32(signed(a) >> (b & 31)),
+                    (0x00, 6): a | b, (0x00, 7): a & b,
+                }
+                legal = (funct7, funct3) in operations
+                expected_rd, expected_value = rd, operations.get((funct7, funct3), 0)
         elif opcode == 0x03:
             expected_rd = rd
             shift = (mem_address & 3) * 8
@@ -404,5 +434,5 @@ class RV32ISS:
 
 
 def check_trace(trace: Path, instruction_manifest: Path | None = None,
-                data_image: Path | None = None) -> CheckResult:
-    return RV32ISS(instruction_manifest, data_image).check(trace)
+                data_image: Path | None = None, enable_m: bool = False) -> CheckResult:
+    return RV32ISS(instruction_manifest, data_image, enable_m=enable_m).check(trace)
