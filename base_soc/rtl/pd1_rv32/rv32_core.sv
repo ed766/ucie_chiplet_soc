@@ -1,6 +1,8 @@
 module rv32_core #(
   parameter logic [31:0] MMIO_BASE = 32'h0000_0100,
   parameter logic [31:0] MMIO_END  = 32'h0000_01ff,
+  parameter logic [31:0] EXT_MEM_BASE = 32'hffff_ffff,
+  parameter logic [31:0] EXT_MEM_END  = 32'h0000_0000,
   parameter int DATA_MEM_WORDS = 64,
   parameter logic [31:0] MAILBOX_ALIAS_BASE = 32'h0000_8000,
   parameter bit ENABLE_M = 1'b0,
@@ -135,6 +137,15 @@ module rv32_core #(
 
   function automatic logic [31:0] imm_i(input logic [31:0] value);
     imm_i = {{20{value[31]}}, value[31:20]};
+  endfunction
+
+  function automatic logic external_bus_address(input logic [31:0] address);
+    return ((address >= MMIO_BASE) && (address <= MMIO_END)) ||
+           ((address >= EXT_MEM_BASE) && (address <= EXT_MEM_END));
+  endfunction
+
+  function automatic logic external_memory_address(input logic [31:0] address);
+    return (address >= EXT_MEM_BASE) && (address <= EXT_MEM_END);
   endfunction
 
   function automatic logic [31:0] imm_s(input logic [31:0] value);
@@ -681,7 +692,15 @@ module rv32_core #(
                 take_trap = 1'b1;
                 trap_cause = 32'd4;
                 trap_value = address;
-              end else if (legal && (address >= MMIO_BASE) && (address <= MMIO_END)) begin
+              end else if (legal && external_memory_address(address) && funct3 != 3'b010) begin
+                if (ENABLE_TRAPS) begin
+                  take_trap = 1'b1;
+                  trap_cause = 32'd5;
+                  trap_value = address;
+                end else begin
+                  legal = 1'b0;
+                end
+              end else if (legal && external_bus_address(address)) begin
                 defer_retire = 1'b1;
                 mmio_pending_q <= 1'b1;
                 mmio_addr_q <= address;
@@ -716,7 +735,7 @@ module rv32_core #(
                 take_trap = 1'b1;
                 trap_cause = 32'd6;
                 trap_value = address;
-              end else if (legal && (address >= MMIO_BASE) && (address <= MMIO_END)) begin
+              end else if (legal && external_bus_address(address)) begin
                 legal = (funct3 == 3'b010);
                 if (legal) begin
                   defer_retire = 1'b1;
