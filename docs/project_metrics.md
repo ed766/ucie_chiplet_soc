@@ -49,7 +49,7 @@ This is the single resume-facing metrics snapshot for the chiplet project. It is
 | `compiled_firmware_robust_points` | `118 / 118` | Architectural points with at least two independent contributors. |
 | `compiled_firmware_robust_crosses` | `58 / 58` | High-risk crosses with at least two independent contributors. |
 | `rv32_external_tool_status` | `7 PASS / 0 SKIP / 0 FAIL` | Pinned external dependency status; missing or unverified tools are SKIP. |
-| `rv32_spike_differential` | `12 PASS / 0 SKIP / 0 FAIL` | Pinned Spike CPU-only differential status. |
+| `rv32_spike_differential` | `19 PASS / 0 SKIP / 0 FAIL` | Pinned Spike CPU-only differential status. |
 | `rv32_act4` | `45 PASS / 0 SKIP / 0 FAIL` | ACT4/Sail self-checking ELF execution on RTL; generation alone is not a pass. |
 | `rv32_standard_custom_formal` | `3 PASS / 0 SKIP / 0 FAIL` | Standard riscv-formal and project-specific solver status. |
 | `rv32_external_mutation_matrix` | `5 / 5` | Independent Spike, ACT4/Sail, local ISS/SVA, and solver mutation sensitivity. |

@@ -91,6 +91,7 @@ module rv32_core #(
   logic [31:0] pending_instr_q;
   logic [31:0] pending_pc_q;
   logic        mmio_pending_q;
+  logic        mmio_access_q;
   logic [31:0] mmio_addr_q;
   logic [31:0] mmio_wdata_q;
   logic [4:0]  mmio_rd_q;
@@ -140,12 +141,12 @@ module rv32_core #(
   endfunction
 
   function automatic logic external_bus_address(input logic [31:0] address);
-    return ((address >= MMIO_BASE) && (address <= MMIO_END)) ||
-           ((address >= EXT_MEM_BASE) && (address <= EXT_MEM_END));
+    external_bus_address = ((address >= MMIO_BASE) && (address <= MMIO_END)) ||
+                           ((address >= EXT_MEM_BASE) && (address <= EXT_MEM_END));
   endfunction
 
   function automatic logic external_memory_address(input logic [31:0] address);
-    return (address >= EXT_MEM_BASE) && (address <= EXT_MEM_END);
+    external_memory_address = (address >= EXT_MEM_BASE) && (address <= EXT_MEM_END);
   endfunction
 
   function automatic logic [31:0] imm_s(input logic [31:0] value);
@@ -291,7 +292,14 @@ module rv32_core #(
   assign instr_ready = rst_n && !halted && !wfi_sleep_q && !pending_valid_q &&
                        !mmio_pending_q && !muldiv_active_q;
   assign rvfi_mscratch_state = mscratch_q;
+  // Dispatch arbitration is shared with interrupt entry.  An M instruction
+  // must not be accepted by the iterative unit on the same boundary where
+  // the core is going to redirect into an interrupt handler; otherwise the
+  // unit can retain an orphaned request with no architectural owner.
   assign muldiv_req_valid = pending_valid_q && !muldiv_active_q && ENABLE_M &&
+                            !(ENABLE_TRAPS && mstatus_q[3] &&
+                              (((irq_ext === 1'b1) && mie_q[11]) ||
+                               ((irq_timer === 1'b1) && mie_q[7]))) &&
                             pending_instr_q[6:0] == 7'b0110011 &&
                             pending_instr_q[31:25] == 7'b0000001;
   assign muldiv_req_op = pending_instr_q[14:12];
@@ -314,6 +322,7 @@ module rv32_core #(
       pending_instr_q <= 32'h0000_0013;
       pending_pc_q <= '0;
       mmio_pending_q <= 1'b0;
+      mmio_access_q <= 1'b0;
       mmio_addr_q <= '0;
       mmio_wdata_q <= '0;
       mmio_rd_q <= '0;
@@ -475,7 +484,9 @@ module rv32_core #(
         paddr <= mmio_addr_q;
         pwdata <= mmio_wdata_q;
         penable <= 1'b1;
-        if (pready) begin
+        // APB completion is sampled only in the access phase.  A slave that
+        // advertises PREADY during setup must not retire the instruction.
+        if (mmio_access_q && pready) begin
           result = load_value(prdata, mmio_addr_q[1:0], mmio_funct3_q);
           bus_error <= pslverr;
           mem_valid <= 1'b1;
@@ -529,9 +540,12 @@ module rv32_core #(
           mmio_pending_q <= 1'b1;
 `else
           mmio_pending_q <= 1'b0;
+          mmio_access_q <= 1'b0;
 `endif
           psel <= 1'b0;
           penable <= 1'b0;
+        end else begin
+          mmio_access_q <= 1'b1;
         end
       end else if (pending_valid_q) begin
         opcode = pending_instr_q[6:0];
@@ -703,6 +717,7 @@ module rv32_core #(
               end else if (legal && external_bus_address(address)) begin
                 defer_retire = 1'b1;
                 mmio_pending_q <= 1'b1;
+                mmio_access_q <= 1'b0;
                 mmio_addr_q <= address;
                 mmio_wdata_q <= '0;
                 mmio_rd_q <= rd;
@@ -735,11 +750,20 @@ module rv32_core #(
                 take_trap = 1'b1;
                 trap_cause = 32'd6;
                 trap_value = address;
+              end else if (legal && external_memory_address(address) && funct3 != 3'b010) begin
+                if (ENABLE_TRAPS) begin
+                  take_trap = 1'b1;
+                  trap_cause = 32'd7;
+                  trap_value = address;
+                end else begin
+                  legal = 1'b0;
+                end
               end else if (legal && external_bus_address(address)) begin
                 legal = (funct3 == 3'b010);
                 if (legal) begin
                   defer_retire = 1'b1;
                   mmio_pending_q <= 1'b1;
+                  mmio_access_q <= 1'b0;
                   mmio_addr_q <= address;
                   mmio_wdata_q <= rs2_value;
                   mmio_rd_q <= '0;
@@ -962,4 +986,13 @@ module rv32_core #(
       end
     end
   end
+`ifndef SYNTHESIS
+  a_mmio_setup_no_retire: assert property (@(posedge clk) disable iff (!rst_n)
+    mmio_pending_q && !mmio_access_q |-> !retire);
+  a_mmio_retire_requires_access: assert property (@(posedge clk) disable iff (!rst_n)
+    retire && mmio_pending_q |-> mmio_access_q && pready);
+  // An interrupt boundary may not split a multicycle arithmetic instruction.
+  a_interrupt_after_muldiv_retire: assert property (@(posedge clk) disable iff (!rst_n)
+    rvfi_intr |-> !muldiv_active_q);
+`endif
 endmodule

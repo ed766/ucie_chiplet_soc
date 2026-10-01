@@ -24,6 +24,12 @@ module soc_chiplet_top #(
     output logic [DATA_WIDTH-1:0]  plaintext_monitor,
     output logic [DATA_WIDTH-1:0]  ciphertext_monitor,
     output logic [DATA_WIDTH-1:0]  die_b_ciphertext_monitor,
+    output logic                   plaintext_handshake_monitor,
+    output logic [DATA_WIDTH-1:0]  plaintext_handshake_data,
+    output logic                   ciphertext_handshake_monitor,
+    output logic [DATA_WIDTH-1:0]  ciphertext_handshake_data,
+    output logic                   die_b_ciphertext_handshake_monitor,
+    output logic [DATA_WIDTH-1:0]  die_b_ciphertext_handshake_data,
     output logic                   crypto_error_flag,
     output logic                   dma_busy_monitor,
     output logic                   dma_done_monitor,
@@ -123,6 +129,10 @@ module soc_chiplet_top #(
         .lane_lane_fault     (lane_die_a_lane_fault),
         .plaintext_monitor   (plaintext_monitor),
         .ciphertext_monitor  (ciphertext_monitor),
+        .plaintext_handshake_monitor(plaintext_handshake_monitor),
+        .plaintext_handshake_data(plaintext_handshake_data),
+        .ciphertext_handshake_monitor(ciphertext_handshake_monitor),
+        .ciphertext_handshake_data(ciphertext_handshake_data),
         .crypto_error_flag   (crypto_error_flag),
         .dma_busy_monitor    (dma_busy_monitor),
         .dma_done_monitor    (dma_done_monitor),
@@ -147,7 +157,9 @@ module soc_chiplet_top #(
         .lane_rx_data       (lane_die_b_rx_data),
         .lane_rx_valid      (lane_die_b_rx_valid),
         .lane_lane_fault    (lane_die_b_lane_fault),
-        .ciphertext_monitor (die_b_ciphertext_monitor)
+        .ciphertext_monitor (die_b_ciphertext_monitor),
+        .ciphertext_handshake_monitor(die_b_ciphertext_handshake_monitor),
+        .ciphertext_handshake_data(die_b_ciphertext_handshake_data)
     );
 
     // Behavioral channel links the two dice and injects skew/faults.

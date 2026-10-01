@@ -50,14 +50,18 @@ def write_harvard_data_image(text: Path, text_base: int, data: Path, output: Pat
     output.write_text("\n".join(lines) + "\n")
 
 
-def prepare_config(home: Path, work: Path) -> Path:
+def prepare_config(home: Path, work: Path, isa: str = "rv32i") -> Path:
     """Create a self-contained ACT config from project inputs and pinned Sail data."""
     source = ROOT / "verification" / "act4"
     config_dir = work / "dut_config"
     config_dir.mkdir(parents=True)
-    for name in ("test_config.yaml", "ucie-chiplet-rv32i.yaml", "link.ld",
+    for name in ("test_config.yaml", f"ucie-chiplet-{isa}.yaml", "link.ld",
                  "rvmodel_macros.h", "rvtest_config.h", "rvtest_config.svh"):
         shutil.copy2(source / name, config_dir / name)
+    (config_dir / "test_config.yaml").write_text(
+        (config_dir / "test_config.yaml").read_text()
+        .replace("ucie-chiplet-rv32i", f"ucie-chiplet-{isa}")
+    )
 
     sail_template = home / "config" / "sail" / "sail-RVI20U32" / "sail.json"
     sail_text = sail_template.read_text()
@@ -80,9 +84,10 @@ def prepare_config(home: Path, work: Path) -> Path:
 
 
 def execute_elfs(elfs: list[Path], verilator: str, work: Path,
-                 mutation: str | None = None) -> list[dict[str, object]]:
+                 mutation: str | None = None, isa: str = "rv32i") -> list[dict[str, object]]:
     """Convert ACT4 ELFs to the core's split ROM/SRAM images and run them."""
-    binary = compile_sim(verilator, False, variant_tag="act4", extra_defines=("ACT4_MODE",),
+    defines = ("ACT4_MODE", "RV32M_MODE") if isa == "rv32im" else ("ACT4_MODE",)
+    binary = compile_sim(verilator, False, variant_tag=f"act4_{isa}", extra_defines=defines,
                          mutation_define=mutation)
     objcopy = tool("objcopy")
     objdump = tool("objdump")
@@ -138,9 +143,11 @@ def main() -> int:
     parser.add_argument("--require", action="store_true")
     parser.add_argument("--verilator", default="verilator")
     parser.add_argument("--suite-prefix")
+    parser.add_argument("--isa", choices=("rv32i", "rv32im"), default="rv32i",
+                        help="architectural extension set built by ACT4 and enabled in the RTL core")
     parser.add_argument("--mutation")
     parser.add_argument("--expect-detection", action="store_true")
-    parser.add_argument("--report", type=Path, default=REPORT)
+    parser.add_argument("--report", type=Path)
     args = parser.parse_args()
     home_text = os.environ.get("RISCV_ACT_HOME", "")
     sail = shutil.which("sail_riscv_sim")
@@ -149,16 +156,16 @@ def main() -> int:
         home = Path(home_text)
         revision = subprocess.run(["git", "-C", str(home), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
         if revision != REVISION:
-            rows.append({"suite": "ACT4_RV32I_Zicsr", "status": "FAIL",
+            rows.append({"suite": f"ACT4_{args.isa.upper()}_Zicsr", "status": "FAIL",
                          "applicable_tests": 0, "detail": f"revision_mismatch:{revision}",
                          "failure_kind": "revision_mismatch", "mailbox_status": "",
                          "failing_address": "", "register": "NA", "expected": REVISION,
                          "observed": revision, "trace": ""})
         else:
-            work = ROOT / "build" / "act4"
+            work = ROOT / "build" / f"act4_{args.isa}"
             shutil.rmtree(work, ignore_errors=True)
             work.mkdir(parents=True, exist_ok=True)
-            config = prepare_config(home, work)
+            config = prepare_config(home, work, args.isa)
             result = subprocess.run(["make", "-j2", f"CONFIG_FILES={config}", f"WORKDIR={work}"], cwd=home,
                                     capture_output=True, text=True)
             (work / "act4.log").write_text(result.stdout + result.stderr)
@@ -169,24 +176,25 @@ def main() -> int:
                 elfs = [path for path in elfs if path.stem.startswith(args.suite_prefix)]
             if result.returncode == 0 and elfs:
                 try:
-                    rows = execute_elfs(elfs, args.verilator, work, args.mutation)
+                    rows = execute_elfs(elfs, args.verilator, work, args.mutation, args.isa)
                 except (OSError, RuntimeError, subprocess.CalledProcessError) as exc:
-                    rows = [{"suite": "ACT4_RV32I_Zicsr", "status": "FAIL",
+                    rows = [{"suite": f"ACT4_{args.isa.upper()}_Zicsr", "status": "FAIL",
                              "applicable_tests": len(elfs), "detail": f"rtl_execution_setup_failed:{exc}",
                              "failure_kind": "setup", "mailbox_status": "", "failing_address": "",
                              "register": "NA", "expected": "runnable_elf", "observed": str(exc), "trace": ""}]
             else:
-                rows.append({"suite": "ACT4_RV32I_Zicsr", "status": "FAIL",
+                rows.append({"suite": f"ACT4_{args.isa.upper()}_Zicsr", "status": "FAIL",
                              "applicable_tests": len(elfs), "detail": "generation_failed",
                              "failure_kind": "generation", "mailbox_status": "", "failing_address": "",
                              "register": "NA", "expected": "generated_elf", "observed": "none", "trace": ""})
     else:
-        rows.append({"suite": "ACT4_RV32I_Zicsr", "status": "SKIP",
+        rows.append({"suite": f"ACT4_{args.isa.upper()}_Zicsr", "status": "SKIP",
                      "applicable_tests": 0, "detail": "RISCV_ACT_HOME_or_Sail_missing",
                      "failure_kind": "dependency_missing", "mailbox_status": "", "failing_address": "",
                      "register": "NA", "expected": "pinned_dependencies", "observed": "missing", "trace": ""})
-    args.report.parent.mkdir(exist_ok=True)
-    with args.report.open("w", newline="") as handle:
+    report = args.report or (ROOT / "reports" / ("rv32_act_m_summary.csv" if args.isa == "rv32im" else REPORT.name))
+    report.parent.mkdir(exist_ok=True)
+    with report.open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=("suite", "status", "applicable_tests", "detail",
                                                       "failure_kind", "mailbox_status", "failing_address",
                                                       "register", "expected", "observed", "trace"), lineterminator="\n")

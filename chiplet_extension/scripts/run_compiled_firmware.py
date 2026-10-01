@@ -497,7 +497,7 @@ def run_one(
     fields = parse_result(output)
     state = parse_state(output)
     iss = check_trace(trace, instruction_manifest, data_image,
-                      enable_m=(metadata or {}).get("isa") == "rv32im") if trace.exists() else None
+                      enable_m=(metadata or {}).get("isa") in ("rv32im", "rv32im_zicsr")) if trace.exists() else None
     timing = trace_timing(trace) if trace.exists() else {"handler_cycles": 0}
     status = result.returncode == 0 and fields.get("status") == "PASS" and iss is not None and not iss.mismatches
     first_mismatch = "" if not iss or not iss.mismatches else iss.mismatches[0]

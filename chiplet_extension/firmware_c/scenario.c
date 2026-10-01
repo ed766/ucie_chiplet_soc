@@ -634,6 +634,40 @@ int main(void)
     if (read_csr_misa() != 0x40000100u) return 1;
 #endif
     return 0;
+#elif SCENARIO_ID == 59
+    /* Force every RV32M opcode to retire from runtime operands; external
+       Spike checking must not infer M support from -march alone. */
+    volatile uint32_t signed_lhs = 0x80000001u;
+    volatile uint32_t signed_rhs = 3u;
+    volatile uint32_t unsigned_lhs = 100u;
+    volatile uint32_t unsigned_rhs = 7u;
+    volatile uint32_t minus_ten = 0xfffffff6u;
+    uint32_t mul, mulh, mulhsu, mulhu;
+    uint32_t div, divu, rem, remu;
+    __asm__ volatile ("mul %0, %1, %2" : "=r"(mul) : "r"(signed_lhs), "r"(signed_rhs));
+    __asm__ volatile ("mulh %0, %1, %2" : "=r"(mulh) : "r"(signed_lhs), "r"(signed_rhs));
+    __asm__ volatile ("mulhsu %0, %1, %2" : "=r"(mulhsu) : "r"(signed_lhs), "r"(signed_rhs));
+    __asm__ volatile ("mulhu %0, %1, %2" : "=r"(mulhu) : "r"(signed_lhs), "r"(signed_rhs));
+    __asm__ volatile ("div %0, %1, %2" : "=r"(div) : "r"(minus_ten), "r"(signed_rhs));
+    __asm__ volatile ("divu %0, %1, %2" : "=r"(divu) : "r"(unsigned_lhs), "r"(unsigned_rhs));
+    __asm__ volatile ("rem %0, %1, %2" : "=r"(rem) : "r"(minus_ten), "r"(signed_rhs));
+    __asm__ volatile ("remu %0, %1, %2" : "=r"(remu) : "r"(unsigned_lhs), "r"(unsigned_rhs));
+    uint32_t div_zero, rem_zero, signed_overflow, overflow_rem;
+    __asm__ volatile ("div %0, %1, zero" : "=r"(div_zero) : "r"(minus_ten));
+    __asm__ volatile ("rem %0, %1, zero" : "=r"(rem_zero) : "r"(minus_ten));
+    __asm__ volatile ("div %0, %1, %2" : "=r"(signed_overflow) : "r"(0x80000000u), "r"(0xffffffffu));
+    __asm__ volatile ("rem %0, %1, %2" : "=r"(overflow_rem) : "r"(0x80000000u), "r"(0xffffffffu));
+    local_write(0u, mul); local_write(1u, mulh); local_write(2u, mulhsu); local_write(3u, mulhu);
+    local_write(4u, div); local_write(5u, divu); local_write(6u, rem); local_write(7u, remu);
+    local_write(8u, div_zero); local_write(9u, rem_zero);
+    local_write(10u, signed_overflow); local_write(11u, overflow_rem);
+    local_write(12u, read_csr_misa());
+    if (mul != 0x80000003u || mulh != 0xfffffffeu || mulhsu != 0xfffffffeu ||
+        mulhu != 1u || div != 0xfffffffdu || divu != 14u || rem != 0xffffffffu ||
+        remu != 2u || div_zero != 0xffffffffu || rem_zero != minus_ten ||
+        signed_overflow != 0x80000000u || overflow_rem != 0u ||
+        (read_csr_misa() & (1u << 12)) == 0u) return 1;
+    return 0;
 #else
 #error Unsupported SCENARIO_ID
 #endif

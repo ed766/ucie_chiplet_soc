@@ -31,6 +31,10 @@ module soc_die_a_top #(
     input  logic                   lane_lane_fault,
     output logic [DATA_WIDTH-1:0]  plaintext_monitor,
     output logic [DATA_WIDTH-1:0]  ciphertext_monitor,
+    output logic                   plaintext_handshake_monitor,
+    output logic [DATA_WIDTH-1:0]  plaintext_handshake_data,
+    output logic                   ciphertext_handshake_monitor,
+    output logic [DATA_WIDTH-1:0]  ciphertext_handshake_data,
     output logic                   crypto_error_flag,
     output logic                   dma_busy_monitor,
     output logic                   dma_done_monitor,
@@ -306,6 +310,10 @@ module soc_die_a_top #(
     end
 
     // Monitor registers for debug visibility.
+    assign plaintext_handshake_monitor = tx_stream_valid && tx_stream_ready;
+    assign plaintext_handshake_data = tx_stream_data;
+    assign ciphertext_handshake_monitor = rx_stream_valid && rx_stream_ready;
+    assign ciphertext_handshake_data = rx_stream_data;
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             plaintext_monitor  <= '0;

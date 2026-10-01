@@ -27,6 +27,8 @@ class Program:
     scenario_id: int
     testbench_name: str
     optimization: str
+    defines: tuple[tuple[str, int], ...] = ()
+    requires_m: bool = False
 
 
 # Exercise instruction semantics, compiled ABI behavior, initialized data,
@@ -45,6 +47,11 @@ PROGRAMS = (
             "gcc_cpu_only", "-O2"),
     Program("spike_dependency_matrix_O2", "spike_dependency_matrix", 49,
             "gcc_cpu_only", "-O2"),
+    *(Program(f"rv32m_kernel_{kernel}_O2", "rv32m_compiler_kernel", 58,
+              "gcc_cpu_only", "-O2", (("RV32M_KERNEL_ID", kernel),), True)
+      for kernel in range(6)),
+    Program("rv32m_external_opcode_matrix_O2", "rv32m_external_opcode_matrix", 59,
+            "gcc_cpu_only", "-O2", requires_m=True),
 )
 SPIKE_REVISION = "907862288f7b2af1afe533a4c74a5f33cc851830"
 # Spike emits both a disassembly line and a privilege-qualified commit line for
@@ -156,6 +163,11 @@ def main() -> int:
     parser.add_argument("--require", action="store_true")
     parser.add_argument("--verilator", default="verilator")
     parser.add_argument("--program", choices=[item.report_name for item in PROGRAMS])
+    # The program set includes genuine M-extension encodings.  Default the
+    # external lane to the configured RV32IM core; callers may still select
+    # RV32I for a filtered, non-M program.
+    parser.add_argument("--isa", choices=["rv32i_zicsr", "rv32im_zicsr"], default="rv32im_zicsr",
+                        help="Spike ISA and RTL compiler configuration for the selected CPU-only programs")
     parser.add_argument("--mutation")
     parser.add_argument("--report", type=Path, default=REPORT)
     parser.add_argument("--expect-detection", action="store_true")
@@ -172,9 +184,10 @@ def main() -> int:
     if not spike:
         for program in selected_programs:
             rows.append({"program": program.report_name, "source": program.source_name,
-                         "optimizer": program.optimization, "mutation": args.mutation or "nominal",
+                         "optimizer": program.optimization, "requires_m": int(program.requires_m),
+                         "mutation": args.mutation or "nominal",
                          "detected": 0, "status": "SKIP", "rtl_status": "SKIP",
-                         "rtl_retires": 0, "spike_retires": 0,
+                         "rtl_retires": 0, "rtl_m_instructions": 0, "spike_retires": 0,
                          "matched_retires": 0, "matched_register_writes": 0,
                          "matched_memory_accesses": 0, "rtl_suffix_retires": 0,
                          "terminal_relation": "SKIP",
@@ -182,20 +195,29 @@ def main() -> int:
     else:
         image_dir = BUILD / "spike" / "images"
         linker = ROOT / "firmware_c" / "link_spike.ld"
+        # The second compile_sim argument is the coverage switch, not the ISA
+        # selector.  Keep the external lane nominal and explicitly enable the
+        # M-capable elaboration when requested.
         binary = compile_sim(args.verilator, False, assertions=True,
-                             mutation_define=args.mutation, variant_tag="spike")
+                             mutation_define=args.mutation,
+                             variant_tag=f"spike_{args.isa}",
+                             extra_defines=("RV32M_MODE",) if args.isa == "rv32im_zicsr" else ())
         for program in selected_programs:
             artifacts = build_one(program.report_name, program.scenario_id, image_dir,
                                   optimization=program.optimization, linker_script=linker,
+                                  march=args.isa,
+                                  defines=dict(program.defines),
                                   text_base_address=0x1000, data_base_address=0x3000)
             add_reset_trampoline(artifacts["manifest"])
             scenario = Scenario(program.report_name, program.testbench_name)
             mutation_suffix = f"_{args.mutation.lower()}" if args.mutation else ""
             artifact_suffix = f"_spike{mutation_suffix}"
-            rtl_result, _ = run_one(binary, scenario, artifacts["hex"], artifact_suffix=artifact_suffix)
+            rtl_result, _ = run_one(binary, scenario, artifacts["hex"],
+                                    artifact_suffix=artifact_suffix,
+                                    metadata={"isa": args.isa})
             trace = BUILD / "traces" / f"{program.report_name}{artifact_suffix}.csv"
             elf = artifacts["elf"]
-            command = [spike, "--isa=rv32i_zicsr", "--priv=m", "--pc=0x1000",
+            command = [spike, f"--isa={args.isa}", "--priv=m", "--pc=0x1000",
                        "--disable-dtb", "-m0x1000:0xf000", "--instructions=2000",
                        "-l", "--log-commits", str(elf)]
             try:
@@ -206,6 +228,10 @@ def main() -> int:
             (image_dir / f"{program.report_name}.spike.log").write_text(spike_text)
             spike_rows = spike_sequence(spike_text)
             rtl_rows = rtl_sequence(trace, 0x1000)
+            rtl_m_instructions = sum(
+                (commit.insn & 0x7f) == 0x33 and ((commit.insn >> 25) & 0x7f) == 0x01
+                for commit in rtl_rows
+            )
             count = min(len(rtl_rows), len(spike_rows))
             mismatch = next((detail for index in range(count)
                              if (detail := compare_commit(index, rtl_rows[index], spike_rows[index]))), "")
@@ -213,6 +239,8 @@ def main() -> int:
                 mismatch = "insufficient_spike_trace"
             if rtl_result["status"] != "PASS" and not mismatch:
                 mismatch = f"relocated_rtl_failed:{rtl_result['first_mismatch']}"
+            if args.isa == "rv32im_zicsr" and program.requires_m and rtl_m_instructions == 0 and not mismatch:
+                mismatch = "rv32im_configuration_executed_no_m_extension_instruction"
             terminal_relation = "spike_mailbox_fault_rtl_mailbox_accept"
             if not mismatch and not ("trap_store_access_fault" in spike_text and
                                      re.search(r"tval\s+0x0*1e0\b", spike_text)):
@@ -226,9 +254,11 @@ def main() -> int:
             outcome_pass = detected if args.expect_detection else not detected
             rows.append({"program": program.report_name, "source": program.source_name,
                          "optimizer": program.optimization,
+                         "requires_m": int(program.requires_m),
                          "mutation": args.mutation or "nominal", "detected": int(detected),
                          "status": "PASS" if outcome_pass else "FAIL",
                          "rtl_status": rtl_result["status"], "rtl_retires": len(rtl_rows),
+                         "rtl_m_instructions": rtl_m_instructions,
                          "spike_retires": len(spike_rows), "matched_retires": count,
                          "matched_register_writes": sum(spike_rows[index].rd is not None for index in range(count)),
                          "matched_memory_accesses": sum(spike_rows[index].mem_addr is not None for index in range(count)),

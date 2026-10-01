@@ -85,7 +85,11 @@ def run_standard(home_text: str, sby: str | None) -> list[dict[str, str]]:
     for source in ("checks.cfg", "rvfi_wrapper.sv"):
         shutil.copy2(ROOT / "formal" / "rv32" / source, core / source)
     shutil.copy2(ROOT / "sim" / "rvfi" / "rvfi_standard_adapter.sv", core / "rvfi_standard_adapter.sv")
-    shutil.copy2(REPO / "base_soc" / "rtl" / "pd1_rv32" / "rv32_core.sv", core / "rv32_core.sv")
+    core_source = REPO / "base_soc" / "rtl" / "pd1_rv32" / "rv32_core.sv"
+    # riscv-formal generates Yosys scripts that do not carry a per-file
+    # SYNTHESIS define.  Keep simulation-only concurrent assertions out of
+    # that parser while retaining the standard RVFI checks.
+    (core / "rv32_core.sv").write_text("`define SYNTHESIS\n" + core_source.read_text())
     shutil.copy2(REPO / "base_soc" / "rtl" / "pd1_rv32" / "rv32_muldiv.sv", core / "rv32_muldiv.sv")
     # The pinned riscv-formal revision predates current Yosys' SystemVerilog
     # parser. Preserve its intent while translating the legacy random-variable
@@ -102,6 +106,13 @@ def run_standard(home_text: str, sby: str | None) -> list[dict[str, str]]:
     (BUILD / "genchecks.log").write_text(generated.stdout + generated.stderr)
     if generated.returncode:
         return [row(group, "riscv-formal", "FAIL", "20-30", "genchecks_failed") for group in groups]
+    # The core contains simulation-only SVA around the APB adapter.  The
+    # pinned Yosys frontend does not parse concurrent assertions, so define
+    # SYNTHESIS on the core read commands while retaining all RVFI checks.
+    for design in (workspace / "cores" / "ucie_rv32" / "checks").glob("*/model/design.ys"):
+        text = design.read_text()
+        text = text.replace("read_verilog -formal -sv", "read_verilog -formal -D SYNTHESIS -sv")
+        design.write_text(text)
     result = subprocess.run(["make", "-C", "checks", "-j2"], cwd=core,
                             capture_output=True, text=True, env=solver_env(sby))
     (BUILD / "checks.log").write_text(result.stdout + result.stderr)

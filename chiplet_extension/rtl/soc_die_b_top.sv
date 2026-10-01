@@ -15,7 +15,9 @@ module soc_die_b_top #(
     input  logic [LANES-1:0]      lane_rx_data,
     input  logic                  lane_rx_valid,
     input  logic                  lane_lane_fault,
-    output logic [DATA_WIDTH-1:0] ciphertext_monitor
+    output logic [DATA_WIDTH-1:0] ciphertext_monitor,
+    output logic                 ciphertext_handshake_monitor,
+    output logic [DATA_WIDTH-1:0] ciphertext_handshake_data
 );
 
     localparam int CREDIT_INIT = 128;
@@ -225,6 +227,8 @@ module soc_die_b_top #(
     end
 
     // Monitor ciphertext for debug.
+    assign ciphertext_handshake_monitor = ciphertext_valid && ciphertext_ready;
+    assign ciphertext_handshake_data = ciphertext_stream;
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             ciphertext_monitor <= '0;

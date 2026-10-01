@@ -159,8 +159,13 @@ module rv32_muldiv (
   end
 
 `ifdef FORMAL
+  logic formal_past_valid;
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) formal_past_valid <= 1'b0;
+    else formal_past_valid <= 1'b1;
+  end
   always_ff @(posedge clk) if (rst_n) begin
-    if ($past(rsp_valid && !rsp_ready)) begin
+    if (formal_past_valid && $past(rsp_valid && !rsp_ready)) begin
       a_result_stable: assert (rsp_valid && $stable(rsp_result));
     end
     if (req_valid && !req_ready) begin

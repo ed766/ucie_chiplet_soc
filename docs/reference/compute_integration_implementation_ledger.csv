@@ -4,10 +4,13 @@ A-ISS-01,Independent local ISS RV32M semantics,PASS,rv32m-compiler-matrix,36/36 
 A-RAND-01,Deterministic mixed arithmetic streams,PASS,rv32m-random-check,100/100 seeds,
 A-FORMAL-01,Arithmetic protocol safety and reachability,PASS,rv32m-formal-check,2/2 bounded formal groups,
 A-MUT-01,RV32M RTL mutation sensitivity,PASS,rv32m-mutation-check,8/8 detected,
-B-IOMMU-01,Latched translation context and PTE validation,PASS,make iommu-check in axi4_qos_fabric_dv,22/22 IOMMU points,
+B-IOMMU-01,Latched translation context and PTE validation,PASS,make iommu-check in axi4_qos_fabric_dv,28/28 IOMMU points,
 B-HOST-PREREQ,Explicit RV32 external-memory APB window,PASS,rv32-external-window-check,two wait-stated transfers with exact retirement and data checks,
 B-SVC-01,CPU-independent protected accelerator service,PASS,make protected-offload-service-check in int8_tensor_accelerator_dv,explicit host payload PTW invalidation configuration and IRQ ports,
-B-HOST-01,Firmware-owned shared-memory AXI host,NOT_RUN,protected-offload-shared-check,No canonical report,external-memory RV32 path not implemented
-B-IRQ-01,Combined accelerator interrupt aggregation,NOT_RUN,compute-host-check,No canonical report,shared-memory service prerequisite
-C-CACHE-01,Baseline L1 ownership and maintenance integration,NOT_RUN,cached-offload-check,No canonical report,uncached shared-memory milestone prerequisite
-C-PERF-01,Matched five-path performance experiment,NOT_RUN,compute-performance,No canonical report,cached and uncached paths required
+B-HOST-01,Firmware-owned shared-memory AXI host,PASS,make protected-offload-shared-matrix in int8_tensor_accelerator_dv,reports/protected_shared_firmware.csv 32/32 GCC fabric jobs,
+B-IRQ-01,Combined accelerator interrupt aggregation,PASS,make compute-host-check in int8_tensor_accelerator_dv,reports/compute_host_summary.csv 2/2 single-core combined jobs,
+C-CACHE-01,Baseline L1 ownership and maintenance integration,PASS,make protected-offload-cache-ownership in int8_tensor_accelerator_dv,8/8 positive and 4/4 intended-negative handoffs,
+C-PERF-01,Matched five-path performance experiment,PASS,make protected-offload-matched-performance in int8_tensor_accelerator_dv,reports/protected_offload_matched_performance.csv 150/150 rows,
+C-CROSSOVER-01,Observed transaction-level compute crossover,PARTIAL,make compute-crossover-directed in int8_tensor_accelerator_dv,reports/compute_crossover_model.csv in accelerator repository,Configuration replay does not prove all 48 original scenario intents; follow accelerator implementation ledger
+C-CROSSOVER-02,Event-correlated interaction closure,PARTIAL,make compute-crossover-coverage in int8_tensor_accelerator_dv,reports/compute_crossover_cross_coverage.csv in accelerator repository,Existing predicates are a subset of required transaction interactions; full legal tuples and independently constructed high-risk paths remain required
+C-CROSSOVER-FORMAL,Solver-backed crossover control checks,PASS,make protected-offload-formal in int8_tensor_accelerator_dv,reports/protected_offload_formal.csv in accelerator repository,16 solver-backed groups with reachable covers including six bounded crossover groups; reduced tag/reset geometry is not full-system unbounded proof

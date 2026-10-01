@@ -73,6 +73,7 @@ SCENARIOS = {
     "mtvec_vectored_external": 56,
     "mret_state_restore": 57,
     "rv32m_compiler_kernel": 58,
+    "rv32m_external_opcode_matrix": 59,
 }
 
 

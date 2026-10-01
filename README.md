@@ -49,7 +49,7 @@ This table is generated from `chiplet_extension/reports/project_metrics.csv` by 
 | Compiled firmware focused line coverage | `96.49%` |
 | Compiled firmware focused branch coverage | `90.00%` |
 | True RV32 RTL mutations | `14 / 14` |
-| Spike CPU differential | `12 PASS / 0 SKIP / 0 FAIL` |
+| Spike CPU differential | `19 PASS / 0 SKIP / 0 FAIL` |
 | ACT4/Sail RTL tests | `45 PASS / 0 SKIP / 0 FAIL` |
 | RV32 standard/custom formal | `3 PASS / 0 SKIP / 0 FAIL` |
 | Supporting real-UVM lane | `4 / 4` |

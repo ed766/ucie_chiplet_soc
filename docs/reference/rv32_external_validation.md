@@ -9,7 +9,7 @@ RV32I/Zicsr machine-mode subset; they are not RISC-V certification.
 | Evidence lane | Current result | What it independently checks | Canonical report |
 | --- | ---: | --- | --- |
 | Pinned dependency integrity | `7 PASS / 0 SKIP / 0 FAIL` | Git revisions and archive SHA-256 values | `chiplet_extension/reports/rv32_external_tool_status.csv` |
-| Spike CPU differential | `12 PASS / 0 SKIP / 0 FAIL` | PC/instruction, register write, memory address/mask, and store-data comparison across ALU, ABI, CSR, memory-width, dependency, control-flow, and optimizer cases | `chiplet_extension/reports/rv32_external_iss_summary.csv` |
+| Spike CPU differential | `19 PASS / 0 SKIP / 0 FAIL` | PC/instruction, register write, memory address/mask, and store-data comparison across ALU, ABI, CSR, memory-width, dependency, control-flow, and optimizer cases | `chiplet_extension/reports/rv32_external_iss_summary.csv` |
 | ACT4/Sail RTL execution | `45 PASS / 0 SKIP / 0 FAIL` | Self-checking generated RV32I/Zicsr architectural ELFs executed on RTL | `chiplet_extension/reports/rv32_act_summary.csv` |
 | Standard/custom RVFI formal | `3 PASS / 0 SKIP / 0 FAIL` | Instruction/register/PC ordering plus bounded CSR, trap, APB, interrupt, and `mscratch` properties | `chiplet_extension/reports/rv32_formal_summary.csv` |
 | External-oracle mutation sensitivity | `5 PASS / 0 SKIP / 0 FAIL` | A real injected RTL defect is detected by each oracle family | `chiplet_extension/reports/rv32_external_mutation_matrix.csv` |

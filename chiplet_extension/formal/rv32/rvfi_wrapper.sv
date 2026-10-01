@@ -14,7 +14,7 @@ module rvfi_wrapper (
     wire [31:0] legacy_mem_addr, legacy_mem_rdata, legacy_mem_wdata;
     wire [3:0] legacy_mem_rmask, legacy_mem_wmask;
 
-    rv32_core #(.EBREAK_TEST_HALT(1'b0)) core (
+    rv32_core #(.ENABLE_TRAPS(1'b1), .EBREAK_TEST_HALT(1'b0)) core (
         .clk(clock), .rst_n(!reset), .instr_valid(1'b1), .instr_ready(instruction_ready),
         .instr(instruction), .irq_ext(1'b0), .irq_timer(1'b0),
         .prdata(peripheral_rdata), .pready(1'b1), .pslverr(1'b0),

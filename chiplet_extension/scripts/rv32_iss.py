@@ -65,7 +65,12 @@ class CheckResult:
 
 class RV32ISS:
     def __init__(self, instruction_manifest: Path | None = None,
-                 data_image: Path | None = None, enable_m: bool = False) -> None:
+                 data_image: Path | None = None, enable_m: bool = False,
+                 external_ranges: tuple[tuple[int, int], ...] = (),
+                 direct_memory_ranges: tuple[tuple[int, int], ...] = ()) -> None:
+        self.enable_m = enable_m
+        self.external_ranges = external_ranges
+        self.direct_memory_ranges = direct_memory_ranges
         self.regs = [0] * 32
         self.memory: dict[int, int] = {}
         self.previous_order: int | None = None
@@ -90,6 +95,12 @@ class RV32ISS:
                 for row in csv.DictReader(handle):
                     self.instructions_by_pc[parse_hex(row["pc"])] = parse_hex(row["insn"])
 
+    def memory_word_address(self, address: int) -> int:
+        if (any(start <= address <= end for start, end in self.external_ranges) or
+                any(start <= address <= end for start, end in self.direct_memory_ranges)):
+            return address & ~3
+        return ((address - 0x8000) if address >= 0x8000 else address) & ~3
+
     @staticmethod
     def load_data_image(path: Path | None) -> dict[int, int]:
         memory: dict[int, int] = {}
@@ -111,7 +122,7 @@ class RV32ISS:
         self.regs = [0] * 32
         self.memory = dict(self.initial_memory)
         self.csrs = {
-            0x300: 0x1800, 0x301: 0x40000100, 0x304: 0, 0x305: 0x300,
+            0x300: 0x1800, 0x301: 0x40000100 | (0x1000 if self.enable_m else 0), 0x304: 0, 0x305: 0x300,
             0x340: 0, 0x341: 0, 0x342: 0, 0x343: 0,
             0x344: 0, 0xB00: 0, 0xB80: 0, 0xB02: 0, 0xB82: 0,
         }
@@ -338,8 +349,9 @@ class RV32ISS:
             expected_mask = ({0: 0x1, 1: 0x3, 2: 0xF, 4: 0x1, 5: 0x3}.get(funct3, 0) << (mem_address & 3)) & 0xF
             if rmask != expected_mask:
                 self.mismatch(order, f"load mask 0x{rmask:x}, expected 0x{expected_mask:x}")
-            mmio = 0x100 <= mem_address <= 0x1FF
-            model_base = ((mem_address - 0x8000) if mem_address >= 0x8000 else mem_address) & ~3
+            mmio = (0x100 <= mem_address <= 0x1FF or
+                    any(start <= mem_address <= end for start, end in self.external_ranges))
+            model_base = self.memory_word_address(mem_address)
             model_word = mem_rdata if mmio else self.memory.get(model_base, 0)
             if not mmio and mem_rdata != model_word:
                 self.mismatch(order, f"load source 0x{mem_rdata:08x}, expected modeled memory 0x{model_word:08x}")
@@ -354,7 +366,7 @@ class RV32ISS:
             expected_mask = ({0: 0x1, 1: 0x3, 2: 0xF}.get(funct3, 0) << (mem_address & 3)) & 0xF
             if wmask != expected_mask:
                 self.mismatch(order, f"store mask 0x{wmask:x}, expected 0x{expected_mask:x}")
-            base = ((mem_address - 0x8000) if mem_address >= 0x8000 else mem_address) & ~3
+            base = self.memory_word_address(mem_address)
             word = self.memory.get(base, 0)
             offset = mem_address & 3
             for lane in range(4):
@@ -362,7 +374,8 @@ class RV32ISS:
                     source_lane = lane - offset
                     byte = (mem_wdata >> (source_lane * 8)) & 0xFF
                     word = (word & ~(0xFF << (lane * 8))) | (byte << (lane * 8))
-            if not 0x100 <= mem_address <= 0x1FF:
+            if not (0x100 <= mem_address <= 0x1FF or
+                    any(start <= mem_address <= end for start, end in self.external_ranges)):
                 self.memory[base] = u32(word)
         elif opcode == 0x0F:
             legal = funct3 == 0

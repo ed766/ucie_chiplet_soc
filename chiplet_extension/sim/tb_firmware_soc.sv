@@ -178,6 +178,9 @@ module tb_firmware_soc;
     soc_chiplet_rv32_top #(
         .ROM_WORDS(131072),
         .CPU_DATA_MEM_WORDS(262144),
+`ifdef RV32M_MODE
+        .CPU_ENABLE_M(1'b1),
+`endif
         .CPU_ENABLE_TRAPS(1'b1),
         .CPU_EBREAK_TEST_HALT(1'b0)
     ) dut (
