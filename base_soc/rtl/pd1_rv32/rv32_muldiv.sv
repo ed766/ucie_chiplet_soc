@@ -165,6 +165,13 @@ module rv32_muldiv (
     else formal_past_valid <= 1'b1;
   end
   always_ff @(posedge clk) if (rst_n) begin
+    if (formal_past_valid && $past(rst_n && req_valid && req_ready)) begin
+      a_operands_captured: assert (lhs_q == $past(req_lhs) && rhs_q == $past(req_rhs));
+      a_opcode_captured: assert (op_q == $past(req_op));
+    end
+    if (formal_past_valid && $past(rst_n && !req_ready) && !req_ready) begin
+      a_captured_operands_stable: assert ($stable(lhs_q) && $stable(rhs_q) && $stable(op_q));
+    end
     if (formal_past_valid && $past(rsp_valid && !rsp_ready)) begin
       a_result_stable: assert (rsp_valid && $stable(rsp_result));
     end

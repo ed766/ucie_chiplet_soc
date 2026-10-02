@@ -448,8 +448,8 @@ module rv32_core #(
       rvfi_mem_wdata <= '0;
       mcycle_q <= mcycle_q + 1'b1;
       // Interrupt entry is represented by a legacy RVFI pseudo-event, not a
-      // retired instruction, so it must not advance minstret.
-      if (retire && !rvfi_intr) minstret_q <= minstret_q + 1'b1;
+      // retired instruction. Synchronous fault events likewise do not retire.
+      if (retire && !rvfi_intr && !rvfi_trap) minstret_q <= minstret_q + 1'b1;
 
       if (wfi_sleep_q) begin
         if ((irq_ext === 1'b1) || (irq_timer === 1'b1)) begin
@@ -486,7 +486,11 @@ module rv32_core #(
         penable <= 1'b1;
         // APB completion is sampled only in the access phase.  A slave that
         // advertises PREADY during setup must not retire the instruction.
+`ifdef RV32_BUG_APB_SETUP_RETIRE
+        if (pready) begin
+`else
         if (mmio_access_q && pready) begin
+`endif
           result = load_value(prdata, mmio_addr_q[1:0], mmio_funct3_q);
           bus_error <= pslverr;
           mem_valid <= 1'b1;
@@ -574,6 +578,30 @@ module rv32_core #(
         trap_value = '0;
         mem_idx = 0;
 
+`ifdef RV32_BUG_IRQ_BEFORE_M_RETIRE
+        if (muldiv_active_q && ENABLE_TRAPS && mstatus_q[3] &&
+            (((irq_ext === 1'b1) && mie_q[11]) || ((irq_timer === 1'b1) && mie_q[7]))) begin
+          logic [31:0] early_cause, early_target;
+          early_cause = ((irq_ext === 1'b1) && mie_q[11]) ? 32'h8000_000b : 32'h8000_0007;
+          early_target = trap_target(mtvec_q, early_cause, 1'b1);
+          mepc_q <= pending_pc_q;
+          mcause_q <= early_cause;
+          mtval_q <= '0;
+          mstatus_q[7] <= mstatus_q[3];
+          mstatus_q[3] <= 1'b0;
+          pc_q <= early_target;
+          rvfi_intr <= 1'b1;
+          set_rvfi_base(32'h0000_0013, pending_pc_q, early_target, '0, '0);
+          rvfi_mepc <= pending_pc_q;
+          rvfi_mcause <= early_cause;
+          rvfi_mtval <= '0;
+          commit_valid <= 1'b1;
+          commit_instr <= 32'h0000_0013;
+          commit_pc <= pending_pc_q;
+          commit_next_pc <= early_target;
+          retire <= 1'b1;
+        end else
+`endif
         if (muldiv_active_q) begin
           defer_retire = 1'b1;
           if (muldiv_rsp_valid) begin
@@ -986,6 +1014,49 @@ module rv32_core #(
       end
     end
   end
+`ifdef FORMAL_RV32M_CORE
+  logic formal_initialized = 0;
+  logic formal_m_owned;
+  logic [31:0] formal_m_insn, formal_m_pc;
+  always_ff @(posedge clk) begin
+    formal_initialized <= 1;
+    if (!rst_n) begin
+      formal_m_owned <= 0;
+      formal_m_insn <= 0;
+      formal_m_pc <= 0;
+    end else begin
+      if (muldiv_req_valid && muldiv_req_ready) begin
+        assert(!formal_m_owned);
+        formal_m_owned <= 1;
+        formal_m_insn <= pending_instr_q;
+        formal_m_pc <= pending_pc_q;
+      end
+      if (muldiv_rsp_valid && muldiv_rsp_ready) begin
+        assert(formal_m_owned);
+        formal_m_owned <= 0;
+      end
+      if (muldiv_active_q) begin
+        assert(formal_m_owned);
+        assert(!psel);
+        assert(pending_instr_q == formal_m_insn);
+        assert(pending_pc_q == formal_m_pc);
+      end
+      if (rvfi_valid && !rvfi_trap && !rvfi_intr &&
+          rvfi_insn[6:0] == 7'h33 && rvfi_insn[31:25] == 1) begin
+        assert(formal_initialized && $past(rst_n));
+        assert($past(muldiv_rsp_valid && muldiv_rsp_ready));
+        assert(rvfi_insn == formal_m_insn);
+        assert(rvfi_pc_rdata == formal_m_pc);
+        assert(rvfi_mem_rmask == 0 && rvfi_mem_wmask == 0);
+      end
+      if (formal_initialized && !$past(rst_n)) begin
+        assert(!rvfi_valid);
+        assert(!muldiv_active_q);
+      end
+      cover(rvfi_valid && !rvfi_trap && rvfi_insn[31:25] == 1 && rvfi_insn[6:0] == 7'h33);
+    end
+  end
+`endif
 `ifndef SYNTHESIS
   a_mmio_setup_no_retire: assert property (@(posedge clk) disable iff (!rst_n)
     mmio_pending_q && !mmio_access_q |-> !retire);
@@ -994,5 +1065,15 @@ module rv32_core #(
   // An interrupt boundary may not split a multicycle arithmetic instruction.
   a_interrupt_after_muldiv_retire: assert property (@(posedge clk) disable iff (!rst_n)
     rvfi_intr |-> !muldiv_active_q);
+  a_muldiv_blocks_younger_apb: assert property (@(posedge clk) disable iff (!rst_n)
+    muldiv_active_q |-> !psel);
+  a_muldiv_dispatch_has_owner: assert property (@(posedge clk) disable iff (!rst_n)
+    muldiv_req_valid && muldiv_req_ready |=> muldiv_active_q);
+  a_muldiv_retirement_requires_consumption: assert property (@(posedge clk) disable iff (!rst_n)
+    rvfi_valid && !rvfi_trap && !rvfi_intr && rvfi_insn[6:0] == 7'h33 && rvfi_insn[31:25] == 1 |->
+    $past(muldiv_active_q && muldiv_rsp_valid && muldiv_rsp_ready));
+  a_muldiv_retirement_no_memory_effect: assert property (@(posedge clk) disable iff (!rst_n)
+    rvfi_valid && rvfi_insn[6:0] == 7'h33 && rvfi_insn[31:25] == 1 |->
+    rvfi_mem_rmask == 0 && rvfi_mem_wmask == 0);
 `endif
 endmodule
