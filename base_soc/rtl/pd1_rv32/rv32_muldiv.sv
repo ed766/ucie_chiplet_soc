@@ -37,7 +37,8 @@ module rv32_muldiv (
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
 `ifdef RV32_BUG_M_STALE_RESET
-      state_q <= RESPONSE;
+      // Poison only an interrupted operation, not the initial boot epoch.
+      state_q <= state_q == IDLE ? IDLE : RESPONSE;
 `else
       state_q <= IDLE;
 `endif
