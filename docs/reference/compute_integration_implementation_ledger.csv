@@ -1,9 +1,14 @@
 requirement_id,component,status,test_target,evidence,blocking_dependency
-A-RTL-01,Optional complete RV32M iterative unit,PASS,rv32m-unit-check,24/24 directed and 48/48 arithmetic bins,
+A-RTL-01,Optional complete RV32M iterative unit,PASS,rv32m-unit-check,24/24 named arithmetic-unit cases and 48/48 arithmetic bins,
 A-ISS-01,Independent local ISS RV32M semantics,PASS,rv32m-compiler-matrix,36/36 compiler executions,
-A-RAND-01,Deterministic mixed arithmetic streams,PASS,rv32m-random-check,100/100 seeds,
-A-FORMAL-01,Arithmetic protocol safety and reachability,PASS,rv32m-formal-check,2/2 bounded formal groups,
-A-MUT-01,RV32M RTL mutation sensitivity,PASS,rv32m-mutation-check,8/8 detected,
+A-RAND-01,Deterministic arithmetic-unit random vectors,PASS,rv32m-random-check,100/100 unit-vector seeds; not core instruction streams,
+A-FORMAL-01,Arithmetic protocol safety and reachability,PASS,rv32m-formal-check,Real-unit depth-84 bounded safety and reachable repeated-operation/reset covers,
+A-FORMAL-CORE,Core retirement contract and reachability,PASS,rv32m-formal-check,Depth-50 bounded core-control safety and reachable retirement with abstract arithmetic unit and zero operands,Not full-width arithmetic or interrupt proof
+A-MUT-01,RV32M RTL mutation sensitivity,PASS,rv32m-mutation-check,8/8 intended diagnostic detections with passing nominal controls,
+A-ISS-LEGALITY,Enabled and disabled M trap legality,PASS,rv32m-checker-selftest,All eight encodings checked positively and with corrupted traces,
+A-CORE-BOUNDARY,Event-targeted core boundary execution,PASS,rv32m-boundary-check,312/312 core IRQ reset alias APB and fault cases with ISS replay and epoch/order/cycle witnesses,
+A-M-COVERAGE,Separate arithmetic-unit code coverage,PASS,rv32m-code-coverage,reports/rv32m_boundary_code_coverage.csv with raw enabled/disabled counts and zero exclusions,
+A-SUBSYSTEM-PHASE,Systematic M x live DMA power and dual-service phase closure,PARTIAL,compute-crossover-directed,Core boundary matrix is not full-system interaction coverage,Refresh tested source snapshots and require live transaction-level phase witnesses
 B-IOMMU-01,Latched translation context and PTE validation,PASS,make iommu-check in axi4_qos_fabric_dv,28/28 IOMMU points,
 B-HOST-PREREQ,Explicit RV32 external-memory APB window,PASS,rv32-external-window-check,two wait-stated transfers with exact retirement and data checks,
 B-SVC-01,CPU-independent protected accelerator service,PASS,make protected-offload-service-check in int8_tensor_accelerator_dv,explicit host payload PTW invalidation configuration and IRQ ports,

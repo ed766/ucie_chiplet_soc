@@ -1,12 +1,12 @@
 [options]
 mode cover
-depth 42
+depth 84
 
 [engines]
 smtbmc z3
 
 [script]
-read -formal -sv rv32_muldiv.sv rv32_muldiv_formal.sv
+read -formal -sv -D FORMAL_COVER rv32_muldiv.sv rv32_muldiv_formal.sv
 prep -top rv32_muldiv_formal
 
 [files]

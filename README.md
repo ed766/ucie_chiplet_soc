@@ -92,6 +92,7 @@ make -C chiplet_extension formal-prove
 make -C chiplet_extension async-cdc-check
 make -C chiplet_extension uvm-ci
 make -C chiplet_extension rv32m-release-check
+make -C chiplet_extension rv32m-boundary-check # core IRQ/reset/APB matrix plus ISS replay
 ```
 
 ## Firmware-Driven DMA Flow

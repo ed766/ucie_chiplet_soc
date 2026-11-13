@@ -1,0 +1,25 @@
+test,status,latency_cycles,evidence
+mul_basic,PASS,34,rv32_muldiv handshake simulation
+mul_low_wrap,PASS,34,rv32_muldiv handshake simulation
+mul_zero,PASS,34,rv32_muldiv handshake simulation
+mulh_signed,PASS,34,rv32_muldiv handshake simulation
+mulh_positive,PASS,34,rv32_muldiv handshake simulation
+mulhsu_mixed,PASS,34,rv32_muldiv handshake simulation
+mulhsu_positive,PASS,34,rv32_muldiv handshake simulation
+mulhu_max,PASS,34,rv32_muldiv handshake simulation
+div_signed,PASS,34,rv32_muldiv handshake simulation
+div_signed_signs,PASS,34,rv32_muldiv handshake simulation
+div_by_zero,PASS,34,rv32_muldiv handshake simulation
+div_overflow,PASS,34,rv32_muldiv handshake simulation
+divu_basic,PASS,34,rv32_muldiv handshake simulation
+divu_high,PASS,34,rv32_muldiv handshake simulation
+divu_by_zero,PASS,34,rv32_muldiv handshake simulation
+rem_signed,PASS,34,rv32_muldiv handshake simulation
+rem_signed_divisor,PASS,34,rv32_muldiv handshake simulation
+rem_by_zero,PASS,34,rv32_muldiv handshake simulation
+rem_overflow,PASS,34,rv32_muldiv handshake simulation
+remu_basic,PASS,34,rv32_muldiv handshake simulation
+remu_high,PASS,34,rv32_muldiv handshake simulation
+remu_by_zero,PASS,34,rv32_muldiv handshake simulation
+response_backpressure,PASS,34,rv32_muldiv handshake simulation
+reset_cancellation,PASS,5,rv32_muldiv handshake simulation

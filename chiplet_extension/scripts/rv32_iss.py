@@ -143,6 +143,37 @@ class RV32ISS:
             if value != self.csrs[csr]:
                 self.mismatch(order, f"CSR 0x{csr:03x}=0x{value:08x}, expected 0x{self.csrs[csr]:08x}")
 
+    def legal_encoding(self, insn: int) -> bool:
+        """Decode supported encodings without consulting the observed trap bit."""
+        opcode, funct3, funct7 = insn & 0x7f, field(insn, 14, 12), field(insn, 31, 25)
+        if opcode in (0x37, 0x17, 0x6f):
+            return True
+        if opcode == 0x67:
+            return funct3 == 0
+        if opcode == 0x63:
+            return funct3 in (0, 1, 4, 5, 6, 7)
+        if opcode == 0x03:
+            return funct3 in (0, 1, 2, 4, 5)
+        if opcode == 0x23:
+            return funct3 in (0, 1, 2)
+        if opcode == 0x13:
+            return (funct3 in (0, 2, 3, 4, 6, 7) or
+                    (funct3 == 1 and funct7 == 0) or
+                    (funct3 == 5 and funct7 in (0, 0x20)))
+        if opcode == 0x33:
+            return (self.enable_m if funct7 == 1 else
+                    funct7 == 0 or (funct7 == 0x20 and funct3 in (0, 5)))
+        if opcode == 0x0f:
+            return funct3 == 0
+        if opcode == 0x73:
+            if funct3 == 0:
+                return insn in (0x73, 0x00100073, 0x30200073, 0x10500073)
+            csr, rs1 = field(insn, 31, 20), field(insn, 19, 15)
+            writes = (funct3 & 3) == 1 or rs1 != 0
+            return (funct3 in (1, 2, 3, 5, 6, 7) and csr in self.csrs and
+                    not (csr == 0x301 and writes))
+        return False
+
     def check_row(self, row: dict[str, str]) -> None:
         order = int(row["order"])
         epoch = int(row.get("epoch", "0"))
@@ -190,14 +221,18 @@ class RV32ISS:
 
         if intr:
             self.interrupts += 1
-            cause = 0x8000_000B if int(row.get("irq_level", "0")) else 0x8000_0007
+            irq_external = int(row.get("irq_level", "0")) != 0
+            irq_timer = int(row.get("irq_timer_level", "0")) != 0
+            external_enabled = irq_external and bool(self.csrs[0x304] & 0x800)
+            timer_enabled = irq_timer and bool(self.csrs[0x304] & 0x80)
+            if not (self.csrs[0x300] & 8) or not (external_enabled or timer_enabled):
+                self.mismatch(order, "interrupt entry while architectural interrupt enables are masked")
+            cause = 0x8000_000B if external_enabled else 0x8000_0007
             mtvec = parse_hex(row["mtvec"])
             expected_target = (mtvec & ~3) + ((cause & 0x7FFF_FFFF) * 4 if (mtvec & 3) == 1 else 0)
             if observed_next_pc != expected_target:
                 self.mismatch(order, "interrupt target does not match mtvec")
-            irq_external = int(row.get("irq_level", "0")) != 0
-            irq_timer = int(row.get("irq_timer_level", "0")) != 0
-            expected_interrupt_cause = 0x8000_000B if irq_external else 0x8000_0007
+            expected_interrupt_cause = cause
             if not (irq_external or irq_timer):
                 self.mismatch(order, "interrupt entry has no pending implemented source")
             if parse_hex(row["mcause"]) != expected_interrupt_cause:
@@ -223,6 +258,11 @@ class RV32ISS:
                 self.mismatch(order, "trapping instruction wrote a register")
             opcode = insn & 0x7F
             funct3 = field(insn, 14, 12)
+            if opcode not in (0x03, 0x23) and (rmask or wmask):
+                self.mismatch(order, "trapping non-memory instruction reports memory effects")
+            if (opcode not in (0x03, 0x23) and parse_hex(row["mcause"]) == 2 and self.legal_encoding(insn) and
+                    insn not in (0x73, 0x00100073)):
+                self.mismatch(order, "unexpected illegal-instruction trap on legal encoding")
             if insn == 0x0000_0073:
                 expected_cause = 11
             elif insn == 0x0010_0073:
@@ -332,7 +372,9 @@ class RV32ISS:
             a, b = self.regs[rs1], self.regs[rs2]
             if funct7 == 0x01:
                 expected_rd, expected_value = rd, rv32m_result(funct3, a, b)
-                legal = funct3 in range(8)
+                legal = self.enable_m and funct3 in range(8)
+                if rmask or wmask:
+                    self.mismatch(order, "M instruction has unexpected memory effects")
             else:
                 operations = {
                     (0x00, 0): u32(a + b), (0x20, 0): u32(a - b),
@@ -406,7 +448,7 @@ class RV32ISS:
                 elif mode == 2: new_value = expected_value | source
                 elif mode == 3: new_value = expected_value & ~source
                 else: new_value = expected_value; legal = False
-                if legal and (mode == 1 or source != 0):
+                if legal and (mode == 1 or rs1 != 0):
                     if csr == 0x301:
                         legal = False
                     if csr == 0x300: new_value = 0x1800 | (new_value & 0x88)
@@ -427,6 +469,8 @@ class RV32ISS:
             self.mismatch(order, f"next PC 0x{observed_next_pc:08x}, expected 0x{next_pc:08x}")
         if expected_rd == 0:
             expected_value = 0
+        if observed_rd == 0 and observed_rd_value:
+            self.mismatch(order, "zero destination has nonzero retirement data")
         if observed_rd != expected_rd:
             self.mismatch(order, f"rd x{observed_rd}, expected x{expected_rd}")
         if observed_rd and u32(observed_rd_value) != u32(expected_value):

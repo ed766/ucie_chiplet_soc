@@ -1,0 +1,15 @@
+[options]
+mode bmc
+depth 50
+
+[engines]
+abc bmc3
+
+[script]
+read -formal -sv -D SYNTHESIS -D FORMAL_RV32M_CORE rv32m_contract_unit.sv rv32_core.sv rv32m_core_formal.sv
+prep -top rv32m_core_formal
+
+[files]
+rv32m_contract_unit.sv
+../../../base_soc/rtl/pd1_rv32/rv32_core.sv
+rv32m_core_formal.sv

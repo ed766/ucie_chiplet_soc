@@ -1,0 +1,9 @@
+mutation,kind,expected_bucket,activation,activation_reached,observed_failure,nominal_control,compile_status,detected,status
+RV32_BUG_M_HIGH_PRODUCT,RTL_MUTATION,high_product,mulh_signed,1,mulh_signed,PASS,PASS,1,PASS
+RV32_BUG_MULHSU_SIGNEDNESS,RTL_MUTATION,mixed_signedness,mulhsu_mixed,1,mulhsu_mixed,PASS,PASS,1,PASS
+RV32_BUG_M_DIV_ROUND,RTL_MUTATION,quotient_rounding,div_signed,1,div_signed,PASS,PASS,1,PASS
+RV32_BUG_M_REM_SIGN,RTL_MUTATION,remainder_sign,rem_signed,1,rem_signed,PASS,PASS,1,PASS
+RV32_BUG_M_DIV_ZERO,RTL_MUTATION,divide_zero,div_by_zero,1,div_by_zero,PASS,PASS,1,PASS
+RV32_BUG_M_DIV_OVERFLOW,RTL_MUTATION,signed_overflow,div_overflow,1,div_overflow,PASS,PASS,1,PASS
+RV32_BUG_M_EARLY_RETIRE,RTL_MUTATION,retirement_order,core_retirement,1,core_retirement,PASS,PASS,1,PASS
+RV32_BUG_M_STALE_RESET,RTL_MUTATION,reset_cancellation,reset_cancellation,1,reset_cancellation,PASS,PASS,1,PASS

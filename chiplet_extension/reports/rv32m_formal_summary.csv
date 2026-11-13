@@ -1,0 +1,5 @@
+group,mode,status,depth,runtime_seconds,detail
+muldiv_protocol,bounded_safety,PASS,84,164.160,solver_backed_bmc_z3
+opcode_reachability,cover,PASS,84,134.711,solver_backed_cover_z3
+core_retirement_contract,bounded_safety,PASS,50,123.249,solver_backed_bmc_abc_abstract_unit_zero_operands
+core_retirement_reachability,cover,PASS,50,3.300,solver_backed_cover_z3_abstract_unit_zero_operands

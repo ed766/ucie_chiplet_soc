@@ -476,7 +476,22 @@ rv32m-mutation-check:
 rv32m-formal-check:
 	$(PYTHON) $(RUN_RV32M_FORMAL)
 
-rv32m-release-check: rv32m-lint rv32m-unit-check rv32m-random-check rv32m-compiler-matrix rv32m-formal-check rv32m-mutation-check
+rv32m-checker-selftest:
+	$(PYTHON) -m unittest discover -s $(ROOT_DIR)/scripts -p 'test_rv32m*.py' -v
+
+rv32m-boundary-check: rv32m-checker-selftest
+	$(PYTHON) $(ROOT_DIR)/scripts/run_rv32m_boundaries.py
+
+rv32m-code-coverage: rv32m-checker-selftest
+	$(PYTHON) $(ROOT_DIR)/scripts/run_rv32m_boundaries.py --code-coverage
+
+.PHONY: rv32m-checker-selftest rv32m-boundary-check rv32m-code-coverage
+rv32m-release-check: rv32m-lint rv32m-unit-check rv32m-random-check rv32m-compiler-matrix rv32m-formal-check rv32m-mutation-check rv32m-boundary-check
+	$(MAKE) rv32m-code-coverage
 
 rv32-external-window-check:
 	$(PYTHON) $(ROOT_DIR)/scripts/run_rv32_external_window.py
+
+.PHONY: rv32m-stateful-formal
+rv32m-stateful-formal:
+	$(PYTHON) $(ROOT_DIR)/scripts/run_rv32m_stateful_formal.py

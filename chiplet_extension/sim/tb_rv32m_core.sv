@@ -47,6 +47,7 @@ module tb_rv32m_core;
   initial begin
     for(integer i=0;i<32;i++) observed[i]=0;
     repeat(3)@(posedge clk);rst_n=1;
+    $display("RV32M_ACTIVATE|core_retirement");
     issue(addi(1,0,-7));
     issue(addi(2,0,3));
     issue(mop(4,3,1,2));
@@ -56,7 +57,7 @@ module tb_rv32m_core;
     issue(csrr(7,12'h301));
     issue(32'h0010_0073);
     wait(halted);
-    if(observed[3]!==32'hffff_fffe) $fatal(1,"DIV core result");
+    if(observed[3]!==32'hffff_fffe) $fatal(1,"RV32M_FAILURE|core_retirement|DIV core result");
     if(observed[4]!==32'hffff_ffff) $fatal(1,"REM core result");
     if(observed[5]!==32'hffff_ffeb) $fatal(1,"MUL core result");
     if(observed[6]!==32'hffff_ffff) $fatal(1,"MULH core result");

@@ -1,0 +1,2 @@
+group,mode,depth,status,environment,arithmetic,cover_status,harness_sha256
+stateful_core_control,bounded_safety,50,PASS,"arbitrary issue, nonzero/aliased registers, external/timer IRQ and mid-operation reset",assume-guarantee muldiv response contract; not arithmetic equivalence,REACHABLE,5f1d265c2e995a6d93c0839d9302df1002339e126da6a1a048a6d3b4d6ce04d8

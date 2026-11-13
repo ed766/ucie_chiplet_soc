@@ -47,6 +47,7 @@ module tb_rv32_muldiv;
     int latency;
     logic [31:0] held_result;
     begin
+      $display("RV32M_ACTIVATE|%s", name);
       while (!req_ready) @(posedge clk);
       @(negedge clk);
       req_op = op;
@@ -63,7 +64,7 @@ module tb_rv32_muldiv;
       end
       if (!rsp_valid) $fatal(1, "%s exceeded bounded completion", name);
       if (rsp_result !== expected)
-        $fatal(1, "%s got %08x expected %08x", name, rsp_result, expected);
+        $fatal(1, "RV32M_FAILURE|%s|got=%08x|expected=%08x", name, rsp_result, expected);
       held_result = rsp_result;
       repeat (hold_cycles) begin
         @(posedge clk);
@@ -87,6 +88,8 @@ module tb_rv32_muldiv;
     rsp_ready = 0;
     repeat (3) @(posedge clk);
     rst_n = 1;
+    $display("RV32M_ACTIVATE|reset_cancellation");
+    if (rsp_valid) $fatal(1, "RV32M_FAILURE|reset_cancellation|unowned reset response");
 
     check_case("mul_basic", 0, 3, 7, 21);
     check_case("mul_low_wrap", 0, 32'hffff_ffff, 2, 32'hffff_fffe);
@@ -142,7 +145,7 @@ module tb_rv32_muldiv;
     rst_n = 1;
     repeat (40) begin
       @(posedge clk);
-      if (rsp_valid) $fatal(1, "reset produced stale response");
+      if (rsp_valid) $fatal(1, "RV32M_FAILURE|reset_cancellation|stale response");
     end
     $display("RV32M_TEST|reset_cancellation|PASS|5");
     $display("RV32M_SUMMARY|72|72|PASS");
